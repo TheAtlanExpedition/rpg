@@ -674,7 +674,8 @@ window.addEventListener('keydown', event => {
 
 if (restartButton) {
   restartButton.addEventListener('click', () => {
-    initGame(1);
+    showPoweredOffScreen();
+
   });
 }
 
