@@ -1,3 +1,8 @@
+const canvas = document.querySelector("#gameCanvas");
+const context = canvas.getContext("2d");
+
+const powerButton = document.querySelector("#powerButton");
+
 let gameRunning = false;
 
 'use strict';
@@ -675,6 +680,8 @@ window.addEventListener('keydown', event => {
 if (restartButton) {
   restartButton.addEventListener('click', () => {
     showPoweredOffScreen();
+drawPoweredOffScreen();
+gameLoop();
 
   });
 }
