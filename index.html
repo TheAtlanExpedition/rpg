@@ -21,7 +21,6 @@
 
   <link rel="stylesheet" href="styles.css">
   <script src="html.js" defer></script>
-  <script src="game.js" defer></script>
 </head>
 
 <body>
@@ -88,11 +87,19 @@
         </button>
       </div>
     </section>
+    
     <section id="game" class="page">
-      <h2>Games</h2>
-      <article>
+      <div class="intro-text">
+        <h2>Games</h2>
+      </div>
+      <article class="paragraph-text">
         <h3>Attempt 1</h3>
         <p></p>
+        <div class="game-window">
+          <canvas id="gameCanvas" width="800" height="500">
+          
+          </canvas>
+        </div>
       </article>
     </section>
     <section id="about" class="page">
@@ -159,5 +166,6 @@
 
     <img id="modal-image" src="" alt="">
   </div>
+<script src="game.js" defer></script>
 </body>
 </html>
