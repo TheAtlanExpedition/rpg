@@ -141,20 +141,3 @@ carouselWindow.addEventListener("mouseup", (e) => {
 //Prevent Text Selection While Dragging
 carouselWindow.addEventListener("dragstart", (e) => e.preventDefault());
 
-// PAGES SCRIPT 
-<script>
-  function showPage() {
-    const pageName = window.location.hash.substring(1) || "home";
-    document.querySelectorAll(".page").forEach((page) => {
-      page.classList.remove("active");
-    });
-    const selectedPage = document.getElementById(pageName);
-    if (selectedPage) {
-      selectedPage.classList.add("active");
-    } else {
-      document.getElementById("home").classList.add("active");
-    }
-    window.scrollTo(0, 0);
-  }
-  window.addEventListener("hashchange", showPage);
-  showPage();    
