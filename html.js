@@ -273,7 +273,10 @@ function closeModal() {
 modalClose.addEventListener("click", closeModal);
 
 imageModal.addEventListener("click", (event) => {
-  if (event.target === imageModal) {
+  if (
+    event.target === imageModal ||
+    event.target === modalImage
+  ) {
     closeModal();
   }
 });
