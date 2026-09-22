@@ -679,4 +679,3 @@ if (restartButton) {
   });
 }
 
-initGame(1);
