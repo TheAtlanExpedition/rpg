@@ -452,5 +452,17 @@ figcaption {
   background-color: #87ceeb;
   border: 3px solid #fff;
   border-radius: 8px;
+  touch-action: none;
+  user-select: none;
 }
 
+
+#powerButton {
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+#powerButton.on {
+  background-color: #22c55e;
+  color: white;
+}
