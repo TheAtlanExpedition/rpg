@@ -434,3 +434,23 @@ figcaption {
     height: 400px;
   }
 }
+
+.game-window {
+  width: min(95vw, 840px);
+  margin: 30px auto;
+  padding: 20px;
+  background-color: #111;
+  border: 5px solid #388e3c;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background-color: #87ceeb;
+  border: 3px solid #fff;
+  border-radius: 8px;
+}
+
