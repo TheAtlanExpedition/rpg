@@ -1,3 +1,5 @@
+let gameRunning = false;
+
 'use strict';
 
 const TILE_SIZE = 32;
