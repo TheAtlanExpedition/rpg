@@ -12,8 +12,8 @@ const TileType = {
 
 const canvas = document.getElementById("gameCanvas2");
 const context = canvas.getContext("2d");
-const gameInfo = document.getElementById("gameInfo");
-const restartButton = document.getElementById("restartButton");
+const game2Info = document.getElementById("game2Info");
+const restartButton = document.getElementById("game2restartButton");
 
 canvas.width = MAP_WIDTH * TILE_SIZE;
 canvas.height = MAP_HEIGHT * TILE_SIZE;
@@ -63,7 +63,12 @@ function createGameState(level, existingPlayer, existingScrolls) {
   const startRoom = rooms[0];
 
   const player = existingPlayer
-    ? { ...existingPlayer, x: startRoom.x + 1, y: startRoom.y + 1, hp: Math.max(existingPlayer.hp, 1) }
+    ? {
+        ...existingPlayer,
+        x: startRoom.x + 1,
+        y: startRoom.y + 1,
+        hp: Math.max(existingPlayer.hp, 1),
+      }
     : {
         id: "player",
         x: startRoom.x + 1,
@@ -118,9 +123,13 @@ function createGameState(level, existingPlayer, existingScrolls) {
     explosions: [],
     map: newMap,
     level,
-    scrolls: existingScrolls !== undefined ? existingScrolls : level === 1 ? 3 : 0,
+    scrolls:
+      existingScrolls !== undefined ? existingScrolls : level === 1 ? 3 : 0,
     gameOver: false,
-    message: level === 1 ? "Find scrolls and defeat all monsters!" : `Floor ${level} reached.`,
+    message:
+      level === 1
+        ? "Find scrolls and defeat all monsters!"
+        : `Floor ${level} reached.`,
   };
 }
 
@@ -148,7 +157,11 @@ function stopGame2() {
   context.font = "24px Arial";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText("Game 2 is powered off", canvas.width / 2, canvas.height / 2);
+  context.fillText(
+    "Game 2 is powered off",
+    canvas.width / 2,
+    canvas.height / 2
+  );
 }
 
 function movePlayer(dx, dy) {
@@ -160,7 +173,9 @@ function movePlayer(dx, dy) {
   if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT) return;
   if (gameState.map[newY][newX] === TileType.WALL) return;
 
-  const enemyAtPos = gameState.enemies.find((e) => e.x === newX && e.y === newY);
+  const enemyAtPos = gameState.enemies.find(
+    (e) => e.x === newX && e.y === newY
+  );
   if (enemyAtPos) {
     attackEnemy(enemyAtPos.id);
     return;
@@ -177,7 +192,7 @@ function movePlayer(dx, dy) {
     newItems = gameState.items.filter((i) => i.id !== itemAtPos.id);
     if (itemAtPos.type === "scroll") {
       newScrolls += 3;
-      msg = "Picked up a Magic Scroll (3 charges)!";
+      msg = "Picked up a Magic Scroll (Fireball)!";
     } else if (itemAtPos.type === "potion") {
       newHp = Math.min(gameState.player.maxHp, newHp + 30);
       msg = "Drank a Health Potion!";
@@ -275,12 +290,7 @@ function getEnemyMove(enemy, state, reservedPositions) {
       const nextY = current.y + direction.y;
       const nextKey = `${nextX},${nextY}`;
 
-      if (
-        nextX < 0 ||
-        nextX >= MAP_WIDTH ||
-        nextY < 0 ||
-        nextY >= MAP_HEIGHT
-      ) {
+      if (nextX < 0 || nextX >= MAP_WIDTH || nextY < 0 || nextY >= MAP_HEIGHT) {
         continue;
       }
 
@@ -313,8 +323,7 @@ function getEnemyMove(enemy, state, reservedPositions) {
       };
 
       const distanceToPlayer =
-        Math.abs(nextX - player.x) +
-        Math.abs(nextY - player.y);
+        Math.abs(nextX - player.x) + Math.abs(nextY - player.y);
 
       if (distanceToPlayer === 1) {
         return firstMove;
@@ -360,7 +369,9 @@ function moveEnemies(state) {
         break;
       }
 
-      const hitEnemy = enemies.find((e) => e.x === currentX && e.y === currentY);
+      const hitEnemy = enemies.find(
+        (e) => e.x === currentX && e.y === currentY
+      );
       if (hitEnemy) {
         exploded = true;
         break;
@@ -398,58 +409,52 @@ function moveEnemies(state) {
   }
 
   // Enemy AI// Enemy AI
-const newEnemies = [];
+  const newEnemies = [];
 
-// Reserve every enemy's current position first.
-const reservedPositions = new Set(
-  enemies.map((enemy) => `${enemy.x},${enemy.y}`)
-);
-
-for (const enemy of enemies) {
-  const currentKey = `${enemy.x},${enemy.y}`;
-
-  // This enemy is now being processed, so its old position
-  // can be considered available.
-  reservedPositions.delete(currentKey);
-
-  const distToPlayer =
-    Math.abs(enemy.x - state.player.x) +
-    Math.abs(enemy.y - state.player.y);
-
-  // Attack instead of moving.
-  if (distToPlayer === 1) {
-    playerHp -= 8;
-    msg = "The monster strikes!";
-
-    // Keep this enemy in place.
-    reservedPositions.add(currentKey);
-    newEnemies.push(enemy);
-    continue;
-  }
-
-  const nextMove = getEnemyMove(
-    enemy,
-    state,
-    reservedPositions
+  // Reserve every enemy's current position first.
+  const reservedPositions = new Set(
+    enemies.map((enemy) => `${enemy.x},${enemy.y}`)
   );
 
-  if (nextMove) {
-    const nextKey = `${nextMove.x},${nextMove.y}`;
+  for (const enemy of enemies) {
+    const currentKey = `${enemy.x},${enemy.y}`;
 
-    newEnemies.push({
-      ...enemy,
-      x: nextMove.x,
-      y: nextMove.y,
-    });
+    // This enemy is now being processed, so its old position
+    // can be considered available.
+    reservedPositions.delete(currentKey);
 
-    reservedPositions.add(nextKey);
-  } else {
-    // No available path, so stay still.
-    reservedPositions.add(currentKey);
-    newEnemies.push(enemy);
+    const distToPlayer =
+      Math.abs(enemy.x - state.player.x) + Math.abs(enemy.y - state.player.y);
+
+    // Attack instead of moving.
+    if (distToPlayer === 1) {
+      playerHp -= 8;
+      msg = "The monster strikes!";
+
+      // Keep this enemy in place.
+      reservedPositions.add(currentKey);
+      newEnemies.push(enemy);
+      continue;
+    }
+
+    const nextMove = getEnemyMove(enemy, state, reservedPositions);
+
+    if (nextMove) {
+      const nextKey = `${nextMove.x},${nextMove.y}`;
+
+      newEnemies.push({
+        ...enemy,
+        x: nextMove.x,
+        y: nextMove.y,
+      });
+
+      reservedPositions.add(nextKey);
+    } else {
+      // No available path, so stay still.
+      reservedPositions.add(currentKey);
+      newEnemies.push(enemy);
+    }
   }
-}
-
 
   return {
     ...state,
