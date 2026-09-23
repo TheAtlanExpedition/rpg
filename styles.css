@@ -448,7 +448,70 @@ body {
   outline-offset: 2px;
 }
 
-/* ===== GAME WINDOW (outer frame) ===== */
+/* ===== GAMES SECTION ===== */
+.games-container {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  width: min(95vw, 1100px);
+  margin: 20px auto 40px;
+}
+
+/* Vertical game buttons */
+.game-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.game-select-btn {
+  position: relative;
+  width: 140px;
+  height: 90px;
+  border: 4px solid #000;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  font-family: "Black Ops One", sans-serif;
+  font-size: 1.1rem;
+  color: #fff;
+  text-shadow: 1px 1px 2px #000;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.game-select-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.game-select-btn .btn-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.game1-btn .btn-bg {
+  background: linear-gradient(135deg, #87ceeb, #228b22);
+}
+
+.game2-btn .btn-bg {
+  background: linear-gradient(135deg, #1f2937, #7c3aed);
+}
+
+.game-select-btn .btn-label {
+  position: relative;
+  z-index: 1;
+}
+
+.game-select-btn.selected-game {
+  outline: 4px solid #ffeb3b;
+  outline-offset: 2px;
+}
+
+/* ===== ONE shared game window ===== */
 .game-window {
   position: relative;
   flex: 1;
@@ -480,7 +543,7 @@ body {
   background-color: #050505;
 }
 
-/* Power button sits on the top of the frame */
+/* Power button on the frame */
 .power-btn {
   position: absolute;
   top: 10px;
@@ -517,17 +580,24 @@ body {
   background: #e53935;
 }
 
-/* Content area – always starts BELOW the power button */
-.powered-off-screen,
-.game-container {
+/* The single screen area (everything below the power button) */
+.game-screen {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  /* Keep content below the power button */
+  padding-top: 56px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* All three contents share the exact same space */
+.screen-content {
   flex: 1;
   width: 100%;
   box-sizing: border-box;
-  /* Reserve space under the power button so content never covers it */
-  padding-top: 56px;
-  padding-left: 12px;
-  padding-right: 12px;
-  padding-bottom: 12px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -539,7 +609,6 @@ body {
   color: #666;
   font-family: Arial, sans-serif;
   text-align: center;
-  min-height: 0; /* let flex control height */
 }
 
 .powered-off-screen p {
@@ -552,17 +621,12 @@ body {
   font-size: 0.95rem;
 }
 
-/* Active game fills the content area */
-.game-container {
-  text-align: center;
-}
-
+/* Active game */
 .game-container canvas {
   display: block;
   width: 100%;
   max-width: 800px;
   height: auto;
-  max-height: calc(100% - 20px); /* stay inside the content area */
   margin: 0 auto;
   border: 3px solid #fff;
   border-radius: 8px;
@@ -605,7 +669,7 @@ body {
   background-color: #2e7d32;
 }
 
-/* ===== RESPONSIVE ===== */
+/* Responsive */
 @media (max-width: 768px) {
   .games-container {
     flex-direction: column;
@@ -629,8 +693,7 @@ body {
     width: 100%;
   }
 
-  .powered-off-screen,
-  .game-container {
+  .game-screen {
     padding-top: 52px;
   }
 }
