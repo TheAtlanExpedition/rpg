@@ -3,43 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <meta name="description" content="Differences in AI image generations">
   <meta property="og:title" content="Differences in AI Image Generations">
   <meta property="og:image" content="">
   <meta property="og:url" content="">
-
   <title>Differences in AI Image Generations</title>
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-  <link
-    href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Pacifico&display=swap"
-    rel="stylesheet"
-  >
-
+  <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Pacifico&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="html.js" defer></script>
 </head>
-
 <body>
   <header class="header-wrapper">
     <div class="header-container">
       <h1>Differences in A.I<br>Image Generations</h1>
-
       <div class="brand-container">
-        <a
-          href="https://theatlanexpedition.github.io/Learning_HTML/index.html"
-          aria-label="Visit homepage"
-        >
+        <a href="https://theatlanexpedition.github.io/Learning_HTML/index.html" aria-label="Visit homepage">
           <button class="brand-button" type="button">
             <span>ICON</span>
           </button>
         </a>
       </div>
     </div>
-
     <nav class="menu-container" aria-label="Main navigation">
       <a href="#home">Home</a>
       <a href="#images">Images</a>
@@ -54,7 +40,6 @@
         <h2>Home</h2>
         <p>Welcome</p>
       </div>
-
       <div class="info-paragraph"></div>
     </section>
 
@@ -64,27 +49,12 @@
         <h3>Picking two random images and asking A.I. to combine them.</h3>
         <p>The only prompt I give is “Combine these two images”.</p>
       </div>
-
       <div class="carousel">
-        <button
-          class="carousel-arrow previous"
-          type="button"
-          aria-label="Previous image"
-        >
-          &#10094;
-        </button>
-
+        <button class="carousel-arrow previous" type="button" aria-label="Previous image">&#10094;</button>
         <div class="carousel-window">
           <div class="carousel-track" id="carousel-track"></div>
         </div>
-
-        <button
-          class="carousel-arrow next"
-          type="button"
-          aria-label="Next image"
-        >
-          &#10095;
-        </button>
+        <button class="carousel-arrow next" type="button" aria-label="Next image">&#10095;</button>
       </div>
     </section>
 
@@ -94,32 +64,27 @@
       </div>
 
       <div class="games-container">
-        <div class="game-controls">
-          <button id="game1Button" type="button">
-            Game 1
+        <!-- Vertical stack of game buttons -->
+        <div class="game-buttons">
+          <button id="game1Button" type="button" class="game-select-btn game1-btn">
+            <span class="btn-bg"></span>
+            <span class="btn-label">Game 1</span>
           </button>
-
-          <button id="game2Button" type="button">
-            Game 2
-          </button>
-
-          <button
-            id="gamePowerButton"
-            type="button"
-            aria-pressed="false"
-          >
-            Power On
+          <button id="game2Button" type="button" class="game-select-btn game2-btn">
+            <span class="btn-bg"></span>
+            <span class="btn-label">Game 2</span>
           </button>
         </div>
 
-        <div
-          id="gameWindow"
-          class="game-window powered-off"
-          aria-live="polite"
-        >
+        <!-- Game window with power button in the frame -->
+        <div id="gameWindow" class="game-window powered-off" aria-live="polite">
+          <button id="gamePowerButton" type="button" class="power-btn" aria-pressed="false" title="Power">
+            <span class="power-icon">⏻</span>
+          </button>
+
           <div id="poweredOffScreen" class="powered-off-screen">
             <p>Game Window Powered Off</p>
-            <span>Select a game or press Power On</span>
+            <span>Select a game to power on</span>
           </div>
 
           <div id="game1Container" class="game-container" hidden>
@@ -128,12 +93,8 @@
 
           <div id="game2Container" class="game-container" hidden>
             <canvas id="gameCanvas2" width="800" height="640"></canvas>
-
             <div id="gameInfo" class="game-info"></div>
-
-            <button id="restartButton" type="button" hidden>
-              Restart Game 2
-            </button>
+            <button id="restartButton" type="button" hidden>Restart Game 2</button>
           </div>
         </div>
       </div>
@@ -144,42 +105,27 @@
         <h2>About</h2>
         <p><i>What?</i></p>
       </div>
-
       <div class="info-paragraph">
         <p>Here's a map of <b>Bendigo</b></p>
-
         <div class="map-container">
           <iframe
             src="https://www.openstreetmap.org/export/embed.html?bbox=144.03282165527347%2C-36.873029362792956%2C144.53235626220706%2C-36.6378455719693&layer=mapnik"
             title="Map of Bendigo, Victoria, Australia"
             loading="lazy"
           ></iframe>
-
           <p>
-            <a
-              href="https://www.openstreetmap.org/#map=12/-36.7555/144.2826"
-              target="_blank"
-              rel="noopener"
-            >
+            <a href="https://www.openstreetmap.org/#map=12/-36.7555/144.2826" target="_blank" rel="noopener">
               <b>View Larger Map</b>
             </a>
           </p>
         </div>
       </div>
-
       <div class="definitions">
         <dl>
           <dt>SVG Images</dt>
-          <dd>
-            An XML-based file format used to display two-dimensional,
-            code-driven graphics directly on a webpage.
-          </dd>
-
+          <dd>An XML-based file format used to display two-dimensional, code-driven graphics directly on a webpage.</dd>
           <dt>XML</dt>
-          <dd>
-            A file format that uses the syntax of Extensible Markup Language
-            to structure, store, or transport data.
-          </dd>
+          <dd>A file format that uses the syntax of Extensible Markup Language to structure, store, or transport data.</dd>
         </dl>
       </div>
     </section>
@@ -190,119 +136,11 @@
   </footer>
 
   <div id="image-modal" class="image-modal" aria-hidden="true">
-    <button
-      id="modal-close"
-      class="modal-close"
-      type="button"
-      aria-label="Close image preview"
-    >
-      &times;
-    </button>
-
+    <button id="modal-close" class="modal-close" type="button" aria-label="Close image preview">&times;</button>
     <img id="modal-image" src="" alt="">
   </div>
 
   <script src="game.js"></script>
   <script src="game_2.js"></script>
-
-  <script>
-    const gameWindow = document.getElementById("gameWindow");
-    const poweredOffScreen = document.getElementById("poweredOffScreen");
-
-    const game1Button = document.getElementById("game1Button");
-    const game2Button = document.getElementById("game2Button");
-    const gamePowerButton = document.getElementById("gamePowerButton");
-
-    const game1Container = document.getElementById("game1Container");
-    const game2Container = document.getElementById("game2Container");
-
-    let selectedGame = 1;
-    let gamePoweredOn = false;
-
-    function updateGameWindow() {
-      gameWindow.classList.toggle("powered-on", gamePoweredOn);
-      gameWindow.classList.toggle("powered-off", !gamePoweredOn);
-
-      poweredOffScreen.hidden = gamePoweredOn;
-
-      game1Container.hidden = !gamePoweredOn || selectedGame !== 1;
-      game2Container.hidden = !gamePoweredOn || selectedGame !== 2;
-
-      game1Button.classList.toggle(
-        "selected-game",
-        gamePoweredOn && selectedGame === 1
-      );
-
-      game2Button.classList.toggle(
-        "selected-game",
-        gamePoweredOn && selectedGame === 2
-      );
-
-      gamePowerButton.textContent = gamePoweredOn
-        ? "Power Off"
-        : "Power On";
-
-      gamePowerButton.setAttribute(
-        "aria-pressed",
-        String(gamePoweredOn)
-      );
-    }
-
-    function stopSelectedGame() {
-      if (selectedGame === 1 && window.stopGame1) {
-        window.stopGame1();
-      }
-
-      if (selectedGame === 2 && window.stopGame2) {
-        window.stopGame2();
-      }
-    }
-
-    function startSelectedGame() {
-      if (selectedGame === 1 && window.startGame1) {
-        window.startGame1();
-      }
-
-      if (selectedGame === 2 && window.startGame2) {
-        window.startGame2();
-      }
-    }
-
-    function selectGame(gameNumber) {
-      if (gamePoweredOn) {
-        stopSelectedGame();
-      }
-
-      selectedGame = gameNumber;
-      gamePoweredOn = true;
-
-      updateGameWindow();
-      startSelectedGame();
-    }
-
-    function togglePower() {
-      if (gamePoweredOn) {
-        stopSelectedGame();
-        gamePoweredOn = false;
-      } else {
-        gamePoweredOn = true;
-        startSelectedGame();
-      }
-
-      updateGameWindow();
-    }
-
-    game1Button.addEventListener("click", () => {
-      selectGame(1);
-    });
-
-    game2Button.addEventListener("click", () => {
-      selectGame(2);
-    });
-
-    gamePowerButton.addEventListener("click", togglePower);
-
-    updateGameWindow();
-  </script>
 </body>
 </html>
