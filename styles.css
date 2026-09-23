@@ -210,11 +210,27 @@ body {
   width: 100%;
   min-width: 0;
 }
-
+/* Result column headings – keep images aligned */
 .result-column .intro-text {
   margin-bottom: 8px;
   color: #388e3c;
   text-decoration: none;
+  min-height: 4.2em;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.result-column .intro-text h2 {
+  font-size: clamp(0.95rem, 2.2vw, 1.25rem);
+  margin: 0 0 2px;
+  line-height: 1.2;
+}
+
+.result-column .intro-text p {
+  font-size: clamp(0.75rem, 1.6vw, 0.95rem);
+  margin: 0;
+  line-height: 1.2;
 }
 
 /* Carousel */
