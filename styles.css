@@ -115,6 +115,13 @@ body {
   text-align: center;
   font-family: "Black Ops One", sans-serif;
   margin: 0 10px 20px;
+  color: #000;                    /* default black for page text */
+}
+
+/* Keep green only inside the carousel */
+.carousel .intro-text,
+.gallery-container .intro-text,
+.result-column .intro-text {
   color: #388e3c;
 }
 
