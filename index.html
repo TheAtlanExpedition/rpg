@@ -58,47 +58,54 @@
       </div>
     </section>
 
-    <section id="game" class="page">
-      <div class="intro-text">
-        <h2>Games</h2>
-      </div>
+  <section id="game" class="page">
+  <div class="intro-text">
+    <h2>Games</h2>
+  </div>
 
-      <div class="games-container">
-        <!-- Vertical stack of game buttons -->
-        <div class="game-buttons">
-          <button id="game1Button" type="button" class="game-select-btn game1-btn">
-            <span class="btn-bg"></span>
-            <span class="btn-label">Game 1</span>
-          </button>
-          <button id="game2Button" type="button" class="game-select-btn game2-btn">
-            <span class="btn-bg"></span>
-            <span class="btn-label">Game 2</span>
-          </button>
+  <div class="games-container">
+    <!-- Vertical game buttons -->
+    <div class="game-buttons">
+      <button id="game1Button" type="button" class="game-select-btn game1-btn">
+        <span class="btn-bg"></span>
+        <span class="btn-label">Game 1</span>
+      </button>
+      <button id="game2Button" type="button" class="game-select-btn game2-btn">
+        <span class="btn-bg"></span>
+        <span class="btn-label">Game 2</span>
+      </button>
+    </div>
+
+    <!-- ONE shared game window -->
+    <div id="gameWindow" class="game-window powered-off" aria-live="polite">
+      <!-- Power button sits on the frame -->
+      <button id="gamePowerButton" type="button" class="power-btn" aria-pressed="false" title="Power">
+        <span class="power-icon">⏻</span>
+      </button>
+
+      <!-- Single screen area that switches content -->
+      <div class="game-screen">
+        <!-- Powered Off -->
+        <div id="poweredOffScreen" class="screen-content powered-off-screen">
+          <p>Game Window Powered Off</p>
+          <span>Select a game to power on</span>
         </div>
 
-        <!-- Game window with power button in the frame -->
-        <div id="gameWindow" class="game-window powered-off" aria-live="polite">
-          <button id="gamePowerButton" type="button" class="power-btn" aria-pressed="false" title="Power">
-            <span class="power-icon">⏻</span>
-          </button>
+        <!-- Game 1 -->
+        <div id="game1Container" class="screen-content game-container" hidden>
+          <canvas id="gameCanvas" width="800" height="500"></canvas>
+        </div>
 
-          <div id="poweredOffScreen" class="powered-off-screen">
-            <p>Game Window Powered Off</p>
-            <span>Select a game to power on</span>
-          </div>
-
-          <div id="game1Container" class="game-container" hidden>
-            <canvas id="gameCanvas" width="800" height="500"></canvas>
-          </div>
-
-          <div id="game2Container" class="game-container" hidden>
-            <canvas id="gameCanvas2" width="800" height="640"></canvas>
-            <div id="gameInfo" class="game-info"></div>
-            <button id="restartButton" type="button" hidden>Restart Game 2</button>
-          </div>
+        <!-- Game 2 -->
+        <div id="game2Container" class="screen-content game-container" hidden>
+          <canvas id="gameCanvas2" width="800" height="640"></canvas>
+          <div id="gameInfo" class="game-info"></div>
+          <button id="restartButton" type="button" hidden>Restart Game 2</button>
         </div>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
     <section id="about" class="page">
       <div class="intro-text">
