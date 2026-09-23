@@ -9,7 +9,9 @@ body {
   background-color: #e0e0e0;
   font-family: Arial, sans-serif;
 }
-
+#game.page {
+  display: block;
+}
 /* ===== HEADER ===== */
 .header-wrapper {
   position: sticky;
@@ -96,18 +98,6 @@ body {
   padding: 30px 20px;
   box-sizing: border-box;
 }
-
-.page.active {
-  display: block;
-}
-
-#home,
-#images,
-#about,
-#game {
-  scroll-margin-top: 200px;
-}
-
 /* ===== INTRO TEXT ===== */
 .intro-text {
   text-decoration: underline;
@@ -115,7 +105,7 @@ body {
   text-align: center;
   font-family: "Black Ops One", sans-serif;
   margin: 0 10px 20px;
-  color: #000;                    /* default black for page text */
+  color: #000;
 }
 
 /* Keep green only inside the carousel */
@@ -141,237 +131,6 @@ body {
   text-align: center;
   font-family: "Black Ops One", sans-serif;
   margin: 0 10px;
-}
-
-/* ===== GALLERY / CAROUSEL ===== */
-.gallery-image {
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
-.gallery-container {
-  font-family: "Black Ops One", sans-serif;
-  display: flex;
-  gap: 20px;
-  flex-direction: column;
-  justify-content: center;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 20px auto;
-  text-align: center;
-  max-width: 1300px;
-  padding: 0 15px;
-}
-
-.gallery-container figure,
-.result-column figcaption {
-  flex: 1;
-  min-width: 200px;
-  max-width: 900px;
-  margin: 0;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #388e3c;
-}
-
-.gallery-container img,
-.result-column img {
-  width: 100%;
-  max-width: 480px;
-  height: auto;
-  aspect-ratio: 480 / 280;
-  object-fit: cover;
-  border: 5px solid #388e3c;
-  cursor: pointer;
-  display: block;
-  border-radius: 12px;
-  box-sizing: border-box;
-}
-
-.gallery-operator {
-  font-family: "Black Ops One", sans-serif;
-  font-size: 80px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #388e3c;
-}
-
-.gallery-container.bottom-results {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
-  align-items: start;
-  width: 100%;
-  max-width: 1100px;
-  margin: 20px auto;
-  box-sizing: border-box;
-}
-
-.result-column {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-width: 0;
-}
-/* Result column headings – keep images aligned */
-.result-column .intro-text {
-  margin-bottom: 8px;
-  color: #388e3c;
-  text-decoration: none;
-  min-height: 4.2em;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.result-column .intro-text h2 {
-  font-size: clamp(0.95rem, 2.2vw, 1.25rem);
-  margin: 0 0 2px;
-  line-height: 1.2;
-}
-
-.result-column .intro-text p {
-  font-size: clamp(0.75rem, 1.6vw, 0.95rem);
-  margin: 0;
-  line-height: 1.2;
-}
-
-/* Carousel */
-.carousel {
-  display: grid;
-  grid-template-columns: 45px minmax(0, 1fr) 45px;
-  align-items: start;
-  width: 100%;
-  max-width: 1200px;
-  margin: 30px auto;
-  position: relative;
-}
-
-.carousel-window {
-  grid-column: 2;
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-  background-color: #000;
-  border-radius: 12px;
-  user-select: none;
-}
-
-.carousel-track {
-  display: flex;
-  transition: transform 0.4s ease-in-out;
-}
-
-.carousel-slide {
-  width: 100%;
-  min-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  box-sizing: border-box;
-  padding: 10px 0;
-}
-
-.carousel-arrow {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  width: 45px;
-  height: 120px;
-  border: none;
-  background-color: #388e3c;
-  color: #000;
-  font-size: 64px;
-  cursor: pointer;
-  line-height: 1.2;
-}
-
-.carousel-arrow.previous { left: 0; }
-.carousel-arrow.next { right: 0; }
-
-.carousel-arrow:hover {
-  background-color: #2e7d32;
-}
-
-/* ===== IMAGE MODAL ===== */
-.image-modal {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  box-sizing: border-box;
-  background-color: rgba(0, 0, 0, 0.85);
-}
-
-.image-modal.active {
-  display: flex;
-}
-
-.image-modal img {
-  display: block;
-  max-width: 90vw;
-  max-height: 90vh;
-  object-fit: contain;
-  border: 5px solid #388e3c;
-  border-radius: 12px;
-}
-
-.modal-close {
-  position: absolute;
-  top: 15px;
-  right: 20px;
-  z-index: 1001;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: crimson;
-  font-size: 64px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-/* ===== MAP ===== */
-.map-container {
-  width: 100%;
-  max-width: 400px;
-  height: 300px;
-  margin: 0 auto;
-  border: 2px solid #000;
-  box-sizing: border-box;
-}
-
-.map-container iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-/* ===== DEFINITIONS ===== */
-.definitions {
-  font-family: "Black Ops One", sans-serif;
-  padding-top: 60px;
-  max-width: 700px;
-  margin: 0 auto;
-  text-align: left;
-}
-
-.definitions dt {
-  text-decoration: underline;
-  margin-top: 20px;
-}
-
-.definitions dd {
-  margin: 8px 0 0 20px;
 }
 
 /* ===== FOOTER ===== */
@@ -406,8 +165,8 @@ body {
 
 .game-select-btn {
   position: relative;
-  width: 140px;
-  height: 90px;
+  width: 100px;
+  height: 30px;
   border: 4px solid #000;
   border-radius: 12px;
   overflow: hidden;
@@ -421,7 +180,7 @@ body {
 
 .game-select-btn:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .game-select-btn .btn-bg {
@@ -431,10 +190,13 @@ body {
 }
 
 .game1-btn .btn-bg {
-  background: linear-gradient(135deg, #87ceeb, #228b22);
+  background: linear-gradient(135deg, #87eeeb, #228b22);
 }
 
 .game2-btn .btn-bg {
+  background: linear-gradient(135deg, #1f2937, #7c3aed);
+}
+.game3-btn .btn-bg {
   background: linear-gradient(135deg, #1f2937, #7c3aed);
 }
 
@@ -451,7 +213,7 @@ body {
 /* ===== GAMES SECTION ===== */
 .games-container {
   display: flex;
-  justify-content: center;        /* centers the whole group */
+  justify-content: center; /* centers the whole group */
   align-items: flex-start;
   gap: 24px;
   width: min(95vw, 1100px);
@@ -485,7 +247,7 @@ body {
 
 .game-select-btn:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .game-select-btn .btn-bg {
@@ -523,9 +285,7 @@ body {
   background-color: #111;
   border: 10px solid #222;
   border-radius: 16px;
-  box-shadow:
-    0 0 0 4px #444,
-    0 0 25px rgba(0,0,0,0.6);
+  box-shadow: 0 0 0 4px #444, 0 0 25px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -534,9 +294,7 @@ body {
 
 .game-window.powered-on {
   border-color: #388e3c;
-  box-shadow:
-    0 0 0 4px #2e7d32,
-    0 0 25px rgba(56,142,60,0.4);
+  box-shadow: 0 0 0 4px #2e7d32, 0 0 25px rgba(56, 142, 60, 0.4);
 }
 
 .game-window.powered-off {
@@ -562,7 +320,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .power-btn:hover {
@@ -574,7 +332,7 @@ body {
   background: #c62828;
   border-color: #ff5252;
   color: #fff;
-  box-shadow: 0 0 10px rgba(198,40,40,0.6);
+  box-shadow: 0 0 10px rgba(198, 40, 40, 0.6);
 }
 
 .game-window.powered-on .power-btn:hover {
@@ -586,7 +344,7 @@ body {
   position: relative;
   flex: 1;
   width: 100%;
-  padding-top: 56px;          /* keeps content under the power button */
+  padding-top: 56px; /* keeps content under the power button */
   box-sizing: border-box;
 }
 
@@ -630,14 +388,14 @@ body {
   width: 100%;
   max-width: 800px;
   height: auto;
-  max-height: 500px;          /* matches Game 1’s height */
-  object-fit: contain;        /* keeps the correct aspect ratio */
+  max-height: 500px; /* matches Game 1’s height */
+  object-fit: contain; /* keeps the correct aspect ratio */
   margin: 0 auto;
   border: 3px solid #fff;
   border-radius: 8px;
   touch-action: none;
   user-select: none;
-  background-color: #111;     /* fallback while loading */
+  background-color: #111; /* fallback while loading */
 }
 
 #gameCanvas {
@@ -647,11 +405,8 @@ body {
 #gameCanvas2 {
   background-color: #111827;
 }
-#gameCanvas {
-  background-color: #87ceeb;
-}
 
-#gameCanvas2 {
+#gameCanvas3 {
   background-color: #111827;
 }
 
