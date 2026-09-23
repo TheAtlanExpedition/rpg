@@ -246,6 +246,90 @@ function castSpell(dx, dy) {
   gameState = moveEnemies(gameState);
   renderGame();
 }
+function getEnemyMove(enemy, state, reservedPositions) {
+  const player = state.player;
+  const startKey = `${enemy.x},${enemy.y}`;
+
+  const queue = [
+    {
+      x: enemy.x,
+      y: enemy.y,
+      firstMove: null,
+    },
+  ];
+
+  const visited = new Set([startKey]);
+
+  const directions = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    for (const direction of directions) {
+      const nextX = current.x + direction.x;
+      const nextY = current.y + direction.y;
+      const nextKey = `${nextX},${nextY}`;
+
+      if (
+        nextX < 0 ||
+        nextX >= MAP_WIDTH ||
+        nextY < 0 ||
+        nextY >= MAP_HEIGHT
+      ) {
+        continue;
+      }
+
+      if (visited.has(nextKey)) continue;
+      visited.add(nextKey);
+
+      if (state.map[nextY][nextX] === TileType.WALL) {
+        continue;
+      }
+
+      const containsItem = state.items.some(
+        (item) => item.x === nextX && item.y === nextY
+      );
+
+      if (containsItem) continue;
+
+      if (reservedPositions.has(nextKey)) {
+        continue;
+      }
+
+      // The player tile is not entered.
+      // An adjacent enemy attacks instead.
+      if (nextX === player.x && nextY === player.y) {
+        continue;
+      }
+
+      const firstMove = current.firstMove || {
+        x: nextX,
+        y: nextY,
+      };
+
+      const distanceToPlayer =
+        Math.abs(nextX - player.x) +
+        Math.abs(nextY - player.y);
+
+      if (distanceToPlayer === 1) {
+        return firstMove;
+      }
+
+      queue.push({
+        x: nextX,
+        y: nextY,
+        firstMove,
+      });
+    }
+  }
+
+  return null;
+}
 
 function moveEnemies(state) {
   let enemies = [...state.enemies];
@@ -313,55 +397,59 @@ function moveEnemies(state) {
     };
   }
 
-  // Enemy AI
-  const newEnemies = [];
-  for (const enemy of enemies) {
-    const distToPlayer =
-      Math.abs(enemy.x - state.player.x) + Math.abs(enemy.y - state.player.y);
+  // Enemy AI// Enemy AI
+const newEnemies = [];
 
-    if (distToPlayer === 1) {
-      playerHp -= 8;
-      msg = "The monster strikes!";
-      newEnemies.push(enemy);
-      continue;
-    }
+// Reserve every enemy's current position first.
+const reservedPositions = new Set(
+  enemies.map((enemy) => `${enemy.x},${enemy.y}`)
+);
 
-    if (distToPlayer > 5) {
-      newEnemies.push(enemy);
-      continue;
-    }
+for (const enemy of enemies) {
+  const currentKey = `${enemy.x},${enemy.y}`;
 
-    const dx = state.player.x > enemy.x ? 1 : state.player.x < enemy.x ? -1 : 0;
-    const dy = state.player.y > enemy.y ? 1 : state.player.y < enemy.y ? -1 : 0;
+  // This enemy is now being processed, so its old position
+  // can be considered available.
+  reservedPositions.delete(currentKey);
 
-    const possibleMoves = [
-      { x: enemy.x + dx, y: enemy.y },
-      { x: enemy.x, y: enemy.y + dy },
-    ];
+  const distToPlayer =
+    Math.abs(enemy.x - state.player.x) +
+    Math.abs(enemy.y - state.player.y);
 
-    let moved = false;
-    for (const move of possibleMoves) {
-      if (
-        move.x < 0 ||
-        move.x >= MAP_WIDTH ||
-        move.y < 0 ||
-        move.y >= MAP_HEIGHT
-      )
-        continue;
-      if (state.map[move.y][move.x] === TileType.WALL) continue;
-      if (move.x === state.player.x && move.y === state.player.y) continue;
-      if (state.items.some((i) => i.x === move.x && i.y === move.y)) continue;
+  // Attack instead of moving.
+  if (distToPlayer === 1) {
+    playerHp -= 8;
+    msg = "The monster strikes!";
 
-      const isOccupied = newEnemies.some((o) => o.x === move.x && o.y === move.y);
-      if (isOccupied) continue;
-
-      newEnemies.push({ ...enemy, x: move.x, y: move.y });
-      moved = true;
-      break;
-    }
-
-    if (!moved) newEnemies.push(enemy);
+    // Keep this enemy in place.
+    reservedPositions.add(currentKey);
+    newEnemies.push(enemy);
+    continue;
   }
+
+  const nextMove = getEnemyMove(
+    enemy,
+    state,
+    reservedPositions
+  );
+
+  if (nextMove) {
+    const nextKey = `${nextMove.x},${nextMove.y}`;
+
+    newEnemies.push({
+      ...enemy,
+      x: nextMove.x,
+      y: nextMove.y,
+    });
+
+    reservedPositions.add(nextKey);
+  } else {
+    // No available path, so stay still.
+    reservedPositions.add(currentKey);
+    newEnemies.push(enemy);
+  }
+}
+
 
   return {
     ...state,
