@@ -624,18 +624,29 @@ body {
 }
 
 /* Game canvases */
+/* Make both games display at the same size */
 .game-container canvas {
   display: block;
   width: 100%;
   max-width: 800px;
   height: auto;
+  max-height: 500px;          /* matches Game 1’s height */
+  object-fit: contain;        /* keeps the correct aspect ratio */
   margin: 0 auto;
   border: 3px solid #fff;
   border-radius: 8px;
   touch-action: none;
   user-select: none;
+  background-color: #111;     /* fallback while loading */
 }
 
+#gameCanvas {
+  background-color: #87ceeb;
+}
+
+#gameCanvas2 {
+  background-color: #111827;
+}
 #gameCanvas {
   background-color: #87ceeb;
 }
