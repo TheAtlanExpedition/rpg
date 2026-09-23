@@ -1,5 +1,4 @@
 /* IMAGE DATA */
-
 const imageBase =
   "https://raw.githubusercontent.com/TheAtlanExpedition/Learning_HTML/refs/heads/main/images/";
 
@@ -96,19 +95,15 @@ const imageSets = [
   }
 ];
 
-
 /* BUILD THE CAROUSEL */
-
 const carouselTrack = document.querySelector("#carousel-track");
 
 function createImage(file, alt) {
   const image = document.createElement("img");
-
   image.className = "gallery-image";
   image.src = imageBase + file;
   image.alt = alt;
   image.loading = "lazy";
-
   return image;
 }
 
@@ -116,19 +111,15 @@ function createFigure(file, alt, caption) {
   const figure = document.createElement("figure");
   const image = createImage(file, alt);
   const figcaption = document.createElement("figcaption");
-
   figcaption.textContent = caption;
   figure.append(image, figcaption);
-
   return figure;
 }
 
 function createOperator(symbol) {
   const operator = document.createElement("span");
-
   operator.className = "gallery-operator";
   operator.textContent = symbol;
-
   return operator;
 }
 
@@ -138,19 +129,10 @@ imageSets.forEach((set) => {
 
   const parents = document.createElement("div");
   parents.className = "gallery-container";
-
   parents.append(
-    createFigure(
-      set.parentOne.file,
-      set.parentOne.alt,
-      set.parentOne.alt
-    ),
+    createFigure(set.parentOne.file, set.parentOne.alt, set.parentOne.alt),
     createOperator("+"),
-    createFigure(
-      set.parentTwo.file,
-      set.parentTwo.alt,
-      set.parentTwo.alt
-    )
+    createFigure(set.parentTwo.file, set.parentTwo.alt, set.parentTwo.alt)
   );
 
   const results = document.createElement("div");
@@ -171,56 +153,35 @@ imageSets.forEach((set) => {
 
     heading.append(title, source);
 
-    const figure = createFigure(
-      result.file,
-      result.alt,
-      ""
-    );
-
+    const figure = createFigure(result.file, result.alt, "");
     column.append(heading, figure);
     results.append(column);
   });
 
-  slide.append(
-    parents,
-    createOperator("="),
-    results
-  );
-
+  slide.append(parents, createOperator("="), results);
   carouselTrack.append(slide);
 });
 
-
 /* PAGE NAVIGATION */
-
 function showPage() {
   const pageName = window.location.hash.substring(1) || "home";
-
   document.querySelectorAll(".page").forEach((page) => {
     page.classList.remove("active");
   });
-
   const selectedPage = document.getElementById(pageName);
   const homePage = document.getElementById("home");
-
   if (selectedPage) {
     selectedPage.classList.add("active");
   } else {
     homePage.classList.add("active");
   }
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 window.addEventListener("hashchange", showPage);
 showPage();
 
-
 /* IMAGE PREVIEW */
-
 const imageModal = document.querySelector("#image-modal");
 const modalImage = document.querySelector("#modal-image");
 const modalClose = document.querySelector("#modal-close");
@@ -250,14 +211,11 @@ document.querySelectorAll(".gallery-image").forEach((image) => {
       moved = false;
       return;
     }
-
     modalImage.src = image.src;
     modalImage.alt = image.alt;
-
     imageModal.classList.add("active");
     imageModal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-
     moved = false;
   });
 });
@@ -273,10 +231,7 @@ function closeModal() {
 modalClose.addEventListener("click", closeModal);
 
 imageModal.addEventListener("click", (event) => {
-  if (
-    event.target === imageModal ||
-    event.target === modalImage
-  ) {
+  if (event.target === imageModal || event.target === modalImage) {
     closeModal();
   }
 });
@@ -287,34 +242,27 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-
 /* CAROUSEL CONTROLS */
-
 const carouselSlides = document.querySelectorAll(".carousel-slide");
 const previousButton = document.querySelector(".carousel-arrow.previous");
 const nextButton = document.querySelector(".carousel-arrow.next");
 const carouselWindow = document.querySelector(".carousel-window");
-
 let currentSlide = 0;
 let startX = 0;
 let isDragging = false;
 
 function updateCarousel() {
-  carouselTrack.style.transform =
-    `translateX(-${currentSlide * 100}%)`;
+  carouselTrack.style.transform = `translateX(-${currentSlide * 100}%)`;
 }
 
 function goToSlide(index) {
   currentSlide = index;
-
   if (currentSlide < 0) {
     currentSlide = carouselSlides.length - 1;
   }
-
   if (currentSlide >= carouselSlides.length) {
     currentSlide = 0;
   }
-
   updateCarousel();
 }
 
@@ -326,9 +274,7 @@ previousButton.addEventListener("click", () => {
   goToSlide(currentSlide - 1);
 });
 
-
 /* TOUCH SWIPING */
-
 carouselWindow.addEventListener(
   "touchstart",
   (event) => {
@@ -341,16 +287,11 @@ carouselWindow.addEventListener(
 carouselWindow.addEventListener(
   "touchend",
   (event) => {
-    if (!isDragging) {
-      return;
-    }
-
+    if (!isDragging) return;
     isDragging = false;
-
     const endX = event.changedTouches[0].clientX;
     const difference = startX - endX;
     const threshold = 70;
-
     if (Math.abs(difference) > threshold) {
       if (difference > 0) {
         goToSlide(currentSlide + 1);
@@ -362,9 +303,7 @@ carouselWindow.addEventListener(
   { passive: true }
 );
 
-
 /* MOUSE DRAGGING */
-
 carouselWindow.addEventListener("mousedown", (event) => {
   startX = event.clientX;
   isDragging = true;
@@ -372,16 +311,11 @@ carouselWindow.addEventListener("mousedown", (event) => {
 });
 
 carouselWindow.addEventListener("mouseup", (event) => {
-  if (!isDragging) {
-    return;
-  }
-
+  if (!isDragging) return;
   isDragging = false;
-
   const endX = event.clientX;
   const difference = startX - endX;
   const threshold = 70;
-
   if (Math.abs(difference) > threshold) {
     if (difference > 0) {
       goToSlide(currentSlide + 1);
@@ -398,3 +332,74 @@ carouselWindow.addEventListener("mouseleave", () => {
 carouselWindow.addEventListener("dragstart", (event) => {
   event.preventDefault();
 });
+
+/* ===== GAMES WINDOW CONTROL ===== */
+const gameWindow = document.getElementById("gameWindow");
+const poweredOffScreen = document.getElementById("poweredOffScreen");
+const game1Button = document.getElementById("game1Button");
+const game2Button = document.getElementById("game2Button");
+const gamePowerButton = document.getElementById("gamePowerButton");
+const game1Container = document.getElementById("game1Container");
+const game2Container = document.getElementById("game2Container");
+
+let selectedGame = 1;
+let gamePoweredOn = false;
+
+function updateGameWindow() {
+  gameWindow.classList.toggle("powered-on", gamePoweredOn);
+  gameWindow.classList.toggle("powered-off", !gamePoweredOn);
+
+  poweredOffScreen.hidden = gamePoweredOn;
+  game1Container.hidden = !gamePoweredOn || selectedGame !== 1;
+  game2Container.hidden = !gamePoweredOn || selectedGame !== 2;
+
+  game1Button.classList.toggle("selected-game", gamePoweredOn && selectedGame === 1);
+  game2Button.classList.toggle("selected-game", gamePoweredOn && selectedGame === 2);
+
+  gamePowerButton.setAttribute("aria-pressed", String(gamePoweredOn));
+}
+
+function stopSelectedGame() {
+  if (selectedGame === 1 && window.stopGame1) {
+    window.stopGame1();
+  }
+  if (selectedGame === 2 && window.stopGame2) {
+    window.stopGame2();
+  }
+}
+
+function startSelectedGame() {
+  if (selectedGame === 1 && window.startGame1) {
+    window.startGame1();
+  }
+  if (selectedGame === 2 && window.startGame2) {
+    window.startGame2();
+  }
+}
+
+function selectGame(gameNumber) {
+  if (gamePoweredOn) {
+    stopSelectedGame();
+  }
+  selectedGame = gameNumber;
+  gamePoweredOn = true;
+  updateGameWindow();
+  startSelectedGame();
+}
+
+function togglePower() {
+  if (gamePoweredOn) {
+    stopSelectedGame();
+    gamePoweredOn = false;
+  } else {
+    gamePoweredOn = true;
+    startSelectedGame();
+  }
+  updateGameWindow();
+}
+
+game1Button.addEventListener("click", () => selectGame(1));
+game2Button.addEventListener("click", () => selectGame(2));
+gamePowerButton.addEventListener("click", togglePower);
+
+updateGameWindow();
