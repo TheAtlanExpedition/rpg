@@ -1,42 +1,35 @@
-const canvas = document.querySelector("#gameCanvas");
-const context = canvas.getContext("2d");
+"use strict";
 
-const powerButton = document.querySelector("#powerButton");
+const game2Canvas = document.getElementById("gameCanvas2");
+const game2Context = game2Canvas.getContext("2d");
 
-let gameRunning = false;
-
-'use strict';
+const gameInfo = document.getElementById("gameInfo");
+const restartButton = document.getElementById("restartButton");
 
 const TILE_SIZE = 32;
 const MAP_WIDTH = 25;
 const MAP_HEIGHT = 20;
 
-const TileType = {
-  WALL: 0,
-  FLOOR: 1,
-  DOOR: 2,
-};
+game2Canvas.width = MAP_WIDTH * TILE_SIZE;
+game2Canvas.height = MAP_HEIGHT * TILE_SIZE;
 
-const canvas = document.getElementById('gameCanvas');
-const context = canvas.getContext('2d');
-const gameInfo = document.getElementById('gameInfo');
-const restartButton = document.getElementById('restartButton');
+const WALL = 0;
+const FLOOR = 1;
 
-canvas.width = MAP_WIDTH * TILE_SIZE;
-canvas.height = MAP_HEIGHT * TILE_SIZE;
+let game2Running = false;
+let game2State = null;
+let game2LevelTimer = null;
 
-let gameState = null;
-let levelTimer = null;
+const game2Keys = {};
 
-function createGameState(level, existingPlayer, existingScrolls) {
-  const newMap = Array.from(
+function createGame2State(level = 1) {
+  const map = Array.from(
     { length: MAP_HEIGHT },
-    () => Array(MAP_WIDTH).fill(TileType.WALL)
+    () => Array(MAP_WIDTH).fill(WALL)
   );
 
   const rooms = [];
 
-  // Generate rooms
   for (let i = 0; i < 6; i++) {
     const width = Math.floor(Math.random() * 4) + 4;
     const height = Math.floor(Math.random() * 4) + 4;
@@ -49,70 +42,41 @@ function createGameState(level, existingPlayer, existingScrolls) {
 
     for (let roomY = y; roomY < y + height; roomY++) {
       for (let roomX = x; roomX < x + width; roomX++) {
-        newMap[roomY][roomX] = TileType.FLOOR;
+        map[roomY][roomX] = FLOOR;
       }
     }
 
-    rooms.push({
-      x,
-      y,
-      width,
-      height,
-    });
+    rooms.push({ x, y, width, height });
   }
 
-  // Connect rooms with corridors
   for (let i = 0; i < rooms.length - 1; i++) {
-    const currentRoom = rooms[i];
-    const nextRoom = rooms[i + 1];
+    const first = rooms[i];
+    const second = rooms[i + 1];
 
-    const currentX = Math.floor(
-      currentRoom.x + currentRoom.width / 2
-    );
+    const firstX = Math.floor(first.x + first.width / 2);
+    const firstY = Math.floor(first.y + first.height / 2);
 
-    const currentY = Math.floor(
-      currentRoom.y + currentRoom.height / 2
-    );
-
-    const nextX = Math.floor(nextRoom.x + nextRoom.width / 2);
-    const nextY = Math.floor(nextRoom.y + nextRoom.height / 2);
+    const secondX = Math.floor(second.x + second.width / 2);
+    const secondY = Math.floor(second.y + second.height / 2);
 
     for (
-      let x = Math.min(currentX, nextX);
-      x <= Math.max(currentX, nextX);
+      let x = Math.min(firstX, secondX);
+      x <= Math.max(firstX, secondX);
       x++
     ) {
-      newMap[currentY][x] = TileType.FLOOR;
+      map[firstY][x] = FLOOR;
     }
 
     for (
-      let y = Math.min(currentY, nextY);
-      y <= Math.max(currentY, nextY);
+      let y = Math.min(firstY, secondY);
+      y <= Math.max(firstY, secondY);
       y++
     ) {
-      newMap[y][nextX] = TileType.FLOOR;
+      map[y][secondX] = FLOOR;
     }
   }
 
   const startRoom = rooms[0];
-
-  const player = existingPlayer
-    ? {
-        ...existingPlayer,
-        x: startRoom.x + 1,
-        y: startRoom.y + 1,
-        hp: Math.max(existingPlayer.hp, 1),
-      }
-    : {
-        id: 'player',
-        x: startRoom.x + 1,
-        y: startRoom.y + 1,
-        hp: 100,
-        maxHp: 100,
-        type: 'player',
-        symbol: '🧙‍♂️',
-        color: '#3b82f6',
-      };
 
   const enemies = [];
 
@@ -126,92 +90,102 @@ function createGameState(level, existingPlayer, existingScrolls) {
       y: room.y + Math.floor(room.height / 2),
       hp: enemyHp,
       maxHp: enemyHp,
-      type: 'enemy',
-      symbol: Math.random() > 0.5 ? '👹' : '💀',
-      color: '#ef4444',
+      symbol: Math.random() > 0.5 ? "👹" : "💀"
     });
   }
-
-  const items = [];
 
   const scrollRoom =
     rooms[Math.floor(Math.random() * (rooms.length - 1)) + 1];
 
-  items.push({
-    id: `scroll-${level}`,
-    x: scrollRoom.x + 1,
-    y: scrollRoom.y + 1,
-    type: 'scroll',
-    symbol: '📜',
-  });
-
   const potionRoom =
     rooms[Math.floor(Math.random() * (rooms.length - 1)) + 1];
 
-  items.push({
-    id: `potion-${level}`,
-    x: potionRoom.x + 2,
-    y: potionRoom.y + 2,
-    type: 'potion',
-    symbol: '🧪',
-  });
-
   return {
-    player,
+    map,
+    level,
+    player: {
+      x: startRoom.x + 1,
+      y: startRoom.y + 1,
+      hp: 100,
+      maxHp: 100,
+      symbol: "🧙‍♂️"
+    },
     enemies,
-    items,
+    items: [
+      {
+        id: `scroll-${level}`,
+        x: scrollRoom.x + 1,
+        y: scrollRoom.y + 1,
+        type: "scroll",
+        symbol: "📜"
+      },
+      {
+        id: `potion-${level}`,
+        x: potionRoom.x + 2,
+        y: potionRoom.y + 2,
+        type: "potion",
+        symbol: "🧪"
+      }
+    ],
     projectiles: [],
     explosions: [],
-    map: newMap,
-    level,
-    scrolls:
-      existingScrolls !== undefined
-        ? existingScrolls
-        : level === 1
-          ? 3
-          : 0,
+    scrolls: level === 1 ? 3 : 0,
     gameOver: false,
-    message:
-      level === 1
-        ? 'Find scrolls and defeat all monsters!'
-        : `Floor ${level} reached.`,
+    message: "Find scrolls and defeat all monsters!"
   };
 }
 
-function initGame(level, existingPlayer, existingScrolls) {
-  clearTimeout(levelTimer);
+function startGame2() {
+  clearTimeout(game2LevelTimer);
 
-  gameState = createGameState(
-    level,
-    existingPlayer,
-    existingScrolls
-  );
+  if (!game2State || game2State.gameOver) {
+    game2State = createGame2State(1);
+  }
 
-  renderGame();
+  game2Running = true;
+  renderGame2();
+}
+
+function stopGame2() {
+  game2Running = false;
+  clearTimeout(game2LevelTimer);
+
+  for (const key in game2Keys) {
+    game2Keys[key] = false;
+  }
+
+  drawGame2PoweredOffScreen();
+}
+
+function restartGame2() {
+  clearTimeout(game2LevelTimer);
+  game2State = createGame2State(1);
+  game2Running = true;
+  renderGame2();
 }
 
 function movePlayer(dx, dy) {
-  if (!gameState || gameState.gameOver) return;
+  if (!game2Running || !game2State || game2State.gameOver) {
+    return;
+  }
 
-  const newX = gameState.player.x + dx;
-  const newY = gameState.player.y + dy;
+  const newX = game2State.player.x + dx;
+  const newY = game2State.player.y + dy;
 
   if (
     newX < 0 ||
     newX >= MAP_WIDTH ||
     newY < 0 ||
-    newY >= MAP_HEIGHT
+    newY >= MAP_HEIGHT ||
+    game2State.map[newY][newX] === WALL
   ) {
     return;
   }
 
-  if (gameState.map[newY][newX] === TileType.WALL) {
-    return;
-  }
-
-  const enemy = gameState.enemies.find(
+  const enemy = game2State.enemies.find(
     currentEnemy =>
-      currentEnemy.x === newX && currentEnemy.y === newY
+      currentEnemy.x === newX &&
+      currentEnemy.y === newY
   );
 
   if (enemy) {
@@ -219,350 +193,233 @@ function movePlayer(dx, dy) {
     return;
   }
 
-  const item = gameState.items.find(
+  const item = game2State.items.find(
     currentItem =>
-      currentItem.x === newX && currentItem.y === newY
+      currentItem.x === newX &&
+      currentItem.y === newY
   );
 
-  let message = 'Moving...';
-
-  gameState.player.x = newX;
-  gameState.player.y = newY;
+  game2State.player.x = newX;
+  game2State.player.y = newY;
 
   if (item) {
-    gameState.items = gameState.items.filter(
+    game2State.items = game2State.items.filter(
       currentItem => currentItem.id !== item.id
     );
 
-    if (item.type === 'scroll') {
-      gameState.scrolls += 3;
-      message = 'Picked up a Magic Scroll: 3 charges!';
+    if (item.type === "scroll") {
+      game2State.scrolls += 3;
+      game2State.message = "Picked up 3 magic scrolls!";
     }
 
-    if (item.type === 'potion') {
-      gameState.player.hp = Math.min(
-        gameState.player.maxHp,
-        gameState.player.hp + 30
+    if (item.type === "potion") {
+      game2State.player.hp = Math.min(
+        game2State.player.maxHp,
+        game2State.player.hp + 30
       );
 
-      message = 'Drank a Health Potion!';
+      game2State.message = "Drank a health potion!";
     }
+  } else {
+    game2State.message = "Moving...";
   }
 
-  gameState.message = message;
-
   moveEnemies();
-  renderGame();
+  renderGame2();
 }
 
 function attackEnemy(enemyId) {
-  if (!gameState || gameState.gameOver) return;
+  if (!game2Running || !game2State || game2State.gameOver) {
+    return;
+  }
 
-  const enemy = gameState.enemies.find(
+  const enemy = game2State.enemies.find(
     currentEnemy => currentEnemy.id === enemyId
   );
 
-  if (!enemy) return;
+  if (!enemy) {
+    return;
+  }
 
   enemy.hp -= 15;
-  gameState.message = 'You struck the monster!';
+  game2State.message = "You struck the monster!";
 
   if (enemy.hp <= 0) {
-    gameState.enemies = gameState.enemies.filter(
+    game2State.enemies = game2State.enemies.filter(
       currentEnemy => currentEnemy.id !== enemyId
     );
 
-    gameState.message = 'Monster defeated!';
+    game2State.message = "Monster defeated!";
   }
 
-  if (gameState.enemies.length === 0) {
-    gameState.message = 'Level Cleared!';
-    renderGame();
+  if (game2State.enemies.length === 0) {
+    game2State.message = "Level cleared!";
+    renderGame2();
 
-    levelTimer = setTimeout(() => {
-      initGame(
-        gameState.level + 1,
-        gameState.player,
-        gameState.scrolls
-      );
+    game2LevelTimer = setTimeout(() => {
+      if (game2Running) {
+        game2State = createGame2State(game2State.level + 1);
+        renderGame2();
+      }
     }, 700);
 
     return;
   }
 
   moveEnemies();
-  renderGame();
+  renderGame2();
 }
 
 function castSpell() {
-  if (!gameState || gameState.gameOver) return;
-
-  if (gameState.scrolls <= 0) {
-    gameState.message = 'You have no magic scrolls!';
-    renderGame();
+  if (!game2Running || !game2State || game2State.gameOver) {
     return;
   }
 
-  gameState.scrolls--;
+  if (game2State.scrolls <= 0) {
+    game2State.message = "You have no magic scrolls!";
+    renderGame2();
+    return;
+  }
+
+  game2State.scrolls--;
 
   const direction =
-    gameState.player.x < MAP_WIDTH / 2 ? 1 : -1;
+    game2State.player.x < MAP_WIDTH / 2 ? 1 : -1;
 
-  gameState.projectiles.push({
-    id: `projectile-${Date.now()}`,
-    x: gameState.player.x,
-    y: gameState.player.y,
-    dx: direction,
-    dy: 0,
-    color: '#facc15',
-  });
+  let projectileX = game2State.player.x;
+  let hitEnemy = null;
 
-  gameState.message = 'You cast a magic bolt!';
+  for (let i = 0; i < 5; i++) {
+    projectileX += direction;
+
+    hitEnemy = game2State.enemies.find(
+      enemy =>
+        enemy.x === projectileX &&
+        enemy.y === game2State.player.y
+    );
+
+    if (hitEnemy) {
+      break;
+    }
+  }
+
+  if (hitEnemy) {
+    hitEnemy.hp -= 20;
+
+    game2State.message =
+      "Magic bolt exploded near the monster!";
+
+    if (hitEnemy.hp <= 0) {
+      game2State.enemies = game2State.enemies.filter(
+        enemy => enemy !== hitEnemy
+      );
+    }
+  } else {
+    game2State.message = "The magic bolt missed!";
+  }
 
   moveEnemies();
-  renderGame();
+  renderGame2();
 }
 
 function moveEnemies() {
-  if (!gameState || gameState.gameOver) return;
-
-  const processedProjectiles = [];
-  const explosions = [];
-
-  // Move projectiles
-  for (const projectile of gameState.projectiles) {
-    let currentX = projectile.x;
-    let currentY = projectile.y;
-    let exploded = false;
-
-    for (let step = 0; step < 2; step++) {
-      currentX += projectile.dx;
-      currentY += projectile.dy;
-
-      const outsideMap =
-        currentX < 0 ||
-        currentX >= MAP_WIDTH ||
-        currentY < 0 ||
-        currentY >= MAP_HEIGHT;
-
-      const hitWall =
-        !outsideMap &&
-        gameState.map[currentY][currentX] === TileType.WALL;
-
-      if (outsideMap || hitWall) {
-        exploded = true;
-        break;
-      }
-
-      const hitEnemy = gameState.enemies.some(
-        enemy =>
-          enemy.x === currentX && enemy.y === currentY
-      );
-
-      if (hitEnemy) {
-        exploded = true;
-        break;
-      }
-    }
-
-    if (exploded) {
-      explosions.push({
-        x: currentX,
-        y: currentY,
-        radius: 2,
-      });
-
-      gameState.message =
-        'Magic bolt exploded in a 5x5 area!';
-
-      for (const enemy of gameState.enemies) {
-        const distance = Math.max(
-          Math.abs(enemy.x - currentX),
-          Math.abs(enemy.y - currentY)
-        );
-
-        if (distance <= 2) {
-          enemy.hp -= 20;
-        }
-      }
-    } else {
-      processedProjectiles.push({
-        ...projectile,
-        x: currentX,
-        y: currentY,
-      });
-    }
-  }
-
-  gameState.projectiles = processedProjectiles;
-  gameState.explosions = explosions;
-
-  gameState.enemies = gameState.enemies.filter(
-    enemy => enemy.hp > 0
-  );
-
-  if (gameState.enemies.length === 0) {
-    gameState.message = 'Level Cleared!';
-    renderGame();
-
-    levelTimer = setTimeout(() => {
-      initGame(
-        gameState.level + 1,
-        gameState.player,
-        gameState.scrolls
-      );
-    }, 700);
-
+  if (!game2State || game2State.gameOver) {
     return;
   }
 
-  // Enemy movement and attacks
-  const newEnemies = [];
+  for (const enemy of game2State.enemies) {
+    const distance =
+      Math.abs(enemy.x - game2State.player.x) +
+      Math.abs(enemy.y - game2State.player.y);
 
-  for (const enemy of gameState.enemies) {
-    const distanceToPlayer =
-      Math.abs(enemy.x - gameState.player.x) +
-      Math.abs(enemy.y - gameState.player.y);
-
-    if (distanceToPlayer === 1) {
-      gameState.player.hp -= 8;
-      gameState.message = 'The monster strikes!';
-      newEnemies.push(enemy);
+    if (distance === 1) {
+      game2State.player.hp -= 8;
+      game2State.message = "The monster strikes!";
       continue;
     }
 
-    if (distanceToPlayer > 5) {
-      newEnemies.push(enemy);
+    if (distance > 5) {
       continue;
     }
-
-    const dx =
-      gameState.player.x > enemy.x
-        ? 1
-        : gameState.player.x < enemy.x
-          ? -1
-          : 0;
-
-    const dy =
-      gameState.player.y > enemy.y
-        ? 1
-        : gameState.player.y < enemy.y
-          ? -1
-          : 0;
 
     const possibleMoves = [
       {
-        x: enemy.x + dx,
-        y: enemy.y,
+        x: enemy.x + Math.sign(game2State.player.x - enemy.x),
+        y: enemy.y
       },
       {
         x: enemy.x,
-        y: enemy.y + dy,
-      },
+        y: enemy.y + Math.sign(game2State.player.y - enemy.y)
+      }
     ];
 
-    let moved = false;
-
     for (const move of possibleMoves) {
-      const outsideMap =
-        move.x < 0 ||
-        move.x >= MAP_WIDTH ||
-        move.y < 0 ||
-        move.y >= MAP_HEIGHT;
+      const validMove =
+        move.x >= 0 &&
+        move.x < MAP_WIDTH &&
+        move.y >= 0 &&
+        move.y < MAP_HEIGHT &&
+        game2State.map[move.y][move.x] === FLOOR &&
+        !(
+          move.x === game2State.player.x &&
+          move.y === game2State.player.y
+        );
 
-      if (outsideMap) continue;
-
-      if (gameState.map[move.y][move.x] === TileType.WALL) {
-        continue;
+      if (validMove) {
+        enemy.x = move.x;
+        enemy.y = move.y;
+        break;
       }
-
-      if (
-        move.x === gameState.player.x &&
-        move.y === gameState.player.y
-      ) {
-        continue;
-      }
-
-      const occupied = newEnemies.some(
-        other =>
-          other.x === move.x && other.y === move.y
-      );
-
-      if (occupied) continue;
-
-      const itemBlocking = gameState.items.some(
-        item =>
-          item.x === move.x && item.y === move.y
-      );
-
-      if (itemBlocking) continue;
-
-      newEnemies.push({
-        ...enemy,
-        x: move.x,
-        y: move.y,
-      });
-
-      moved = true;
-      break;
-    }
-
-    if (!moved) {
-      newEnemies.push(enemy);
     }
   }
 
-  gameState.enemies = newEnemies;
-
-  if (gameState.player.hp <= 0) {
-    gameState.player.hp = 0;
-    gameState.gameOver = true;
-    gameState.message = 'Game Over!';
+  if (game2State.player.hp <= 0) {
+    game2State.player.hp = 0;
+    game2State.gameOver = true;
+    game2State.message = "Game Over!";
   }
-
-  renderGame();
 }
 
 function drawText(symbol, x, y) {
-  context.font = `${TILE_SIZE - 4}px Arial`;
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
+  game2Context.font = `${TILE_SIZE - 4}px Arial`;
+  game2Context.textAlign = "center";
+  game2Context.textBaseline = "middle";
 
-  context.fillText(
+  game2Context.fillText(
     symbol,
     x * TILE_SIZE + TILE_SIZE / 2,
     y * TILE_SIZE + TILE_SIZE / 2
   );
 }
 
-function renderGame() {
-  if (!gameState) return;
+function renderGame2() {
+  if (!game2State) {
+    return;
+  }
 
-  context.clearRect(
+  game2Context.clearRect(
     0,
     0,
-    canvas.width,
-    canvas.height
+    game2Canvas.width,
+    game2Canvas.height
   );
 
-  // Draw map
   for (let y = 0; y < MAP_HEIGHT; y++) {
     for (let x = 0; x < MAP_WIDTH; x++) {
-      if (gameState.map[y][x] === TileType.WALL) {
-        context.fillStyle = '#111827';
-      } else {
-        context.fillStyle = '#374151';
-      }
+      game2Context.fillStyle =
+        game2State.map[y][x] === WALL
+          ? "#111827"
+          : "#374151";
 
-      context.fillRect(
+      game2Context.fillRect(
         x * TILE_SIZE,
         y * TILE_SIZE,
         TILE_SIZE,
         TILE_SIZE
       );
 
-      context.strokeStyle = '#1f2937';
-      context.strokeRect(
+      game2Context.strokeStyle = "#1f2937";
+      game2Context.strokeRect(
         x * TILE_SIZE,
         y * TILE_SIZE,
         TILE_SIZE,
@@ -571,97 +428,82 @@ function renderGame() {
     }
   }
 
-  // Draw items
-  for (const item of gameState.items) {
+  for (const item of game2State.items) {
     drawText(item.symbol, item.x, item.y);
   }
 
-  // Draw explosions
-  for (const explosion of gameState.explosions) {
-    context.fillStyle = 'rgba(250, 204, 21, 0.35)';
-    context.beginPath();
-
-    context.arc(
-      explosion.x * TILE_SIZE + TILE_SIZE / 2,
-      explosion.y * TILE_SIZE + TILE_SIZE / 2,
-      explosion.radius * TILE_SIZE,
-      0,
-      Math.PI * 2
-    );
-
-    context.fill();
-  }
-
-  // Draw projectiles
-  for (const projectile of gameState.projectiles) {
-    context.fillStyle = projectile.color;
-    context.beginPath();
-
-    context.arc(
-      projectile.x * TILE_SIZE + TILE_SIZE / 2,
-      projectile.y * TILE_SIZE + TILE_SIZE / 2,
-      7,
-      0,
-      Math.PI * 2
-    );
-
-    context.fill();
-  }
-
-  // Draw enemies
-  for (const enemy of gameState.enemies) {
+  for (const enemy of game2State.enemies) {
     drawText(enemy.symbol, enemy.x, enemy.y);
   }
 
-  // Draw player
   drawText(
-    gameState.player.symbol,
-    gameState.player.x,
-    gameState.player.y
+    game2State.player.symbol,
+    game2State.player.x,
+    game2State.player.y
   );
 
   updateGameInfo();
 }
 
 function updateGameInfo() {
-  if (!gameInfo || !gameState) return;
+  if (!gameInfo || !game2State) {
+    return;
+  }
 
   gameInfo.innerHTML = `
     <p>
-      ❤️ HP: ${gameState.player.hp}/${gameState.player.maxHp}
+      ❤️ HP: ${game2State.player.hp}/${game2State.player.maxHp}
       &nbsp;|&nbsp;
-      📜 Scrolls: ${gameState.scrolls}
+      📜 Scrolls: ${game2State.scrolls}
       &nbsp;|&nbsp;
-      Floor: ${gameState.level}
+      Floor: ${game2State.level}
     </p>
-    <p>${gameState.message}</p>
+    <p>${game2State.message}</p>
     <p>Use Arrow Keys or WASD to move. Press Space to cast.</p>
   `;
 
-  if (restartButton) {
-    restartButton.style.display = gameState.gameOver
-      ? 'inline-block'
-      : 'none';
-  }
+  restartButton.hidden = !game2State.gameOver;
 }
 
-window.addEventListener('keydown', event => {
+function drawGame2PoweredOffScreen() {
+  game2Context.fillStyle = "#111827";
+  game2Context.fillRect(
+    0,
+    0,
+    game2Canvas.width,
+    game2Canvas.height
+  );
+
+  game2Context.fillStyle = "#9ca3af";
+  game2Context.font = "24px Arial";
+  game2Context.textAlign = "center";
+  game2Context.textBaseline = "middle";
+
+  game2Context.fillText(
+    "Game 2 is powered off",
+    game2Canvas.width / 2,
+    game2Canvas.height / 2
+  );
+}
+
+document.addEventListener("keydown", event => {
+  if (!game2Running) {
+    return;
+  }
+
   const movementKeys = {
     ArrowUp: [0, -1],
     w: [0, -1],
     W: [0, -1],
-
     ArrowDown: [0, 1],
     s: [0, 1],
     S: [0, 1],
-
     ArrowLeft: [-1, 0],
     a: [-1, 0],
     A: [-1, 0],
-
     ArrowRight: [1, 0],
     d: [1, 0],
-    D: [1, 0],
+    D: [1, 0]
   };
 
   if (movementKeys[event.key]) {
@@ -671,18 +513,16 @@ window.addEventListener('keydown', event => {
     movePlayer(dx, dy);
   }
 
-  if (event.key === ' ') {
+  if (event.key === " ") {
     event.preventDefault();
     castSpell();
   }
 });
 
-if (restartButton) {
-  restartButton.addEventListener('click', () => {
-    showPoweredOffScreen();
-drawPoweredOffScreen();
-gameLoop();
+restartButton.addEventListener("click", restartGame2);
 
-  });
-}
+window.startGame2 = startGame2;
+window.stopGame2 = stopGame2;
 
+game2State = createGame2State(1);
+drawGame2PoweredOffScreen();
