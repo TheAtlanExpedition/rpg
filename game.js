@@ -1,11 +1,12 @@
-let gameRunning = false;
+"use strict";
 
-const canvas = document.querySelector("#gameCanvas");
-const context = canvas.getContext("2d");
+const game1Canvas = document.getElementById("gameCanvas");
+const game1Context = game1Canvas.getContext("2d");
 
-const powerButton = document.querySelector("#powerButton");
+let game1Running = false;
+let game1AnimationFrame;
 
-const player = {
+const game1Player = {
   x: 100,
   y: 400,
   width: 40,
@@ -14,15 +15,13 @@ const player = {
   color: "#ff3333"
 };
 
-const keys = {};
+const game1Keys = {};
 
-document.addEventListener("keydown", (event) => {
-  // Only control the game while it is powered on
-  if (!gameRunning) {
+document.addEventListener("keydown", event => {
+  if (!game1Running) {
     return;
   }
 
-  // Stop the webpage from scrolling with arrow keys or Space
   if (
     event.key === "ArrowUp" ||
     event.key === "ArrowDown" ||
@@ -33,144 +32,131 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
 
-  keys[event.key] = true;
+  game1Keys[event.key] = true;
 });
 
-document.addEventListener("keyup", (event) => {
-  keys[event.key] = false;
+document.addEventListener("keyup", event => {
+  game1Keys[event.key] = false;
 });
 
-function startGame() {
-  gameRunning = true;
-  powerButton.textContent = "Power Off";
-  powerButton.classList.add("on");
-}
-
-function stopGame() {
-  gameRunning = false;
-
-  // Clear all held keys so the player does not keep moving
-  for (const key in keys) {
-    keys[key] = false;
-  }
-
-  powerButton.textContent = "Power On";
-  powerButton.classList.remove("on");
-
-  drawPoweredOffScreen();
-}
-
-function updateGame() {
-  // Do not update the game while it is powered off
-  if (!gameRunning) {
+function updateGame1() {
+  if (!game1Running) {
     return;
   }
 
-  if (keys["ArrowLeft"] || keys["a"] || keys["A"]) {
-    player.x -= player.speed;
+  if (game1Keys.ArrowLeft || game1Keys.a || game1Keys.A) {
+    game1Player.x -= game1Player.speed;
   }
 
-  if (keys["ArrowRight"] || keys["d"] || keys["D"]) {
-    player.x += player.speed;
+  if (game1Keys.ArrowRight || game1Keys.d || game1Keys.D) {
+    game1Player.x += game1Player.speed;
   }
 
-  if (keys["ArrowUp"] || keys["w"] || keys["W"]) {
-    player.y -= player.speed;
+  if (game1Keys.ArrowUp || game1Keys.w || game1Keys.W) {
+    game1Player.y -= game1Player.speed;
   }
 
-  if (keys["ArrowDown"] || keys["s"] || keys["S"]) {
-    player.y += player.speed;
+  if (game1Keys.ArrowDown || game1Keys.s || game1Keys.S) {
+    game1Player.y += game1Player.speed;
   }
 
-  // Keep the player inside the canvas
-  player.x = Math.max(
+  game1Player.x = Math.max(
     0,
-    Math.min(canvas.width - player.width, player.x)
+    Math.min(
+      game1Canvas.width - game1Player.width,
+      game1Player.x
+    )
   );
 
-  player.y = Math.max(
+  game1Player.y = Math.max(
     0,
-    Math.min(canvas.height - player.height, player.y)
+    Math.min(
+      game1Canvas.height - game1Player.height,
+      game1Player.y
+    )
   );
 }
 
-function drawGame() {
-  context.clearRect(
+function drawGame1() {
+  game1Context.clearRect(
     0,
     0,
-    canvas.width,
-    canvas.height
+    game1Canvas.width,
+    game1Canvas.height
   );
 
-  // Sky
-  context.fillStyle = "#87ceeb";
-  context.fillRect(
+  game1Context.fillStyle = "#87ceeb";
+  game1Context.fillRect(
     0,
     0,
-    canvas.width,
-    canvas.height
+    game1Canvas.width,
+    game1Canvas.height
   );
 
-  // Ground
-  context.fillStyle = "#228b22";
-  context.fillRect(
+  game1Context.fillStyle = "#228b22";
+  game1Context.fillRect(
     0,
-    canvas.height - 70,
-    canvas.width,
+    game1Canvas.height - 70,
+    game1Canvas.width,
     70
   );
 
-  // Player
-  context.fillStyle = player.color;
-  context.fillRect(
-    player.x,
-    player.y,
-    player.width,
-    player.height
+  game1Context.fillStyle = game1Player.color;
+  game1Context.fillRect(
+    game1Player.x,
+    game1Player.y,
+    game1Player.width,
+    game1Player.height
   );
 }
 
-function drawPoweredOffScreen() {
-  context.fillStyle = "#111827";
-  context.fillRect(
+function drawGame1PoweredOffScreen() {
+  game1Context.fillStyle = "#111827";
+  game1Context.fillRect(
     0,
     0,
-    canvas.width,
-    canvas.height
+    game1Canvas.width,
+    game1Canvas.height
   );
 
-  context.fillStyle = "#9ca3af";
-  context.font = "24px Arial";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
+  game1Context.fillStyle = "#9ca3af";
+  game1Context.font = "24px Arial";
+  game1Context.textAlign = "center";
+  game1Context.textBaseline = "middle";
 
-  context.fillText(
-    "Press Power On to Start",
-    canvas.width / 2,
-    canvas.height / 2
+  game1Context.fillText(
+    "Game 1 is powered off",
+    game1Canvas.width / 2,
+    game1Canvas.height / 2
   );
 }
 
-function gameLoop() {
-  updateGame();
-
-  if (gameRunning) {
-    drawGame();
+function game1Loop() {
+  if (game1Running) {
+    updateGame1();
+    drawGame1();
   }
 
-  requestAnimationFrame(gameLoop);
+  game1AnimationFrame = requestAnimationFrame(game1Loop);
 }
 
-powerButton.addEventListener("click", () => {
-  if (gameRunning) {
-    stopGame();
-  } else {
-    startGame();
+function startGame1() {
+  game1Running = true;
+  drawGame1();
+}
+
+function stopGame1() {
+  game1Running = false;
+
+  for (const key in game1Keys) {
+    game1Keys[key] = false;
   }
-});
 
-// Start with the game powered off
-drawPoweredOffScreen();
+  drawGame1PoweredOffScreen();
+}
 
-// Keep the animation loop running, but the game itself starts off
-gameLoop();
+window.startGame1 = startGame1;
+window.stopGame1 = stopGame1;
+
+drawGame1PoweredOffScreen();
+game1Loop();
