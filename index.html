@@ -1,153 +1,148 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Differences in AI image generations">
-  <meta property="og:title" content="Differences in AI Image Generations">
-  <meta property="og:image" content="">
-  <meta property="og:url" content="">
-  <title>Differences in AI Image Generations</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Pacifico&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <script src="html.js" defer></script>
-</head>
-<body>
-  <header class="header-wrapper">
-    <div class="header-container">
-      <h1>Differences in A.I<br>Image Generations</h1>
-      <div class="brand-container">
-        <a href="https://theatlanexpedition.github.io/Learning_HTML/index.html" aria-label="Visit homepage">
-          <button class="brand-button" type="button">
-            <span>ICON</span>
-          </button>
-        </a>
-      </div>
-    </div>
-    <nav class="menu-container" aria-label="Main navigation">
-      <a href="#home">Home</a>
-      <a href="#images">Images</a>
-      <a href="#game">Games</a>
-      <a href="#about">About</a>
-    </nav>
-  </header>
-
-  <main class="main">
-    <section id="home" class="page">
-      <div class="intro-text">
-        <h2>Home</h2>
-        <p>Welcome</p>
-      </div>
-      <div class="info-paragraph"></div>
-    </section>
-
-    <section id="images" class="page">
-      <div class="intro-text">
-        <h2>Images of Curiosity</h2>
-        <h3>Picking two random images and asking A.I. to combine them.</h3>
-        <p>The only prompt I give is “Combine these two images”.</p>
-      </div>
-      <div class="carousel">
-        <button class="carousel-arrow previous" type="button" aria-label="Previous image">&#10094;</button>
-        <div class="carousel-window">
-          <div class="carousel-track" id="carousel-track"></div>
-        </div>
-        <button class="carousel-arrow next" type="button" aria-label="Next image">&#10095;</button>
-      </div>
-    </section>
-
-  <section id="game" class="page">
-  <div class="intro-text">
-    <h2>Games</h2>
-  </div>
-
-  <div class="games-container">
-    <!-- Vertical game buttons -->
-    <div class="game-buttons">
-      <button id="game1Button" type="button" class="game-select-btn game1-btn">
-        <span class="btn-bg"></span>
-        <span class="btn-label">Game 1</span>
-      </button>
-      <button id="game2Button" type="button" class="game-select-btn game2-btn">
-        <span class="btn-bg"></span>
-        <span class="btn-label">Game 2</span>
-      </button>
-    </div>
-
-    <!-- ONE shared game window -->
-    <div id="gameWindow" class="game-window powered-off" aria-live="polite">
-      <!-- Power button sits on the frame -->
-      <button id="gamePowerButton" type="button" class="power-btn" aria-pressed="false" title="Power">
-        <span class="power-icon">⏻</span>
-      </button>
-
-      <!-- Single screen area that switches content -->
-      <div class="game-screen">
-        <!-- Powered Off -->
-        <div id="poweredOffScreen" class="screen-content powered-off-screen">
-          <p>Game Window Powered Off</p>
-          <span>Select a game to power on</span>
-        </div>
-
-        <!-- Game 1 -->
-        <div id="game1Container" class="screen-content game-container" hidden>
-          <canvas id="gameCanvas" width="800" height="500"></canvas>
-        </div>
-
-        <!-- Game 2 -->
-        <div id="game2Container" class="screen-content game-container" hidden>
-          <canvas id="gameCanvas2" width="800" height="640"></canvas>
-          <div id="gameInfo" class="game-info"></div>
-          <button id="restartButton" type="button" hidden>Restart Game 2</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI Image Generations Arcade Games" />
+    <title>AI Arcade - Games</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Pacifico&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="header-wrapper">
+      <div class="header-container">
+        <h1>Arcade Games</h1>
+        <div class="brand-container">
+          <a
+            href="https://theatlanexpedition.github.io/Learning_HTML/index.html"
+            aria-label="Visit homepage"
+          >
+            <button class="brand-button" type="button">
+              <span>ICON</span>
+            </button>
+          </a>
         </div>
       </div>
-    </div>
-  </div>
-</section>
+    </header>
+    <script src="html.js" defer></script>
+    <main class="main">
+      <section id="game" class="page">
+        <div class="games-container">
+          <!-- Vertical game buttons -->
+          <div class="game-buttons">
+            <button
+              id="game1Button"
+              type="button"
+              class="game-select-btn game1-btn"
+            >
+              <span class="btn-bg"></span>
+              <span class="btn-label">Game 1</span>
+            </button>
+            <button
+              id="game2Button"
+              type="button"
+              class="game-select-btn game2-btn"
+            >
+              <span class="btn-bg"></span>
+              <span class="btn-label">Game 2</span>
+            </button>
+            <button
+              id="game3Button"
+              type="button"
+              class="game-select-btn game3-btn"
+            >
+              <span class="btn-bg"></span>
+              <span class="btn-label">Game 3</span>
+            </button>
+          </div>
 
-    <section id="about" class="page">
-      <div class="intro-text">
-        <h2>About</h2>
-        <p><i>What?</i></p>
-      </div>
-      <div class="info-paragraph">
-        <p>Here's a map of <b>Bendigo</b></p>
-        <div class="map-container">
-          <iframe
-            src="https://www.openstreetmap.org/export/embed.html?bbox=144.03282165527347%2C-36.873029362792956%2C144.53235626220706%2C-36.6378455719693&layer=mapnik"
-            title="Map of Bendigo, Victoria, Australia"
-            loading="lazy"
-          ></iframe>
-          <p>
-            <a href="https://www.openstreetmap.org/#map=12/-36.7555/144.2826" target="_blank" rel="noopener">
-              <b>View Larger Map</b>
-            </a>
-          </p>
+          <!-- ONE shared game window -->
+          <div
+            id="gameWindow"
+            class="game-window powered-off"
+            aria-live="polite"
+          >
+            <!-- Power button sits on the frame -->
+            <button
+              id="gamePowerButton"
+              type="button"
+              class="power-btn"
+              aria-pressed="false"
+              title="Power"
+            >
+              <span class="power-icon">⏻</span>
+            </button>
+
+            <!-- Single screen area that switches content -->
+            <div class="game-screen">
+              <!-- Powered Off -->
+              <div
+                id="poweredOffScreen"
+                class="screen-content powered-off-screen"
+              >
+                <p>Game Window Powered Off</p>
+                <span>Select a game to power on</span>
+              </div>
+              <!-- Game 1 -->
+              <div
+                id="game1Container"
+                class="screen-content game-container"
+                hidden
+              >
+                <canvas id="gameCanvas" width="800" height="500"></canvas>
+              </div>
+
+              <!-- Game 2 -->
+              <div
+                id="game2Container"
+                class="screen-content game-container"
+                hidden
+              >
+                <canvas id="gameCanvas2" width="800" height="640"></canvas>
+                <div id="gameInfo" class="game-info"></div>
+                <button
+                  id="game2restartButton"
+                  type="button"
+                  style="display: none"
+                >
+                  Restart Game 2
+                </button>
+              </div>
+
+              <!-- Game 3 -->
+              <div
+                id="game3Container"
+                class="screen-content game-container"
+                hidden
+              >
+                <canvas id="gameCanvas3" width="800" height="640"></canvas>
+                <div id="game3Info" class="game-info"></div>
+                <button
+                  id="game3restartButton"
+                  type="button"
+                  style="display: none"
+                >
+                  Restart Game 3
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="definitions">
-        <dl>
-          <dt>SVG Images</dt>
-          <dd>An XML-based file format used to display two-dimensional, code-driven graphics directly on a webpage.</dd>
-          <dt>XML</dt>
-          <dd>A file format that uses the syntax of Extensible Markup Language to structure, store, or transport data.</dd>
-        </dl>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
 
-  <footer class="footer-container">
-    <p>“COPYRIGHT INFO”</p>
-  </footer>
+    <footer class="footer-container">
+      <p>“COPYRIGHT INFO”</p>
+    </footer>
 
-  <div id="image-modal" class="image-modal" aria-hidden="true">
-    <button id="modal-close" class="modal-close" type="button" aria-label="Close image preview">&times;</button>
-    <img id="modal-image" src="" alt="">
-  </div>
-
-  <script src="game.js"></script>
-  <script src="game_2.js"></script>
-</body>
+    <!-- Load the game scripts first, then control engine -->
+    <script src="game_1.js"></script>
+    <script src="game_2.js"></script>
+    <script src="game_3.js"></script>
+  </body>
 </html>
