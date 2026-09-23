@@ -214,7 +214,7 @@ function attackEnemy(enemyId) {
   moveEnemies();
   renderGame2();
 }
-function castSpell() {
+function castSpell(dx = 0, dy = 0) {
   if (!game2Running || !game2State || game2State.gameOver) {
     return;
   }
@@ -223,26 +223,42 @@ function castSpell() {
     renderGame2();
     return;
   }
+
+  // Default to right if no direction given (for safety)
+  if (dx === 0 && dy === 0) {
+    dx = 1;
+  }
+
   game2State.scrolls--;
-  const direction =
-    game2State.player.x < MAP_WIDTH / 2 ? 1 : -1;
+
   let projectileX = game2State.player.x;
+  let projectileY = game2State.player.y;
   let hitEnemy = null;
+
+  // Travel up to 5 tiles in the chosen direction
   for (let i = 0; i < 5; i++) {
-    projectileX += direction;
+    projectileX += dx;
+    projectileY += dy;
+
+    // Stop at map edge
+    if (
+      projectileX < 0 || projectileX >= MAP_WIDTH ||
+      projectileY < 0 || projectileY >= MAP_HEIGHT
+    ) {
+      break;
+    }
+
     hitEnemy = game2State.enemies.find(
-      enemy =>
-        enemy.x === projectileX &&
-        enemy.y === game2State.player.y
+      enemy => enemy.x === projectileX && enemy.y === projectileY
     );
     if (hitEnemy) {
       break;
     }
   }
+
   if (hitEnemy) {
     hitEnemy.hp -= 20;
-    game2State.message =
-      "Magic bolt exploded near the monster!";
+    game2State.message = "Magic bolt hit the monster!";
     if (hitEnemy.hp <= 0) {
       game2State.enemies = game2State.enemies.filter(
         enemy => enemy !== hitEnemy
@@ -251,9 +267,56 @@ function castSpell() {
   } else {
     game2State.message = "The magic bolt missed!";
   }
+
   moveEnemies();
   renderGame2();
 }
+
+document.addEventListener("keydown", event => {
+  if (!game2Running) {
+    return;
+  }
+
+  // WASD only for movement
+  const movementKeys = {
+    w: [0, -1],
+    W: [0, -1],
+    s: [0, 1],
+    S: [0, 1],
+    a: [-1, 0],
+    A: [-1, 0],
+    d: [1, 0],
+    D: [1, 0]
+  };
+
+  if (movementKeys[event.key]) {
+    event.preventDefault();
+    const [dx, dy] = movementKeys[event.key];
+    movePlayer(dx, dy);
+    return;
+  }
+
+  // Arrow keys fire in that direction
+  const fireKeys = {
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0]
+  };
+
+  if (fireKeys[event.key]) {
+    event.preventDefault();
+    const [dx, dy] = fireKeys[event.key];
+    castSpell(dx, dy);
+    return;
+  }
+
+  // Optional: keep Space as a quick fire (fires right)
+  if (event.key === " ") {
+    event.preventDefault();
+    castSpell(1, 0);
+  }
+});
 function moveEnemies() {
   if (!game2State || game2State.gameOver) {
     return;
