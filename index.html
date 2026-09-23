@@ -87,22 +87,58 @@
         </button>
       </div>
     </section>
-    
+
     <section id="game" class="page">
       <div class="intro-text">
         <h2>Games</h2>
       </div>
-      <div  class="info-paragraph">
-<button id="gamePowerButton">Game 1 Power On</button>
-<canvas id="gameCanvas" width="800" height="500"></canvas>
 
-<button id="game2PowerButton">Game 2 Power On</button>
-<canvas id="gameCanvas2" width="800" height="500"></canvas>
+      <div class="games-container">
+        <div class="game-controls">
+          <button id="game1Button" type="button">
+            Game 1
+          </button>
 
-<script src="game.js"></script>
-<script src="game_2.js"></script>
+          <button id="game2Button" type="button">
+            Game 2
+          </button>
 
+          <button
+            id="gamePowerButton"
+            type="button"
+            aria-pressed="false"
+          >
+            Power On
+          </button>
+        </div>
+
+        <div
+          id="gameWindow"
+          class="game-window powered-off"
+          aria-live="polite"
+        >
+          <div id="poweredOffScreen" class="powered-off-screen">
+            <p>Game Window Powered Off</p>
+            <span>Select a game or press Power On</span>
+          </div>
+
+          <div id="game1Container" class="game-container" hidden>
+            <canvas id="gameCanvas" width="800" height="500"></canvas>
+          </div>
+
+          <div id="game2Container" class="game-container" hidden>
+            <canvas id="gameCanvas2" width="800" height="640"></canvas>
+
+            <div id="gameInfo" class="game-info"></div>
+
+            <button id="restartButton" type="button" hidden>
+              Restart Game 2
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
+
     <section id="about" class="page">
       <div class="intro-text">
         <h2>About</h2>
@@ -136,15 +172,13 @@
           <dt>SVG Images</dt>
           <dd>
             An XML-based file format used to display two-dimensional,
-            code-driven graphics directly on a webpage. SVG images can be
-            scaled without losing quality.
+            code-driven graphics directly on a webpage.
           </dd>
 
           <dt>XML</dt>
           <dd>
-            A file format that uses the syntax of
-            <em>Extensible Markup Language</em> to structure, store, or
-            transport data.
+            A file format that uses the syntax of Extensible Markup Language
+            to structure, store, or transport data.
           </dd>
         </dl>
       </div>
@@ -167,5 +201,108 @@
 
     <img id="modal-image" src="" alt="">
   </div>
+
+  <script src="game.js"></script>
+  <script src="game_2.js"></script>
+
+  <script>
+    const gameWindow = document.getElementById("gameWindow");
+    const poweredOffScreen = document.getElementById("poweredOffScreen");
+
+    const game1Button = document.getElementById("game1Button");
+    const game2Button = document.getElementById("game2Button");
+    const gamePowerButton = document.getElementById("gamePowerButton");
+
+    const game1Container = document.getElementById("game1Container");
+    const game2Container = document.getElementById("game2Container");
+
+    let selectedGame = 1;
+    let gamePoweredOn = false;
+
+    function updateGameWindow() {
+      gameWindow.classList.toggle("powered-on", gamePoweredOn);
+      gameWindow.classList.toggle("powered-off", !gamePoweredOn);
+
+      poweredOffScreen.hidden = gamePoweredOn;
+
+      game1Container.hidden = !gamePoweredOn || selectedGame !== 1;
+      game2Container.hidden = !gamePoweredOn || selectedGame !== 2;
+
+      game1Button.classList.toggle(
+        "selected-game",
+        gamePoweredOn && selectedGame === 1
+      );
+
+      game2Button.classList.toggle(
+        "selected-game",
+        gamePoweredOn && selectedGame === 2
+      );
+
+      gamePowerButton.textContent = gamePoweredOn
+        ? "Power Off"
+        : "Power On";
+
+      gamePowerButton.setAttribute(
+        "aria-pressed",
+        String(gamePoweredOn)
+      );
+    }
+
+    function stopSelectedGame() {
+      if (selectedGame === 1 && window.stopGame1) {
+        window.stopGame1();
+      }
+
+      if (selectedGame === 2 && window.stopGame2) {
+        window.stopGame2();
+      }
+    }
+
+    function startSelectedGame() {
+      if (selectedGame === 1 && window.startGame1) {
+        window.startGame1();
+      }
+
+      if (selectedGame === 2 && window.startGame2) {
+        window.startGame2();
+      }
+    }
+
+    function selectGame(gameNumber) {
+      if (gamePoweredOn) {
+        stopSelectedGame();
+      }
+
+      selectedGame = gameNumber;
+      gamePoweredOn = true;
+
+      updateGameWindow();
+      startSelectedGame();
+    }
+
+    function togglePower() {
+      if (gamePoweredOn) {
+        stopSelectedGame();
+        gamePoweredOn = false;
+      } else {
+        gamePoweredOn = true;
+        startSelectedGame();
+      }
+
+      updateGameWindow();
+    }
+
+    game1Button.addEventListener("click", () => {
+      selectGame(1);
+    });
+
+    game2Button.addEventListener("click", () => {
+      selectGame(2);
+    });
+
+    gamePowerButton.addEventListener("click", togglePower);
+
+    updateGameWindow();
+  </script>
 </body>
 </html>
