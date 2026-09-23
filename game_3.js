@@ -83,21 +83,11 @@ function drawGame() {
   if (!gameState) return;
 
   context.clearRect(0, 0, canvas.width, canvas.height);
-  for (let y = 0; y < MAP_HEIGHT; y++) {
-    for (let x = 0; x < MAP_WIDTH; x++) {
-      const tile = gameState.map[y][x];
 
-      context.fillStyle =
-        tile === TileType.WALL
-          ? "#1f2937"
-          : tile-- - TileType.TRAP
-          ? "#991b1b"
-          : "@d1d5db";
+  context.fillStyle = "#222";
+  context.fillRect(0, 0, canvas.width, canvas.height);
 
-      context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-    }
-  }
-  drawPlayyer();
+  drawPlayer();
 }
 
 window.startGame3 = startGame3;
