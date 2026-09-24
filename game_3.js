@@ -12,7 +12,7 @@
     TRAP: 3,
     SWITCH: 4,
   };
-
+  let gameLoopId = null;
   // Player Sprites (Pre-load)
   const PLAYER_SPRITES = {
     up: new Image(),
@@ -32,7 +32,7 @@
   PLAYER_SPRITES.up.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-up.svg";
   PLAYER_SPRITES.down.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/mage-idle-down-3frame.png";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/mage-idle-down-4frames.png";
   PLAYER_SPRITES.left.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-left.svg";
   PLAYER_SPRITES.right.src =
@@ -66,11 +66,15 @@
     gameRunning = true;
     gameState = createGameState(1, null, []);
 
-    requestAnimationFrame(gameLoop);
+    gameLoopId = requestAnimationFrame(gameLoop);
   }
 
   function stopGame3() {
     gameRunning = false;
+    if (gameLoopId) {
+      cancelAnimationFrame(gameLoopId);
+      gameLoopId = null;
+    }
   }
 
   function gameLoop(timestamp) {
@@ -78,14 +82,20 @@
 
     drawGame();
 
-    requestAnimationFrame(gameLoop);
+    gameLoopId = requestAnimationFrame(gameLoop);
   }
+  // Player Animations
   const playerAnimation = {
     currentFrame: 0,
     totalFrames: 4,
     tickCount: 0,
-    ticksPerFrame: 8,
+    ticksPerFrame: 60,
   };
+  const framesPerRow = 2;
+  const col = playerAnimation.currentFrame % framesPerRow;
+  const row = Math.floor(playerAnimation.currentFrame / framesPerRow);
+  const srcX = col * SPRITE_FRAME_WIDTH;
+  const srxY = col * SPRITE_FRAME_HEIGHT;
 
   function drawGame() {
     if (!gameState) return;
@@ -157,7 +167,8 @@
     if (!globalPlayer) return;
 
     const activeSprite = PLAYER_SPRITES[globalPlayer.direction];
-    const pixelX = globalPlayer.x * TILE_SIZE;
+    const xOffset = (TILE_SIZE - globalPlayer.width) / 2;
+    const pixelX = globalPlayer.x * TILE_SIZE + xOffset;
     const pixelY = globalPlayer.y * TILE_SIZE;
 
     if (activeSprite && activeSprite.complete) {
@@ -167,8 +178,8 @@
         playerAnimation.currentFrame =
           (playerAnimation.currentFrame + 1) % playerAnimation.totalFrames;
       }
-      const srcX = playerAnimation.currentFrame * SPRITE_FRAME_WIDTH;
-      const srcY = 0;
+      const srcX = 0;
+      const srcY = playerAnimation.currentFrame * SPRITE_FRAME_HEIGHT;
 
       context.drawImage(
         activeSprite,
