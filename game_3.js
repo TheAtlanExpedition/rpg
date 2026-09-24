@@ -30,7 +30,7 @@
   PLAYER_SPRITES.up.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-up.svg";
   PLAYER_SPRITES.down.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/mage-idle-down.gif";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/mage-idle-down-3frame.png";
   PLAYER_SPRITES.left.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-left.svg";
   PLAYER_SPRITES.right.src =
@@ -152,7 +152,28 @@
     const pixelX = globalPlayer.x * TILE_SIZE;
     const pixelY = globalPlayer.y * TILE_SIZE;
 
-    context.drawImage(activeSprite, pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+    if (activeSprite && activeSprite.complete) {
+      playerAnimation.tickCount++;
+      if (playerAnimation.tickCount >= playerAnimation.ticksPerFrame) {
+        playerAnimation.tickCount = 0;
+        playerAnimation.currentFrame =
+          (playerAnimation.currentFrame + 1) % playerAnimation.totalFrames;
+      }
+      const srcX = playerAnimation.currentFrame * SPRITE_FRAME_WIDTH;
+      const srcY = 0;
+
+      ctx.drawImage(
+        activeSprite,
+        srcX,
+        srcY,
+        SPRITE_FRAME_WIDTH,
+        SPRITE_FRAME_HEIGHT,
+        pixelX,
+        pixelY,
+        globalPlayer.width,
+        globalPlayer.height
+      );
+    }
   }
 
   function createGameState(level, existingPlayer, existingScrolls) {
@@ -250,6 +271,8 @@
           y: startRoom.y + 1,
           hp: Math.max(existingPlayer.hp, 1),
           direction: existingPlayer.direction || "down",
+          width: TILE_TYPE / 2,
+          height: TILE_TYPE,
         }
       : {
           id: "player",
@@ -259,9 +282,9 @@
           maxHp: 100,
           type: "player",
           direction: "down",
-          width: TILE_TYPE,
-          height: TILE_TYPE * 2,
           color: "#3b82f6",
+          width: TILE_TYPE / 2,
+          height: TILE_TYPE,
         };
 
     globalPlayer = player;
