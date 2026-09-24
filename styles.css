@@ -144,6 +144,7 @@ body {
   align-items: center;
   justify-content: center;
 }
+
 /* ===== GAMES SECTION ===== */
 .games-container {
   display: flex;
@@ -154,150 +155,66 @@ body {
   width: min(95vw, 1100px);
   margin: 20px auto 40px;
 }
-#globalStopButton {
-  background-color: #ef4444;
-  color: #ffffff;
-  border: 2px solid #b91c1c;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-family: "Black Ops One";
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.25 ease;
-  margin: 5px;
-}
-#globalStopButton: hover {
-  background-color: #dc2626;
-  border-color: #991b1b;
-  transform: translateY(-1px);
-}
-#globalStopButton: active {
-  background-color: #991b1b;
-  transform: translateY(1px);
-}
 
-/* Vertical game buttons */
+/* Vertical game buttons - Shifted to the RIGHT side */
 .game-buttons {
   display: flex;
   flex-direction: column;
   gap: 16px;
   flex-shrink: 0;
-}
-
-.game-select-btn {
-  position: relative;
-  width: 100px;
-  height: 30px;
-  border: 4px solid #000;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  font-family: "Black Ops One", sans-serif;
-  font-size: 1.1rem;
-  color: #fff;
-  text-shadow: 1px 1px 2px #000;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.game-select-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.game-select-btn .btn-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-
-.game1-btn .btn-bg {
-  background: linear-gradient(135deg, #87eeeb, #228b22);
-}
-
-.game2-btn .btn-bg {
-  background: linear-gradient(135deg, #1f2937, #7c3aed);
-}
-.game3-btn .btn-bg {
-  background: linear-gradient(135deg, #1f2937, #7c3aed);
-}
-
-.game-select-btn .btn-label {
-  position: relative;
-  z-index: 1;
-}
-
-.game-select-btn.selected-game {
-  outline: 4px solid #ffeb3b;
-  outline-offset: 2px;
-}
-
-/* ===== GAMES SECTION ===== */
-.games-container {
-  display: flex;
-  justify-content: center; /* centers the whole group */
-  align-items: flex-start;
-  gap: 24px;
-  width: min(95vw, 1100px);
-  margin: 20px auto 40px;
-}
-
-/* Buttons stay on the left of the centered window */
-.game-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  flex-shrink: 0;
-  /* optional: push them a little closer to the window */
-  margin-right: 8px;
+  margin-left: 8px;
+  order: 2;
 }
 
 .game-select-btn {
   position: relative;
   width: 140px;
   height: 90px;
-  border: 4px solid #000;
-  border-radius: 12px;
-  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
   cursor: pointer;
   font-family: "Black Ops One", sans-serif;
   font-size: 1.1rem;
-  color: #fff;
   text-shadow: 1px 1px 2px #000;
   transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .game-select-btn:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
+  background: transparent;
 }
-
-.game-select-btn .btn-bg {
+.game-select-btn img {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scale(1.25);
   z-index: 0;
 }
-
-.game1-btn .btn-bg {
-  background: linear-gradient(135deg, #87ceeb, #228b22);
-}
-
-.game2-btn .btn-bg {
-  background: linear-gradient(135deg, #1f2937, #7c3aed);
-}
-
 .game-select-btn .btn-label {
-  position: relative;
-  z-index: 1;
+  position: absolute;
+  top: 37%;
+  left: 50%;
+  width: 60px;
+  transform: translate(-50%, -50%);
 }
 
 .game-select-btn.selected-game {
-  outline: 4px solid #ffeb3b;
-  outline-offset: 2px;
+  outline: none;
+}
+
+.game-select-btn.selected-game img {
+  filter: drop-shadow(0 0 3px #ffeb3b) drop-shadow(0 0 6px #ffeb3b);
 }
 
 /* ===== ONE shared game window ===== */
 .game-window {
   position: relative;
+  margin-bottom: 70px;
   flex: 1;
   min-width: 280px;
   max-width: 860px;
@@ -307,7 +224,7 @@ body {
   border: 10px solid #222;
   border-radius: 16px;
   box-shadow: 0 0 0 4px #444, 0 0 25px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   transition: border-color 0.3s, box-shadow 0.3s;
@@ -323,14 +240,14 @@ body {
   background-color: #050505;
 }
 
-/* Power button on the frame */
+/* Power button on the frame - Outside at bottom left */
 .power-btn {
   position: absolute;
-  top: 10px;
-  right: 14px;
+  top: calc(100% + 16px);
+  left: 4px;
   z-index: 30;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   border: 3px solid #555;
   background: #222;
@@ -360,19 +277,53 @@ body {
   background: #e53935;
 }
 
-/* The single screen area (below the power button) */
+/* Stop Button - Outside at bottom right */
+#globalStopButton {
+  position: absolute;
+  top: calc(100% + 16px);
+  right: 4px;
+  z-index: 30;
+  background-color: #ef4444;
+  color: #ffffff;
+  border: 3px solid #b91c1c;
+  height: 46px;
+  padding: 0px 20px;
+  font-size: 14px;
+  font-family: "Black Ops One", sans-serif;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  margin: 5px;
+}
+
+#globalStopButton:hover {
+  background-color: #dc2626;
+  border-color: #991b1b;
+  transform: translateY(-1px);
+}
+
+#globalStopButton:active {
+  background-color: #991b1b;
+  transform: translateY(1px);
+}
+
+/* The single screen area */
 .game-screen {
   position: relative;
   flex: 1;
+
+  min-height: 100%;
   width: 100%;
-  padding-top: 56px; /* keeps content under the power button */
-  box-sizing: border-box;
+  overflow: visible;
 }
 
 /* All three contents occupy the EXACT same space */
 .screen-content {
   position: absolute;
-  inset: 56px 12px 12px 12px; /* top / right / bottom / left */
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -380,7 +331,6 @@ body {
   box-sizing: border-box;
 }
 
-/* When a screen is hidden, make sure it really disappears */
 .screen-content[hidden] {
   display: none !important;
 }
@@ -403,30 +353,28 @@ body {
 }
 
 /* Game canvases */
-/* Make both games display at the same size */
 .game-container canvas {
   display: block;
   width: 100%;
   max-width: 800px;
   height: auto;
-  max-height: 500px; /* matches Game 1’s height */
-  object-fit: contain; /* keeps the correct aspect ratio */
+  max-height: 500px;
+  object-fit: contain;
   margin: 0 auto;
   border: 3px solid #fff;
   border-radius: 8px;
   touch-action: none;
   user-select: none;
-  background-color: #111; /* fallback while loading */
+  background-color: #111;
+  transform: translateY(35px);
 }
 
 #gameCanvas {
   background-color: #87ceeb;
 }
-
 #gameCanvas2 {
   background-color: #111827;
 }
-
 #gameCanvas3 {
   background-color: #111827;
 }
@@ -457,40 +405,81 @@ body {
 #restartButton:hover {
   background-color: #2e7d32;
 }
+/* Static screen */
+.static-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  align-self: stretch;
+  min-height: 560px;
+  background-color: #222;
+  color: #fff;
+  font-family: "Black Ops One";
+  text-align: center;
+  overflow: hidden;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+}
+.static-noise {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 
-/* Responsive */
-@media (max-width: 768px) {
-  .games-container {
-    flex-direction: column;
-    align-items: center;
+  background: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.18) 1px,
+      transparent 1px,
+      transparent 2px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.2),
+      rgba(0, 0, 0, 0.2) 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  background-size: 8px 8px;
+  opacity: 1;
+  animation: tv-fuzz 0.05s infinite linear;
+  pointer-events: none;
+}
+.static-screen p,
+.static-screen span {
+  position: relative;
+  z-index: 1;
+}
+.static-screen p {
+  font-size: 2rem;
+  color: #ffeb3b;
+  text-shadow: 0 0 8px rgba(255, 255, 59, 0.6);
+  margin-bottom: 5px;
+  animation: blinker 1.2s linear infinite;
+}
+.static-screen span {
+  font-family: Arial, sans-serif;
+  font-size: 0.95rem;
+}
+@keyframes tv-fuzz {
+  0% {
+    background-position: 0px 0px;
+    transform: translate(0, 0);
   }
-
-  .game-buttons {
-    flex-direction: row;
-    width: 100%;
-    justify-content: right;
+  50% {
+    background-position: 24px 48px;
+    transform: translate(-1px, 1px);
   }
-
-  .game-select-btn {
-    width: 120px;
-    height: 75px;
-    font-size: 1rem;
-  }
-
-  .game-window {
-    min-height: 420px;
-    width: 100%;
-  }
-
-  .game-screen {
-    padding-top: 52px;
+  100% {
+    background-position: -48px 24px;
+    transform: translate(-1px, 1px);
   }
 }
-
-@media (max-width: 480px) {
-  .game-select-btn {
-    width: 100px;
-    height: 65px;
-    font-size: 0.9rem;
+@keyframes blinker {
+  50% {
+    opacity: 0;
   }
 }
