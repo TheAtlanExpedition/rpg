@@ -26,6 +26,8 @@
     ScrollFreezeCloud: new Image(),
     ScrollChainLightning: new Image(),
   };
+  const SPRITE_FRAME_WIDTH = 16;
+  const SPRITE_FRAME_HEIGHT = 32;
   // Sprite Location
   PLAYER_SPRITES.up.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-up.svg";
