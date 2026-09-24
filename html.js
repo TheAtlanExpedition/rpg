@@ -16,7 +16,16 @@ function updateGameWindow() {
   gameWindow.classList.toggle("powered-on", gamePoweredOn);
   gameWindow.classList.toggle("powered-off", !gamePoweredOn);
 
+  gameWindow.classList.toggle(
+    "static-mode",
+    gamePoweredOn && selectedGame === null
+  );
   poweredOffScreen.hidden = gamePoweredOn;
+
+  if(staticScreen){
+    staticScreen.hidden = !gamePoweredOn || selectedGame !==null;
+  }
+  
   game1Container.hidden = !gamePoweredOn || selectedGame !== 1;
   game2Container.hidden = !gamePoweredOn || selectedGame !== 2;
   game3Container.hidden = !gamePoweredOn || selectedGame !== 3;
@@ -41,7 +50,7 @@ if (globalStopButton) {
   globalStopButton.addEventListener("click", () => {
     stopSelectedGame();
     selectedGame = null;
-    gamePoweredOn = false;
+    gamePoweredOn = true;
     updateGameWindow();
   });
 }
