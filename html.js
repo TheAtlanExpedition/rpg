@@ -9,7 +9,7 @@ const game1Container = document.getElementById("game1Container");
 const game2Container = document.getElementById("game2Container");
 const game3Container = document.getElementById("game3Container");
 
-let selectedGame = 1;
+let selectedGame = null;
 let gamePoweredOn = false;
 
 function updateGameWindow() {
@@ -36,7 +36,15 @@ function updateGameWindow() {
 
   gamePowerButton.setAttribute("aria-pressed", String(gamePoweredOn));
 }
-
+const globalStopButton = document.getElementById("globalStopButton");
+if (globalStopButton) {
+  globalStopButton.addEventListener("click", () => {
+    stopSelectedGame();
+    selectedGame = null;
+    gamePoweredOn = false;
+    updateGameWindow();
+  });
+}
 function stopSelectedGame() {
   if (selectedGame === 1 && window.stopGame1) {
     window.stopGame1();
@@ -75,16 +83,24 @@ function togglePower() {
   if (gamePoweredOn) {
     stopSelectedGame();
     gamePoweredOn = false;
+    selectedGame = null;
   } else {
+    selectedGame = null;
     gamePoweredOn = true;
     startSelectedGame();
   }
   updateGameWindow();
 }
 
-game1Button.addEventListener("click", () => selectGame(1));
-game2Button.addEventListener("click", () => selectGame(2));
-game3Button.addEventListener("click", () => selectGame(3));
+game1Button.addEventListener("click", () => {
+  if (!selectedGame) selectGame(1);
+});
+game2Button.addEventListener("click", () => {
+  if (!selectedGame) selectGame(2);
+});
+game3Button.addEventListener("click", () => {
+  if (!selectedGame) selectGame(3);
+});
 gamePowerButton.addEventListener("click", togglePower);
 
 updateGameWindow();
