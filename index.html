@@ -40,24 +40,30 @@
               type="button"
               class="game-select-btn game1-btn"
             >
-              <span class="btn-bg"></span>
-              <span class="btn-label">Game 1</span>
+              <img
+                src="https://raw.githubusercontent.com/TheAtlanExpedition/rpg/72e4e4b492e32bd0e4a35f84ccc1c91b69e86a7d/assets/webpage/game-cartridge.svg"
+              />
+              <span class="btn-label">Game<br />1</span>
             </button>
             <button
               id="game2Button"
               type="button"
               class="game-select-btn game2-btn"
             >
-              <span class="btn-bg"></span>
-              <span class="btn-label">Game 2</span>
+              <img
+                src="https://raw.githubusercontent.com/TheAtlanExpedition/rpg/72e4e4b492e32bd0e4a35f84ccc1c91b69e86a7d/assets/webpage/game-cartridge.svg"
+              />
+              <span class="btn-label">Game<br />2</span>
             </button>
             <button
               id="game3Button"
               type="button"
               class="game-select-btn game3-btn"
             >
-              <span class="btn-bg"></span>
-              <span class="btn-label">Game 3</span>
+              <img
+                src="https://raw.githubusercontent.com/TheAtlanExpedition/rpg/72e4e4b492e32bd0e4a35f84ccc1c91b69e86a7d/assets/webpage/game-cartridge.svg"
+              />
+              <span class="btn-label">Game<br />3</span>
             </button>
           </div>
 
@@ -78,7 +84,7 @@
               <span class="power-icon">⏻</span>
             </button>
             <button id="globalStopButton" class="menu-button stop-btn">
-              <span>Stop Game</span>
+              <span>Eject Game</span>
             </button>
 
             <!-- Single screen area that switches content -->
@@ -91,6 +97,16 @@
                 <p>Game Window Powered Off</p>
                 <span>Select a game to power on</span>
               </div>
+              <div
+                id="staticScreen"
+                class="screen-content static-screen"
+                hidden
+              >
+                <div class="static-noise"></div>
+                <p>INSERT COIN</p>
+                <span>Select a Game to Play</span>
+                <div class="game-info"></div>
+              </div>
               <!-- Game 1 -->
               <div
                 id="game1Container"
@@ -98,6 +114,7 @@
                 hidden
               >
                 <canvas id="gameCanvas" width="800" height="500"></canvas>
+                <div class="game-info"></div>
               </div>
 
               <!-- Game 2 -->
