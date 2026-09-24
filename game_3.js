@@ -30,7 +30,7 @@ const ITEM_SPRITES = {
 PLAYER_SPRITES.up.src =
   "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-up.svg";
 PLAYER_SPRITES.down.src =
-  "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-down.svg";
+  "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/mage-idle-down.gif";
 PLAYER_SPRITES.left.src =
   "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-left.svg";
 PLAYER_SPRITES.right.src =
