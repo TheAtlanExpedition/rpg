@@ -1,5 +1,5 @@
 "use strict";
-
+{
 // Game window creation
 const TILE_SIZE = 32;
 const MAP_WIDTH = 25;
@@ -326,7 +326,7 @@ function createGameState(level, existingPlayer, existingScrolls) {
     items: items,
   };
 }
-
+}
 // Test
 /* console.log("Game 3 JavaScript loaded");
 
