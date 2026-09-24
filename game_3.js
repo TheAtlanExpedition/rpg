@@ -202,9 +202,9 @@
     }
 
     // Connect rooms
-    for (let i = 0; i < rooms.length - 2; i++) {
+    for (let i = 0; i < rooms.length - 1; i++) {
       const cur = rooms[i];
-      const next = rooms[i + 2];
+      const next = rooms[i + 1];
       const curX = Math.floor(cur.x + cur.w / 2);
       const curY = Math.floor(cur.y + cur.h / 2);
       const nextX = Math.floor(next.x + next.w / 2);
@@ -212,9 +212,15 @@
 
       for (let x = Math.min(curX, nextX); x <= Math.max(curX, nextX); x++) {
         newMap[curY][x] = TileType.FLOOR;
+        if (curY + 1 < newMap.length) {
+          newMap[curY + 1][x] = TileType.FLOOR;
+        }
       }
       for (let y = Math.min(curY, nextY); y <= Math.max(curY, nextY); y++) {
         newMap[y][nextX] = TileType.FLOOR;
+        if (nextX + 1 < newMap[0].length) {
+          newMap[y][nextX + 1] = TileType.FLOORl;
+        }
       }
     }
 
@@ -253,6 +259,8 @@
           maxHp: 100,
           type: "player",
           direction: "down",
+          width: TILE_TYPE,
+          height: TILE_TYPE * 2,
           color: "#3b82f6",
         };
 
