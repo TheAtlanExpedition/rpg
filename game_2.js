@@ -1,5 +1,5 @@
 "use strict";
-
+{
 const TILE_SIZE = 32;
 const MAP_WIDTH = 25;
 const MAP_HEIGHT = 20;
@@ -606,3 +606,4 @@ window.stopGame2 = stopGame2;
 
 // Start in powered-off state
 stopGame2();
+}
