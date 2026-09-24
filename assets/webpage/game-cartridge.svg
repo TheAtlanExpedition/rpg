@@ -21,9 +21,6 @@
     stroke-width="6"
   />
 
-  <!-- Label stripes -->
-  <path d="M55 45h130v12H55z" fill="#facc15" />
-  <path d="M55 88h130v12H55z" fill="#2563eb" />
 
   <!-- Blank game-art area -->
 <rect
