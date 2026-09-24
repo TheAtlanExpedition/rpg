@@ -80,6 +80,12 @@
 
     requestAnimationFrame(gameLoop);
   }
+  const playerAnimation = {
+    currentFrame: 0,
+    totalFrames: 4,
+    tickCount: 0,
+    ticksPerFrame: 8,
+  };
 
   function drawGame() {
     if (!gameState) return;
