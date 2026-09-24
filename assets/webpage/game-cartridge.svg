@@ -1,0 +1,70 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 240 180"
+  role="img"
+  aria-label="Retro game cartridge"
+>
+  <!-- Cartridge body -->
+  <path
+    d="M48 20h144l18 20v108H30V40l18-20z"
+    fill="#4b5563"
+    stroke="#111827"
+    stroke-width="8"
+    stroke-linejoin="round"
+  />
+
+  <!-- Top label area -->
+  <path
+    d="M55 35h130v75H55z"
+    fill="#ef4444"
+    stroke="#111827"
+    stroke-width="6"
+  />
+
+  <!-- Label stripes -->
+  <path d="M55 45h130v12H55z" fill="#facc15" />
+  <path d="M55 88h130v12H55z" fill="#2563eb" />
+
+  <!-- Label artwork -->
+  <circle
+    cx="120"
+    cy="75"
+    r="20"
+    fill="#facc15"
+    stroke="#111827"
+    stroke-width="5"
+  />
+  <path
+    d="M108 82l12-24 12 24-12-7-12 7z"
+    fill="#22c55e"
+    stroke="#111827"
+    stroke-width="4"
+    stroke-linejoin="round"
+  />
+
+  <!-- Cartridge grip lines -->
+  <path d="M45 120h150" stroke="#111827" stroke-width="5" />
+  <path d="M45 132h150" stroke="#111827" stroke-width="5" />
+
+  <!-- Bottom connector -->
+  <path
+    d="M55 148h130v18H55z"
+    fill="#f59e0b"
+    stroke="#111827"
+    stroke-width="6"
+  />
+
+  <!-- Connector pins -->
+  <path d="M70 150v14M88 150v14M106 150v14M124 150v14M142 150v14M160 150v14M178 150v14"
+    stroke="#111827"
+    stroke-width="5"
+  />
+
+  <!-- Highlight -->
+  <path
+    d="M57 27h118"
+    stroke="#9ca3af"
+    stroke-width="5"
+    stroke-linecap="round"
+  />
+</svg>
