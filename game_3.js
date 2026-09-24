@@ -273,8 +273,8 @@
           y: startRoom.y + 1,
           hp: Math.max(existingPlayer.hp, 1),
           direction: existingPlayer.direction || "down",
-          width: TILE_TYPE / 2,
-          height: TILE_TYPE,
+          width: TILE_SIZE / 2,
+          height: TILE_,
         }
       : {
           id: "player",
@@ -285,8 +285,8 @@
           type: "player",
           direction: "down",
           color: "#3b82f6",
-          width: TILE_TYPE / 2,
-          height: TILE_TYPE,
+          width: TILE_SIZE / 2,
+          height: TILE_SIZE,
         };
 
     globalPlayer = player;
