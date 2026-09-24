@@ -1,5 +1,5 @@
 "use strict";
-
+{
 const game1Canvas = document.getElementById("gameCanvas");
 const game1Context = game1Canvas.getContext("2d");
 
@@ -130,3 +130,4 @@ window.stopGame1 = stopGame1;
 
 drawGame1PoweredOffScreen();
 game1Loop();
+}
