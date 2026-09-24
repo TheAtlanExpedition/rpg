@@ -32,7 +32,7 @@
   PLAYER_SPRITES.up.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-up.svg";
   PLAYER_SPRITES.down.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/mage-idle-down-4frames.png";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-down-4frame.png";
   PLAYER_SPRITES.left.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-left.svg";
   PLAYER_SPRITES.right.src =
@@ -91,7 +91,7 @@
     tickCount: 0,
     ticksPerFrame: 60,
   };
-  const framesPerRow = 2;
+  const framesPerRow = 4;
   const col = playerAnimation.currentFrame % framesPerRow;
   const row = Math.floor(playerAnimation.currentFrame / framesPerRow);
   const srcX = col * SPRITE_FRAME_WIDTH;
@@ -178,8 +178,8 @@
         playerAnimation.currentFrame =
           (playerAnimation.currentFrame + 1) % playerAnimation.totalFrames;
       }
-      const srcX = 0;
-      const srcY = playerAnimation.currentFrame * SPRITE_FRAME_HEIGHT;
+      const srcX = playerAnimation.currentFrame * SPRITE_FRAME_WIDTH;
+      const srcY = 0;
 
       context.drawImage(
         activeSprite,
