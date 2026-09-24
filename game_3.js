@@ -170,7 +170,7 @@
       const srcX = playerAnimation.currentFrame * SPRITE_FRAME_WIDTH;
       const srcY = 0;
 
-      ctx.drawImage(
+      context.drawImage(
         activeSprite,
         srcX,
         srcY,
