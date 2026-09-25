@@ -1,9 +1,23 @@
 "use strict";
 {
   // Game window creation
-  const TILE_SIZE = 32;
+  const canvas = document.getElementById("gameCanvas3");
+  const context = canvas.getContext("2d");
+
+  const TILE_SIZE = 64;
   const MAP_WIDTH = 25;
   const MAP_HEIGHT = 20;
+
+  const PLAYER_WIDTH = 32;
+  const PLAYER_HEIGHT = 64;
+  const ITEM_SIZE = 32;
+
+  const VIEW_TILES_X = 5;
+  const VIEW_TILES_Y = 5;
+
+  let zoom = 1;
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 3;
 
   const TileType = {
     WALL: 0,
@@ -30,31 +44,119 @@
   const SPRITE_FRAME_HEIGHT = 32;
   // Sprite Location
   PLAYER_SPRITES.up.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-up.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-up-idle-4frame.png";
   PLAYER_SPRITES.down.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-bob-4frame.png";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-down-4frame.png";
   PLAYER_SPRITES.left.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-left.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-left-4frame.png";
   PLAYER_SPRITES.right.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/629309201c79312c67dcc68b68a563ea555df5c1/assets/sprites/characters/player/wizard-right.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-right-4frame.png";
 
   ITEM_SPRITES.HealthPotion.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/bb830fd6234e9dbabdefddcc4d706d9aa52b3fd7/assets/sprites/items/Potion-1.svg";
   ITEM_SPRITES.ScrollFireBall.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/d33f96247a1925eda50a0a743ef371486bc3949e/assets/sprites/items/Scroll-3.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/items/fireBall-scroll-floating2-SS.png";
   ITEM_SPRITES.ScrollFreezeCloud.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/d33f96247a1925eda50a0a743ef371486bc3949e/assets/sprites/items/Scroll-1.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/items/freezeCloud-scroll-floating-SS.png";
   ITEM_SPRITES.ScrollChainLightning.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/d33f96247a1925eda50a0a743ef371486bc3949e/assets/sprites/items/Scroll-2.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/items/chainLightning-scroll-floating2-SS.png";
+
+  for (const [name, image] of Object.entries(ITEM_SPRITES)) {
+    image.onload = () => {
+      console.log(
+        name,
+        "loaded:",
+        image.naturalWidth,
+        "x",
+        image.naturalHeight
+      );
+    };
+
+    image.onerror = () => {
+      console.error("Failed to load:", name, image.src);
+    };
+  }
+
+  const ITEM_ANIMATIONS = {
+    ScrollFireBall: {
+      image: ITEM_SPRITES.ScrollFireBall,
+      frames: 4,
+      frameWidth: 16,
+      frameHeight: 16,
+    },
+    ScrollFreezeCloud: {
+      image: ITEM_SPRITES.ScrollFreezeCloud,
+      frames: 4,
+      frameWidth: 16,
+      frameHeight: 16,
+    },
+    ScrollChainLightning: {
+      image: ITEM_SPRITES.ScrollChainLightning,
+      frames: 4,
+      frameWidth: 16,
+      frameHeight: 16,
+    },
+    HealthPotion: {
+      image: ITEM_SPRITES.HealthPotion,
+      frames: 4,
+      frameWidth: 16,
+      frameHeight: 16,
+    },
+  };
+  const ITEM_ANIMATION_FPS = 2;
+
+  const PLAYER_MOVE_INTERVAL = 250;
+  const PROJECTILE_MOVE_INTERVAL = PLAYER_MOVE_INTERVAL / 2;
+  let lastPlayerMoveTime = 0;
 
   // HTML canvas set up
-  const canvas = document.getElementById("gameCanvas3");
-  const context = canvas.getContext("2d");
   const game3Info = document.getElementById("game3Info");
   const restartButton = document.getElementById("game3restartButton");
 
-  canvas.width = MAP_WIDTH * TILE_SIZE;
-  canvas.height = MAP_HEIGHT * TILE_SIZE;
+  // Controls: WASD = move, Arrow keys = fire
+  window.addEventListener("keydown", (event) => {
+    if (!gameRunning) return;
+
+    const moveKeys = {
+      w: [0, -1],
+      W: [0, -1],
+      s: [0, 1],
+      S: [0, 1],
+      a: [-1, 0],
+      A: [-1, 0],
+      d: [1, 0],
+      D: [1, 0],
+    };
+
+    if (moveKeys[event.key]) {
+      event.preventDefault();
+
+      const [dx, dy] = moveKeys[event.key];
+      movePlayer(dx, dy, performance.now());
+
+      return;
+    }
+
+    const fireKeys = {
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+    };
+
+    if (fireKeys[event.key]) {
+      event.preventDefault();
+      const [dx, dy] = fireKeys[event.key];
+      castSpell(dx, dy);
+    }
+  });
+
+  if (restartButton) {
+    restartButton.addEventListener("click", () => {
+      initGame(1);
+      gameRunning = true;
+    });
+  }
 
   let gameRunning = false;
   let gameStart = null;
@@ -77,39 +179,74 @@
     }
   }
 
+  canvas.width = VIEW_TILES_X * TILE_SIZE;
+  canvas.height = VIEW_TILES_Y * TILE_SIZE;
+
+  function getCamera() {
+    if (!globalPlayer) {
+      return { x: 0, y: 0 };
+    }
+
+    return {
+      x: (globalPlayer.x + 0.5) * TILE_SIZE,
+      y: (globalPlayer.y + 0.5) * TILE_SIZE,
+    };
+  }
+
   function gameLoop(timestamp) {
     if (!gameRunning) return;
 
-    drawGame();
+    updateProjectiles(timestamp);
+    drawGame(timestamp);
 
     gameLoopId = requestAnimationFrame(gameLoop);
   }
+
   // Player Animations
   const playerAnimation = {
     currentFrame: 0,
     totalFrames: 4,
     tickCount: 0,
-    ticksPerFrame: 60,
+    ticksPerFrame: 30,
   };
-  const framesPerRow = 4;
-  const col = playerAnimation.currentFrame % framesPerRow;
-  const row = Math.floor(playerAnimation.currentFrame / framesPerRow);
-  const srcX = col * SPRITE_FRAME_WIDTH;
-  const srxY = col * SPRITE_FRAME_HEIGHT;
 
-  function drawGame() {
-    if (!gameState) return;
+  function drawGame(timestamp) {
+    if (!gameState || !globalPlayer) return;
 
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     context.fillStyle = "#222";
     context.fillRect(0, 0, canvas.width, canvas.height);
 
+    const camera = getCamera();
+
+    context.save();
+
+    context.translate(canvas.width / 2, canvas.height / 2);
+    context.scale(zoom, zoom);
+    context.translate(-camera.x, -camera.y);
+
     drawMap();
-    drawItems();
+    drawItems(timestamp);
+    drawProjectiles();
     drawEnemies();
     drawPlayer();
+
+    context.restore();
   }
+
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+
+    if (event.deltaY < 0) {
+      zoom += 0.1;
+    } else {
+      zoom -= 0.1;
+    }
+
+    /* zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)); */
+  });
+
   function drawMap() {
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
@@ -134,15 +271,69 @@
       }
     }
   }
+  function drawProjectiles() {
+    if (!gameState || !gameState.projectiles) return;
 
-  function drawItems() {
-    for (const item of gameState.items || []) {
-      const pixelX = item.x * TILE_SIZE;
-      const pixelY = item.y * TILE_SIZE;
+    for (const projectile of gameState.projectiles) {
+      const centerX = projectile.x * TILE_SIZE + TILE_SIZE / 2;
+      const centerY = projectile.y * TILE_SIZE + TILE_SIZE / 2;
 
-      context.fillStyle = item.type === "potion" ? "#22c55e" : "#a855f7";
+      context.fillStyle = projectile.color;
 
-      context.fillRect(pixelX + 8, pixelY + 8, TILE_SIZE - 16, TILE_SIZE - 16);
+      context.beginPath();
+      context.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+
+  function drawItems(timestamp = performance.now()) {
+    if (!gameState || !gameState.items) return;
+
+    for (const item of gameState.items) {
+      const tileX = item.x * TILE_SIZE;
+      const tileY = item.y * TILE_SIZE;
+
+      const pixelX = tileX + (TILE_SIZE - ITEM_SIZE) / 2;
+      const pixelY = tileY + (TILE_SIZE - ITEM_SIZE) / 2;
+
+      const animation = ITEM_ANIMATIONS[item.idName];
+
+      if (!animation) {
+        console.warn("Missing animation:", item.idName);
+        continue;
+      }
+
+      const image = animation.image;
+
+      if (!image) {
+        console.warn("No image object for:", item.idName);
+        continue;
+      }
+
+      if (!image.complete || image.naturalWidth === 0) {
+        console.warn("Image did not load:", item.idName, image.src);
+        continue;
+      }
+
+      const frame =
+        Math.floor((timestamp / 1000) * ITEM_ANIMATION_FPS) % animation.frames;
+
+      const sourceX = frame * animation.frameWidth;
+      const sourceY = 0;
+
+      context.imageSmoothingEnabled = false;
+
+      context.drawImage(
+        image,
+        sourceX,
+        sourceY,
+        animation.frameWidth,
+        animation.frameHeight,
+        pixelX,
+        pixelY,
+        ITEM_SIZE,
+        ITEM_SIZE
+      );
     }
   }
 
@@ -167,31 +358,142 @@
     if (!globalPlayer) return;
 
     const activeSprite = PLAYER_SPRITES[globalPlayer.direction];
+    if (!activeSprite || !activeSprite.complete) return;
+
     const xOffset = (TILE_SIZE - globalPlayer.width) / 2;
     const pixelX = globalPlayer.x * TILE_SIZE + xOffset;
     const pixelY = globalPlayer.y * TILE_SIZE;
 
-    if (activeSprite && activeSprite.complete) {
-      playerAnimation.tickCount++;
-      if (playerAnimation.tickCount >= playerAnimation.ticksPerFrame) {
-        playerAnimation.tickCount = 0;
-        playerAnimation.currentFrame =
-          (playerAnimation.currentFrame + 1) % playerAnimation.totalFrames;
-      }
-      const srcX = playerAnimation.currentFrame * SPRITE_FRAME_WIDTH;
-      const srcY = 0;
+    // Advance the player animation
+    playerAnimation.tickCount++;
 
-      context.drawImage(
-        activeSprite,
-        srcX,
-        srcY,
-        SPRITE_FRAME_WIDTH,
-        SPRITE_FRAME_HEIGHT,
-        pixelX,
-        pixelY,
-        globalPlayer.width,
-        globalPlayer.height
+    if (playerAnimation.tickCount >= playerAnimation.ticksPerFrame) {
+      playerAnimation.tickCount = 0;
+
+      playerAnimation.currentFrame =
+        (playerAnimation.currentFrame + 1) % playerAnimation.totalFrames;
+    }
+
+    const framesPerRow = 4;
+
+    const col = playerAnimation.currentFrame % framesPerRow;
+    const row = Math.floor(playerAnimation.currentFrame / framesPerRow);
+
+    const srcX = col * SPRITE_FRAME_WIDTH;
+    const srcY = row * SPRITE_FRAME_HEIGHT;
+
+    context.drawImage(
+      activeSprite,
+      srcX,
+      srcY,
+      SPRITE_FRAME_WIDTH,
+      SPRITE_FRAME_HEIGHT,
+      pixelX,
+      pixelY,
+      globalPlayer.width,
+      globalPlayer.height
+    );
+  }
+
+  // Player movement and spells
+  function movePlayer(dx, dy, timestamp) {
+    if (!gameState || !gameState.player || gameState.gameOver) {
+      return;
+    }
+
+    if (timestamp - lastPlayerMoveTime < PLAYER_MOVE_INTERVAL) {
+      return;
+    }
+
+    lastPlayerMoveTime = timestamp;
+
+    const player = gameState.player;
+    const newX = player.x + dx;
+    const newY = player.y + dy;
+
+    if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT) {
+      return;
+    }
+
+    if (gameState.map[newY][newX] === TileType.WALL) {
+      return;
+    }
+
+    player.x = newX;
+    player.y = newY;
+
+    if (dx < 0) player.direction = "left";
+    if (dx > 0) player.direction = "right";
+    if (dy < 0) player.direction = "up";
+    if (dy > 0) player.direction = "down";
+  }
+
+  function castSpell(dx, dy) {
+    if (!gameState || !gameState.player || gameState.gameOver) {
+      return;
+    }
+
+    const player = gameState.player;
+
+    player.direction =
+      dx < 0 ? "left" : dx > 0 ? "right" : dy < 0 ? "up" : "down";
+
+    gameState.projectiles.push({
+      x: player.x,
+      y: player.y,
+      dx,
+      dy,
+      speed: 1, // Move one tile at a time
+      moveInterval: PROJECTILE_MOVE_INTERVAL,
+      nextMoveTime: 0,
+      damage: 10,
+      color: "#facc15",
+    });
+  }
+  function updateProjectiles(timestamp) {
+    if (!gameState || !gameState.projectiles) return;
+
+    for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+      const projectile = gameState.projectiles[i];
+
+      if (timestamp < projectile.nextMoveTime) {
+        continue;
+      }
+
+      projectile.nextMoveTime = timestamp + projectile.moveInterval;
+
+      // Move only one tile per update
+      projectile.x += projectile.dx;
+      projectile.y += projectile.dy;
+
+      if (
+        projectile.x < 0 ||
+        projectile.x >= MAP_WIDTH ||
+        projectile.y < 0 ||
+        projectile.y >= MAP_HEIGHT
+      ) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (gameState.map[projectile.y][projectile.x] === TileType.WALL) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      const enemy = gameState.enemies.find(
+        (enemy) => enemy.x === projectile.x && enemy.y === projectile.y
       );
+
+      if (enemy) {
+        enemy.hp -= projectile.damage;
+
+        if (enemy.hp <= 0) {
+          gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
+        }
+
+        gameState.projectiles.splice(i, 1);
+      }
     }
   }
 
@@ -209,7 +511,7 @@
       return (
         roomA.x - padding < roomB.x + roomB.w &&
         roomA.x + roomA.w + padding > roomB.x &&
-        roomA.x - padding < roomB.y + roomB.h &&
+        roomA.y - padding < roomB.y + roomB.h &&
         roomA.y + roomA.h + padding > roomB.y
       );
     }
@@ -259,7 +561,7 @@
       for (let y = Math.min(curY, nextY); y <= Math.max(curY, nextY); y++) {
         newMap[y][nextX] = TileType.FLOOR;
         if (nextX + 1 < newMap[0].length) {
-          newMap[y][nextX + 1] = TileType.FLOORl;
+          newMap[y][nextX + 1] = TileType.FLOOR;
         }
       }
     }
@@ -290,8 +592,8 @@
           y: startRoom.y + 1,
           hp: Math.max(existingPlayer.hp, 1),
           direction: existingPlayer.direction || "down",
-          width: TILE_SIZE / 2,
-          height: TILE_,
+          width: PLAYER_WIDTH,
+          height: PLAYER_HEIGHT,
         }
       : {
           id: "player",
@@ -302,8 +604,8 @@
           type: "player",
           direction: "down",
           color: "#3b82f6",
-          width: TILE_SIZE / 2,
-          height: TILE_SIZE,
+          width: PLAYER_WIDTH,
+          height: PLAYER_HEIGHT,
         };
 
     globalPlayer = player;
@@ -361,13 +663,6 @@
       color: "#980002",
     });
 
-    // Player movement
-    function movePlayer(dx, dy) {
-      if (!gameState || gameState.gameOver) return;
-
-      const newX = gameState.player.x + dx;
-      const newY = gameState.player.y + dy;
-    }
     console.log("Items created:", items);
     return {
       map: newMap,
@@ -375,16 +670,7 @@
       player: player,
       enemies: enemies,
       items: items,
+      projectiles: [],
     };
   }
 }
-// Test
-/* console.log("Game 3 JavaScript loaded");
-
-const testCanvas = document.getElementById("gameCanvas3");
-const testContext = testCanvas.getContext("2d");
-
-testContext.fillStyle = "red";
-testContext.fillRect(0, 0, 100, 100);
-
-console.log("Canvas test drawn"); */
