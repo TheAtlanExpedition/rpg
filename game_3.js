@@ -1073,7 +1073,7 @@
   const CURIOUS_WAIT_MS = 1800;      // look around this long after arriving
   const PATROL_WAIT_MS = 1200;       // pause at each patrol point
   const HIDE_SEARCH_MS = 1200;       // how long an alert enemy checks a hiding spot
-  const HIDE_BREAK_DELAY_MS = 2000;     // enemy waits this long before smashing
+  const HIDE_BREAK_DELAY_MS = 1500;     // enemy waits this long before smashing
   const ENEMY_SPEED = { patrol: 1.2, curious: 2.0, alert: 2.6 }; // tiles/sec
   const ENEMY_TURN_SPEED = 6;        // radians/sec
   const NOISE_RADIUS_SPELL = 7;      // tiles
