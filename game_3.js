@@ -481,9 +481,16 @@
 
     // Track real movement: distance drives the walk animation frame.
     const moved = Math.hypot(player.x - oldX, player.y - oldY) * TILE_SIZE;
-    if (moved > 0) {
+        if (moved > 0) {
       player.walkDistance = (player.walkDistance || 0) + moved;
       player.lastMovedTime = timestamp;
+
+      const stepRadius = FOOTSTEP_RADIUS[player.gait] ?? 0;
+      const stepInterval = FOOTSTEP_INTERVAL_MS[player.gait] ?? Infinity;
+      if (stepRadius > 0 && timestamp - lastFootstepTime >= stepInterval) {
+        lastFootstepTime = timestamp;
+        makeNoise(player.x, player.y, stepRadius, "#e2e8f0");
+      }
     }
     globalPlayer = player;
   }
@@ -539,7 +546,52 @@
   function canMoveTo(x, y) {
     return isBoxClear(x, y, HITBOX);
   }
+  function drawRipples() {
+    const now = performance.now();
 
+    for (let i = noiseRipples.length - 1; i >= 0; i--) {
+      const r = noiseRipples[i];
+      const t = (now - r.start) / r.duration;
+      if (t >= 1) {
+        noiseRipples.splice(i, 1);
+        continue;
+      }
+
+      context.save();
+
+      // Confine the ripple to where the sound can actually travel.
+      if (r.reach) {
+        context.beginPath();
+        for (const k of r.reach.keys()) {
+          const tx = k % MAP_WIDTH;
+          const ty = Math.floor(k / MAP_WIDTH);
+          context.rect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+        context.clip();
+      }
+
+      context.strokeStyle = r.color;
+      context.lineWidth = 2;
+
+      for (const lag of [0, 0.18]) {
+        const tt = Math.max(0, t - lag);
+        if (tt <= 0) continue;
+        const eased = 1 - (1 - tt) * (1 - tt);
+        context.globalAlpha = (1 - t) * (lag === 0 ? 0.7 : 0.4);
+        context.beginPath();
+        context.arc(
+          Math.round(r.x * TILE_SIZE),
+          Math.round(r.y * TILE_SIZE),
+          r.radius * TILE_SIZE * eased,
+          0,
+          Math.PI * 2
+        );
+        context.stroke();
+      }
+
+      context.restore(); // also resets globalAlpha
+    }
+  }
   function drawGame(timestamp) {
     if (!gameState || !gameState.player) {
       return;
@@ -583,7 +635,8 @@
     drawProjectiles();
     drawEnemies();
     drawPlayer(timestamp);
-    drawHidePrompt(); // FIX: was defined but never called
+    drawRipples();
+    drawHidePrompt();
 
     context.restore();
     if (gameState.gameOver) drawGameOver();
@@ -954,7 +1007,7 @@
       if (Math.hypot(p.x - item.x, p.y - item.y) < TRAP_TRIGGER_RADIUS) {
         item.sprungUntil = timestamp + TRAP_REARM_MS;
         damagePlayer(TRAP_DAMAGE);
-        makeNoise(item.x, item.y, TRAP_NOISE_RADIUS);
+        makeNoise(item.x, item.y, TRAP_NOISE_RADIUS, "#ef4444");
       }
     }
   }
@@ -1021,13 +1074,52 @@
   const ENEMY_SPEED = { patrol: 1.2, curious: 2.0, alert: 2.6 }; // tiles/sec
   const ENEMY_TURN_SPEED = 6;        // radians/sec
   const NOISE_RADIUS_SPELL = 7;      // tiles
-
+  // --- footsteps & noise ripples ---------------------------------------------
+  const FOOTSTEP_RADIUS = { sneak: 0, walk: 2, run: 4.5 };      // tiles heard
+  const FOOTSTEP_INTERVAL_MS = { walk: 450, run: 280 };
+  
   const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
   const ENEMY_ARRIVE_DIST = 0.15;    // how close counts as "reached" a point
   const NAV_REPLAN_MS = 200;         // how often enemies re-route
 
   const SHOW_VISION_CONES = true;    // set false to hide the cones
 
+  let lastFootstepTime = -Infinity;
+
+  const noiseRipples = []; // { x, y, radius, color, start, duration }
+
+   function spawnRipple(x, y, radius, color, duration = 500 + radius * 60, reach = null) {
+    noiseRipples.push({
+      x: x + 0.5,
+      y: y + 0.75,
+      radius,
+      color,
+      start: performance.now(),
+      duration,
+      reach, // tiles the sound can reach (null = no clipping)
+    });
+  }
+
+  // A sound at (x, y): everyone who can hear it (sound travels through open
+  // floor, not walls) and isn't already hunting goes to check.
+  function makeNoise(x, y, radius, color = "#facc15") {
+    if (!gameState || !gameState.enemies) return;
+
+    const reach = soundReach(x, y, radius);
+    spawnRipple(x, y, radius, color, undefined, reach);
+
+    for (const e of gameState.enemies) {
+      if (e.state === "alert") continue;
+
+      const tileKey =
+        Math.floor(e.y + 0.5) * MAP_WIDTH + Math.floor(e.x + 0.5);
+      if (!reach.has(tileKey)) continue;
+
+      startInvestigating(e, x, y);
+      e.suspicion = Math.max(e.suspicion, CURIOUS_THRESHOLD);
+      spawnRipple(e.x, e.y, 0.7, "#f59e0b", 450); // small "I heard that" ring
+    }
+  }
   // Hook: put a "torch lit area" test here later. While the player is lit, the
   // outer cone can see them even when standing still.
   function isPlayerInLight() {
@@ -1226,16 +1318,51 @@
   }
 
   // A sound at (x, y): everyone in range who isn't already hunting goes to check.
-  function makeNoise(x, y, radius) {
-    if (!gameState || !gameState.enemies) return;
-    for (const e of gameState.enemies) {
-      if (e.state === "alert") continue;
-      if (Math.hypot(e.x - x, e.y - y) > radius) continue;
-      startInvestigating(e, x, y);
-      e.suspicion = Math.max(e.suspicion, CURIOUS_THRESHOLD);
-    }
-  }
+  // A sound at (x, y): everyone in range who isn't already hunting goes to check.
+ 
+  // Which tiles can a sound at (x, y) reach within `radius` tiles, travelling
+  // only through open floor? Returns Map<tileKey, distance>. Walls block it.
+  function soundReach(x, y, radius) {
+    const sx = Math.floor(x + 0.5);
+    const sy = Math.floor(y + 0.5);
+    const key = (tx, ty) => ty * MAP_WIDTH + tx;
 
+    const dist = new Map([[key(sx, sy), 0]]);
+    if (!isWalkableTile(sx, sy)) return dist;
+
+    const dirs = [
+      [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+      [1, 1, Math.SQRT2], [-1, 1, Math.SQRT2],
+      [1, -1, Math.SQRT2], [-1, -1, Math.SQRT2],
+    ];
+    const queue = [[sx, sy]];
+
+    for (let head = 0; head < queue.length; head++) {
+      const [cx, cy] = queue[head];
+      const cd = dist.get(key(cx, cy));
+
+      for (const [dx, dy, cost] of dirs) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (!isWalkableTile(nx, ny)) continue;
+
+        // No squeezing diagonally through wall corners.
+        if (dx !== 0 && dy !== 0 &&
+            (!isWalkableTile(cx + dx, cy) || !isWalkableTile(cx, cy + dy))) {
+          continue;
+        }
+
+        const nd = cd + cost;
+        if (nd > radius) continue;
+
+        const k = key(nx, ny);
+        if (dist.has(k) && dist.get(k) <= nd) continue;
+        dist.set(k, nd);
+        queue.push([nx, ny]);
+      }
+    }
+    return dist;
+  }
   // Hook for when an alerted enemy catches the player (damage, game over...).
   function onEnemyReachedPlayer(e) {
     // e.g. damagePlayer(10);
