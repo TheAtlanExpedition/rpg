@@ -1340,14 +1340,16 @@
       // player. It searches for a short while, then carries on normally
       // (FIX: the timer used to stick at 0 and refresh lastSeenTime every
       // frame, so the enemy stood there forever and never gave up).
-      if (
+            if (
         p.hidden &&
         enemyIsNearHiddenPlayer(e) &&
         !e.canSeePlayer &&
         e.hideSearchTimer > 0
       ) {
-        e.searching = true;
-        e.baseFacing = e.facing;
+        if (!e.searching) {
+          e.searching = true;
+          e.baseFacing = e.facing; // lock the sweep centre once
+        }
         lookAround(e, now);
 
         e.hideSearchTimer -= dt * 1000;
