@@ -1075,7 +1075,7 @@
   const ENEMY_TURN_SPEED = 6;        // radians/sec
   const NOISE_RADIUS_SPELL = 7;      // tiles
   // --- footsteps & noise ripples ---------------------------------------------
-  const FOOTSTEP_RADIUS = { sneak: 0, walk: 2, run: 4.5 };      // tiles heard
+  const FOOTSTEP_RADIUS = { sneak: 0, walk: 0, run: 4.5 };      // tiles heard
   const FOOTSTEP_INTERVAL_MS = { walk: 450, run: 280 };
   
   const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
@@ -1857,7 +1857,7 @@ function placeHidingSpots(rooms, map) {
   }
 
   const RUN_DISPLAY_SCALE = 1.5;
-  const RUN_Y_OFFSET = 4;
+  const RUN_Y_OFFSET = 8;
 
   function drawPlayer(timestamp) {
     if (!globalPlayer) return;
