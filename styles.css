@@ -9,9 +9,11 @@ body {
   background-color: #e0e0e0;
   font-family: Arial, sans-serif;
 }
+
 #game.page {
   display: block;
 }
+
 /* ===== HEADER ===== */
 .header-wrapper {
   position: sticky;
@@ -98,6 +100,7 @@ body {
   padding: 30px 20px;
   box-sizing: border-box;
 }
+
 /* ===== INTRO TEXT ===== */
 .intro-text {
   text-decoration: underline;
@@ -108,7 +111,6 @@ body {
   color: #000;
 }
 
-/* Keep green only inside the carousel */
 .carousel .intro-text,
 .gallery-container .intro-text,
 .result-column .intro-text {
@@ -156,7 +158,6 @@ body {
   margin: 20px auto 40px;
 }
 
-/* Vertical game buttons - Shifted to the RIGHT side */
 .game-buttons {
   display: flex;
   flex-direction: column;
@@ -186,6 +187,7 @@ body {
   box-shadow: none;
   background: transparent;
 }
+
 .game-select-btn img {
   position: absolute;
   inset: 0;
@@ -195,6 +197,7 @@ body {
   transform: scale(1.25);
   z-index: 0;
 }
+
 .game-select-btn .btn-label {
   position: absolute;
   top: 37%;
@@ -210,16 +213,14 @@ body {
 .game-select-btn.selected-game img {
   filter: drop-shadow(0 0 3px #ffeb3b) drop-shadow(0 0 6px #ffeb3b);
 }
-
-/* ===== ONE shared game window ===== */
+/* ===== GAME WINDOW ===== */
 .game-window {
   position: relative;
   margin-bottom: 70px;
-  flex: 1;
-  min-width: 280px;
-  max-width: 860px;
-  width: 100%;
-  min-height: 560px;
+  flex: 0 0 auto;
+  width: 768px;                 /* + 10 px border each side */
+  
+
   background-color: #111;
   border: 10px solid #222;
   border-radius: 16px;
@@ -239,8 +240,7 @@ body {
   border-color: #111;
   background-color: #050505;
 }
-
-/* Power button on the frame - Outside at bottom left */
+/* ===== POWER BUTTON (bottom-left outside) ===== */
 .power-btn {
   position: absolute;
   top: calc(100% + 16px);
@@ -277,7 +277,7 @@ body {
   background: #e53935;
 }
 
-/* Stop Button - Outside at bottom right */
+/* ===== STOP BUTTON (bottom-right outside) ===== */
 #globalStopButton {
   position: absolute;
   top: calc(100% + 16px);
@@ -287,7 +287,7 @@ body {
   color: #ffffff;
   border: 3px solid #b91c1c;
   height: 46px;
-  padding: 0px 20px;
+  padding: 0 20px;
   font-size: 14px;
   font-family: "Black Ops One", sans-serif;
   border-radius: 6px;
@@ -309,18 +309,15 @@ body {
   background-color: #991b1b;
   transform: translateY(1px);
 }
-
-/* The single screen area */
+/* ===== GAME SCREEN ===== */
 .game-screen {
   position: relative;
-  flex: 1;
-
-  min-height: 100%;
-  width: 100%;
-  overflow: visible;
+  flex: 0 0 auto;
+  width: 768px;
+  height: 768px;
+  min-height: 768px;
+  overflow: hidden;
 }
-
-/* All three contents occupy the EXACT same space */
 .screen-content {
   position: absolute;
   inset: 0;
@@ -328,6 +325,9 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 768px;
+  min-height: 768px;
   box-sizing: border-box;
 }
 
@@ -351,34 +351,53 @@ body {
 .powered-off-screen span {
   font-size: 0.95rem;
 }
-
-/* Game canvases */
+/* ===== GAME CONTAINER ===== */
+.game-container {
+  display: flex;
+  position: absolute;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 768px;
+  height: 768px;
+  box-sizing: border-box;
+  transform: translate(20,10);
+  overflow: visible;
+}
+/* ===== GAME CANVASES ===== */
 .game-container canvas {
   display: block;
-  width: 100%;
-  max-width: 800px;
-  height: auto;
-  max-height: 500px;
-  object-fit: contain;
-  margin: 0 auto;
+  width: 768px !important;
+  height: 768px !important;
+  max-width: none !important;
+  max-height: none !important;
+  position: absolute;
+  box-sizing: border-box;
   border: 3px solid #fff;
   border-radius: 8px;
+  background-color: #111;
+  object-fit: cover;
   touch-action: none;
   user-select: none;
-  background-color: #111;
-  transform: translateY(35px);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  overflow: visible;
 }
-
 #gameCanvas {
   background-color: #87ceeb;
 }
+
 #gameCanvas2 {
   background-color: #111827;
 }
+
 #gameCanvas3 {
-  background-color: #111827;
+  image-rendering: pixelated;
+  max-width: none;
+  max-height: none;
 }
 
+/* ===== GAME INFORMATION ===== */
 .game-info {
   min-height: 60px;
   margin: 10px auto 0;
@@ -405,31 +424,35 @@ body {
 #restartButton:hover {
   background-color: #2e7d32;
 }
-/* Static screen */
+
+/* ===== STATIC SCREEN ===== */
 .static-screen {
   position: relative;
-  width: 100%;
-  height: 100%;
-  align-self: stretch;
-  min-height: 560px;
-  background-color: #222;
-  color: #fff;
-  font-family: "Black Ops One";
-  text-align: center;
-  overflow: hidden;
-  z-index: 10;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  width: 768px;
+  height: 768px;
+  min-height: 768px;
+  max-width: 100%;
+  overflow: hidden;
   box-sizing: border-box;
+  z-index: 10;
+  background-color: #222;
+  color: #fff;
+  font-family: "Black Ops One", sans-serif;
+  text-align: center;
 }
+
 .static-noise {
   position: absolute;
   inset: 0;
   z-index: 0;
-
-  background: repeating-linear-gradient(
+  pointer-events: none;
+  opacity: 1;
+  background:
+    repeating-linear-gradient(
       0deg,
       rgba(255, 255, 255, 0.18),
       rgba(255, 255, 255, 0.18) 1px,
@@ -444,29 +467,32 @@ body {
       transparent 2px
     );
   background-size: 8px 8px;
-  opacity: 1;
   animation: tv-fuzz 0.05s infinite linear;
-  pointer-events: none;
 }
+
 .static-screen p,
 .static-screen span {
   position: relative;
   z-index: 1;
 }
+
 .static-screen p {
-  font-size: 2rem;
-  color: #ffeb3b;
-  text-shadow: 0 0 8px rgba(255, 255, 59, 0.6);
   margin-bottom: 5px;
+  color: #ffeb3b;
+  font-size: 2rem;
+  text-shadow: 0 0 8px rgba(255, 255, 59, 0.6);
   animation: blinker 1.2s linear infinite;
 }
+
 .static-screen span {
   font-family: Arial, sans-serif;
   font-size: 0.95rem;
 }
+
+/* ===== ANIMATIONS ===== */
 @keyframes tv-fuzz {
   0% {
-    background-position: 0px 0px;
+    background-position: 0 0;
     transform: translate(0, 0);
   }
   50% {
@@ -478,8 +504,65 @@ body {
     transform: translate(-1px, 1px);
   }
 }
+
 @keyframes blinker {
   50% {
     opacity: 0;
   }
 }
+/*
+/* ===== RESPONSIVE ===== 
+@media (max-width: 900px) {
+  .game-window {
+    max-width: 100%;
+  }
+
+  .game-screen,
+  .screen-content,
+  .game-container,
+  .static-screen {
+    width: 512px;
+    height: 512px;
+    min-height: 512px;
+  }
+
+  .game-container canvas {
+    width: 512px !important;
+    height: 512px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .game-screen,
+  .screen-content,
+  .game-container,
+  .static-screen {
+    width: 256px;
+    height: 256px;
+    min-height: 256px;
+  }
+
+  .game-container canvas {
+    width: 256px !important;
+    height: 256px !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .games-container {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .game-buttons {
+    order: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-left: 0;
+  }
+
+  .game-window {
+    width: 100%;
+  } 
+} */
