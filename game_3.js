@@ -14,7 +14,10 @@
   const DISPLAY_HEIGHT = VIEW_TILES_Y * TILE_SIZE;
 
   // Integer DPR only: fractional values (125%, 150%) cause uneven sprite pixels.
-  const devicePixelRatioValue = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const devicePixelRatioValue = Math.max(
+    1,
+    Math.floor(window.devicePixelRatio || 1)
+  );
   const CANVAS_SCALE = 3;
 
   canvas.style.width = `${DISPLAY_WIDTH * CANVAS_SCALE}px`;
@@ -89,7 +92,8 @@
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/ui/inventory-large-0.1.png";
 
   const TILESET = new Image();
-  TILESET.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/tiles/tileset-damp-dark-dungeon-floor-cobblestone-0.1.png"; // path relative to your HTML page
+  TILESET.src =
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/tiles/tileset-damp-dark-dungeon-floor-cobblestone-0.1.png"; // path relative to your HTML page
 
   const LEDGE_W = 14; // thickness of a ledge strip (ledge + its shadow)
   let tileArt = null;
@@ -120,132 +124,124 @@
     wg.drawImage(TILESET, 2, 192, 30, 32, 0, 0, 30, 32);
     wg.drawImage(TILESET, 2, 192, 2, 32, 30, 0, 2, 32);
 
-   tileArt = {
-  floor: sliceTileset(64, 64, 32, 32),
-  wall,
+    tileArt = {
+      floor: sliceTileset(64, 64, 32, 32),
+      wall,
 
-  west:  sliceTileset(32, 32, LEDGE_W, 32),
-  east:  sliceTileset(32, 32, LEDGE_W, 32, true, false),
-  south: sliceTileset(32, 146, 32, LEDGE_W),
-  north: sliceTileset(32, 146, 32, LEDGE_W, false, true),
+      west: sliceTileset(32, 32, LEDGE_W, 32),
+      east: sliceTileset(32, 32, LEDGE_W, 32, true, false),
+      south: sliceTileset(32, 146, 32, LEDGE_W),
+      north: sliceTileset(32, 146, 32, LEDGE_W, false, true),
 
-  // Replace these coordinates with the actual corner locations
-  // in your tileset.
-  outerNW: sliceTileset(33, 130, 14, 14),
-  outerNE: sliceTileset(96,  67, 14, 14),
-  outerSW: sliceTileset(62,   1, 14, 14),  // was 32×32
-  outerSE: sliceTileset(33,  64, 14, 14),
+      // Replace these coordinates with the actual corner locations
+      // in your tileset.
+      outerNW: sliceTileset(33, 130, 14, 14),
+      outerNE: sliceTileset(96, 67, 14, 14),
+      outerSW: sliceTileset(62, 1, 14, 14), // was 32×32
+      outerSE: sliceTileset(33, 64, 14, 14),
 
-  innerNW: sliceTileset( 4, 129, 14, 14),
-  innerNE: sliceTileset(96, 194, 14, 14),
-  innerSW: sliceTileset( 0,   0, 14, 14),
-  innerSE: sliceTileset(34, 194, 14, 14),
+      innerNW: sliceTileset(4, 129, 14, 14),
+      innerNE: sliceTileset(96, 194, 14, 14),
+      innerSW: sliceTileset(0, 0, 14, 14),
+      innerSE: sliceTileset(34, 194, 14, 14),
     };
     return tileArt;
   }
 
   function isFloorAt(x, y) {
     return (
-      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT &&
+      x >= 0 &&
+      x < MAP_WIDTH &&
+      y >= 0 &&
+      y < MAP_HEIGHT &&
       gameState.map[y][x] === TileType.FLOOR
     );
   }
 
- function drawWallCorner(art, tx, ty, dx, dy) {
-  const T = TILE_SIZE;
-  const L = LEDGE_W;
+  function drawWallCorner(art, tx, ty, dx, dy) {
+    const T = TILE_SIZE;
+    const L = LEDGE_W;
 
-  // Select the horizontal and vertical ledge pieces.
-  const horizontal = dy < 0 ? art.north : art.south;
-  const vertical = dx < 0 ? art.west : art.east;
+    // Select the horizontal and vertical ledge pieces.
+    const horizontal = dy < 0 ? art.north : art.south;
+    const vertical = dx < 0 ? art.west : art.east;
 
-  // Source regions inside the ledge canvases.
-  const hsx = dx < 0 ? 0 : T - L;
-  const vsy = dy < 0 ? 0 : T - L;
+    // Source regions inside the ledge canvases.
+    const hsx = dx < 0 ? 0 : T - L;
+    const vsy = dy < 0 ? 0 : T - L;
 
-  // Destination corner inside the wall tile.
-  const cornerX = dx < 0 ? tx : tx + T - L;
-  const cornerY = dy < 0 ? ty : ty + T - L;
+    // Destination corner inside the wall tile.
+    const cornerX = dx < 0 ? tx : tx + T - L;
+    const cornerY = dy < 0 ? ty : ty + T - L;
 
-  // Horizontal part of the elbow.
-  context.drawImage(
-    horizontal,
-    hsx, 0, L, L,
-    cornerX, cornerY, L, L
-  );
+    // Horizontal part of the elbow.
+    context.drawImage(horizontal, hsx, 0, L, L, cornerX, cornerY, L, L);
 
-  // Vertical part of the elbow.
-  context.drawImage(
-    vertical,
-    0, vsy, L, L,
-    cornerX, cornerY, L, L
-  );
-}
-  
+    // Vertical part of the elbow.
+    context.drawImage(vertical, 0, vsy, L, L, cornerX, cornerY, L, L);
+  }
+
   function drawCorner(art, type, direction, tx, ty) {
-  const T = TILE_SIZE;
-  const L = LEDGE_W;
-  const positions = {
-    NW: [tx,         ty],
-    NE: [tx + T - L, ty],
-    SW: [tx,         ty + T - L],
-    SE: [tx + T - L, ty + T - L],
-  };
-  const [drawX, drawY] = positions[direction];
-  context.drawImage(art[`${type}${direction}`], drawX, drawY);
-}
+    const T = TILE_SIZE;
+    const L = LEDGE_W;
+    const positions = {
+      NW: [tx, ty],
+      NE: [tx + T - L, ty],
+      SW: [tx, ty + T - L],
+      SE: [tx + T - L, ty + T - L],
+    };
+    const [drawX, drawY] = positions[direction];
+    context.drawImage(art[`${type}${direction}`], drawX, drawY);
+  }
 
-  
-function drawWallEdges(art, x, y, tx, ty) {
-  const T = TILE_SIZE;
-  const L = LEDGE_W;
+  function drawWallEdges(art, x, y, tx, ty) {
+    const T = TILE_SIZE;
+    const L = LEDGE_W;
 
-  const n = isFloorAt(x, y - 1);
-  const e = isFloorAt(x + 1, y);
-  const s = isFloorAt(x, y + 1);
-  const w = isFloorAt(x - 1, y);
+    const n = isFloorAt(x, y - 1);
+    const e = isFloorAt(x + 1, y);
+    const s = isFloorAt(x, y + 1);
+    const w = isFloorAt(x - 1, y);
 
-  // Nothing touches a room → leave this cell black
-  if (!n && !e && !s && !w) {
-    // optional: still check diagonals for outer corners only
-    if (
-      !isFloorAt(x - 1, y - 1) &&
-      !isFloorAt(x + 1, y - 1) &&
-      !isFloorAt(x - 1, y + 1) &&
-      !isFloorAt(x + 1, y + 1)
-    ) {
-      return;
+    // Nothing touches a room → leave this cell black
+    if (!n && !e && !s && !w) {
+      // optional: still check diagonals for outer corners only
+      if (
+        !isFloorAt(x - 1, y - 1) &&
+        !isFloorAt(x + 1, y - 1) &&
+        !isFloorAt(x - 1, y + 1) &&
+        !isFloorAt(x + 1, y + 1)
+      ) {
+        return;
+      }
+    }
+
+    // Straight ledges on the room-facing sides
+    if (w) context.drawImage(art.west, tx, ty);
+    if (e) context.drawImage(art.east, tx + T - L, ty);
+    if (n) context.drawImage(art.north, tx, ty);
+    if (s) context.drawImage(art.south, tx, ty + T - L);
+
+    // Inner corners
+    if (n && w) drawCorner(art, "inner", "NW", tx, ty);
+    if (n && e) drawCorner(art, "inner", "NE", tx, ty);
+    if (s && w) drawCorner(art, "inner", "SW", tx, ty);
+    if (s && e) drawCorner(art, "inner", "SE", tx, ty);
+
+    // Outer corners (diagonal floor only)
+    if (!n && !w && isFloorAt(x - 1, y - 1)) {
+      drawCorner(art, "outer", "NW", tx, ty);
+    }
+    if (!n && !e && isFloorAt(x + 1, y - 1)) {
+      drawCorner(art, "outer", "NE", tx, ty);
+    }
+    if (!s && !w && isFloorAt(x - 1, y + 1)) {
+      drawCorner(art, "outer", "SW", tx, ty);
+    }
+    if (!s && !e && isFloorAt(x + 1, y + 1)) {
+      drawCorner(art, "outer", "SE", tx, ty);
     }
   }
-
-  // Straight ledges on the room-facing sides
-  if (w) context.drawImage(art.west,  tx,         ty);
-  if (e) context.drawImage(art.east,  tx + T - L, ty);
-  if (n) context.drawImage(art.north, tx,         ty);
-  if (s) context.drawImage(art.south, tx,         ty + T - L);
-
-  // Inner corners
-  if (n && w) drawCorner(art, "inner", "NW", tx, ty);
-  if (n && e) drawCorner(art, "inner", "NE", tx, ty);
-  if (s && w) drawCorner(art, "inner", "SW", tx, ty);
-  if (s && e) drawCorner(art, "inner", "SE", tx, ty);
-
-  // Outer corners (diagonal floor only)
-  if (!n && !w && isFloorAt(x - 1, y - 1)) {
-    drawCorner(art, "outer", "NW", tx, ty);
-  }
-  if (!n && !e && isFloorAt(x + 1, y - 1)) {
-    drawCorner(art, "outer", "NE", tx, ty);
-  }
-  if (!s && !w && isFloorAt(x - 1, y + 1)) {
-    drawCorner(art, "outer", "SW", tx, ty);
-  }
-  if (!s && !e && isFloorAt(x + 1, y + 1)) {
-    drawCorner(art, "outer", "SE", tx, ty);
-  }
-}
-
-
 
   const ITEM_ANIMATIONS = {
     scrollFireBall: {
@@ -280,7 +276,7 @@ function drawWallEdges(art, x, y, tx, ty) {
   const PLAYER_RUN_SPEED = 5.2;
   const STAMINA_MAX = 3;
   const STAMINA_START_MIN = 0.35;
-  const PROJECTILE_SPEED = 5;        // tiles per second (continuous, any angle)
+  const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
   const PROJECTILE_HIT_RADIUS = 0.75; // how close to an enemy's centre counts as a hit
 
   let gameRunning = false;
@@ -320,7 +316,7 @@ function drawWallEdges(art, x, y, tx, ty) {
 
   const heldGaitKeys = { sneak: false, run: false };
 
-  window.addEventListener("keydown", event => {
+  window.addEventListener("keydown", (event) => {
     if (event.code === "KeyE" && !event.repeat) {
       // FIX: don't touch gameState before the game exists / while in the menu.
       if (!gameRunning || !gameState || inventoryOpen) return;
@@ -619,8 +615,8 @@ function drawWallEdges(art, x, y, tx, ty) {
       player.gait === "sneak"
         ? PLAYER_SNEAK_SPEED
         : player.gait === "run"
-          ? PLAYER_RUN_SPEED
-          : PLAYER_SPEED;
+        ? PLAYER_RUN_SPEED
+        : PLAYER_SPEED;
 
     const movementAmount = speed * deltaTime;
 
@@ -640,7 +636,7 @@ function drawWallEdges(art, x, y, tx, ty) {
 
     // Track real movement: distance drives the walk animation frame.
     const moved = Math.hypot(player.x - oldX, player.y - oldY) * TILE_SIZE;
-        if (moved > 0) {
+    if (moved > 0) {
       player.walkDistance = (player.walkDistance || 0) + moved;
       player.lastMovedTime = timestamp;
 
@@ -659,12 +655,7 @@ function drawWallEdges(art, x, y, tx, ty) {
   const HITBOX = { left: 0.25, right: 0.75, top: 0.5, bottom: 0.9 };
 
   function isWalkableTile(tileX, tileY) {
-    if (
-      tileX < 0 ||
-      tileX >= MAP_WIDTH ||
-      tileY < 0 ||
-      tileY >= MAP_HEIGHT
-    ) {
+    if (tileX < 0 || tileX >= MAP_WIDTH || tileY < 0 || tileY >= MAP_HEIGHT) {
       return false;
     }
     return gameState.map[tileY][tileX] !== TileType.WALL;
@@ -768,9 +759,9 @@ function drawWallEdges(art, x, y, tx, ty) {
     );
 
     context.imageSmoothingEnabled = false;
-   context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-  context.fillStyle = "#000000";
-  context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    context.fillStyle = "#000000";
+    context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     context.save();
 
@@ -782,10 +773,7 @@ function drawWallEdges(art, x, y, tx, ty) {
     // Use only integer zoom values for pixel-perfect sprites.
     context.scale(Math.round(zoom), Math.round(zoom));
 
-    context.translate(
-      -Math.round(camera.x),
-      -Math.round(camera.y)
-    );
+    context.translate(-Math.round(camera.x), -Math.round(camera.y));
 
     drawMap();
     drawHidingSpots();
@@ -836,7 +824,12 @@ function drawWallEdges(art, x, y, tx, ty) {
     context.textBaseline = "alphabetic";
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 6; c++) {
-        context.strokeRect(c * FRAME_W + 0.5, r * FRAME_H + 0.5, FRAME_W - 1, FRAME_H - 1);
+        context.strokeRect(
+          c * FRAME_W + 0.5,
+          r * FRAME_H + 0.5,
+          FRAME_W - 1,
+          FRAME_H - 1
+        );
       }
       context.fillText(String(r), 2, r * FRAME_H + 10);
     }
@@ -946,64 +939,64 @@ function drawWallEdges(art, x, y, tx, ty) {
 
   function seededRandom(x, y) {
     let seed = x * 49632 + y * 325178;
-    return function() {
-      let t = seed += 0x6D2B79F5;
+    return function () {
+      let t = (seed += 0x6d2b79f5);
       t = Math.imul(t ^ (t >>> 15), t | 1);
       t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    }
+    };
   }
 
   function drawMap() {
-  const art = getTileArt();
+    const art = getTileArt();
 
-  for (let y = 0; y < MAP_HEIGHT; y++) {
-    for (let x = 0; x < MAP_WIDTH; x++) {
-      const tile = gameState.map[y][x];
-      const tx = Math.floor(x * TILE_SIZE);
-      const ty = Math.floor(y * TILE_SIZE);
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      for (let x = 0; x < MAP_WIDTH; x++) {
+        const tile = gameState.map[y][x];
+        const tx = Math.floor(x * TILE_SIZE);
+        const ty = Math.floor(y * TILE_SIZE);
 
-      if (tile === TileType.WALL) {
-        // Only edge treatment on walls that touch a room (8-neighbour check).
-        // Everything else stays black (void).
-        let isRoomWall = false;
-        for (let dy = -1; dy <= 1 && !isRoomWall; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            if (isFloorAt(x + dx, y + dy)) {
-              isRoomWall = true;
-              break;
+        if (tile === TileType.WALL) {
+          // Only edge treatment on walls that touch a room (8-neighbour check).
+          // Everything else stays black (void).
+          let isRoomWall = false;
+          for (let dy = -1; dy <= 1 && !isRoomWall; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              if (isFloorAt(x + dx, y + dy)) {
+                isRoomWall = true;
+                break;
+              }
             }
           }
-        }
-        if (!isRoomWall) continue;
+          if (!isRoomWall) continue;
 
-        if (art) {
-          drawWallEdges(art, x, y, tx, ty);
+          if (art) {
+            drawWallEdges(art, x, y, tx, ty);
+          }
+          // no solid fill → outside of the wall is black
+          continue;
         }
-        // no solid fill → outside of the wall is black
-        continue;
+
+        if (tile === TileType.FLOOR) {
+          if (art) {
+            context.drawImage(art.floor, tx, ty);
+          } else {
+            context.fillStyle = "#9ca3af";
+            context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+          }
+          continue;
+        }
+
+        if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
+        else if (tile === TileType.DOOR) context.fillStyle = "#92400e";
+        else if (tile === TileType.SWITCH) context.fillStyle = "#eab308";
+        else continue;
+
+        context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
       }
-
-      if (tile === TileType.FLOOR) {
-        if (art) {
-          context.drawImage(art.floor, tx, ty);
-        } else {
-          context.fillStyle = "#9ca3af";
-          context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-        }
-        continue;
-      }
-
-      if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
-      else if (tile === TileType.DOOR) context.fillStyle = "#92400e";
-      else if (tile === TileType.SWITCH) context.fillStyle = "#eab308";
-      else continue;
-
-      context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
     }
   }
-}
 
   function drawProjectiles() {
     if (!gameState || !gameState.projectiles) return;
@@ -1028,10 +1021,11 @@ function drawWallEdges(art, x, y, tx, ty) {
       }
       const animation = ITEM_ANIMATIONS[item.idName];
       if (!animation || !animation.image) continue;
-      if (!animation.image.complete || animation.image.naturalWidth === 0) continue;
+      if (!animation.image.complete || animation.image.naturalWidth === 0)
+        continue;
 
-      const worldW = animation.frameWidth;   // 25
-      const worldH = animation.frameHeight;  // 11
+      const worldW = animation.frameWidth; // 25
+      const worldH = animation.frameHeight; // 11
       const bob = Math.round(Math.sin(timestamp / 400) * 2);
 
       const tileX = item.x * TILE_SIZE;
@@ -1048,8 +1042,14 @@ function drawWallEdges(art, x, y, tx, ty) {
 
       context.drawImage(
         animation.image,
-        0, 0, worldW, worldH,
-        drawX, drawY, worldW, worldH
+        0,
+        0,
+        worldW,
+        worldH,
+        drawX,
+        drawY,
+        worldW,
+        worldH
       );
     }
   }
@@ -1063,9 +1063,9 @@ function drawWallEdges(art, x, y, tx, ty) {
   const TRAP_TRIGGER_RADIUS = 0.4; // tiles, straight-line distance
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
-  const SEARCH_POINT_COUNT = 3;     // spots an alerted enemy checks after losing you
-  const SEARCH_RADIUS = 4;          // tiles around the last-seen position
-  const SEARCH_WAIT_MS = 800;       // look around at each spot
+  const SEARCH_POINT_COUNT = 3; // spots an alerted enemy checks after losing you
+  const SEARCH_RADIUS = 4; // tiles around the last-seen position
+  const SEARCH_WAIT_MS = 800; // look around at each spot
 
   function damagePlayer(amount) {
     const p = gameState.player;
@@ -1132,41 +1132,48 @@ function drawWallEdges(art, x, y, tx, ty) {
   //   INNER (narrow, short) - instant alert.
   // States: patrol (Zz) -> curious (yellow ?) -> alert (red !)
   // ===========================================================================
-  const ENEMY_OUTER_RANGE = 5.5;                    // tiles
-  const ENEMY_OUTER_HALF_ANGLE = Math.PI / 3.2;     // ~56 deg each side
-  const ENEMY_INNER_RANGE = 2.5;                    // tiles
-  const ENEMY_INNER_HALF_ANGLE = Math.PI / 9;       // 20 deg each side
+  const ENEMY_OUTER_RANGE = 5.5; // tiles
+  const ENEMY_OUTER_HALF_ANGLE = Math.PI / 3.2; // ~56 deg each side
+  const ENEMY_INNER_RANGE = 2.5; // tiles
+  const ENEMY_INNER_HALF_ANGLE = Math.PI / 9; // 20 deg each side
 
-  const SUSPICION_FILL_FAR = 0.45;   // per second, at the edge of the outer cone
-  const SUSPICION_FILL_NEAR = 1.4;   // per second, right at the inner range
-  const SUSPICION_DECAY = 0.3;       // per second when nothing is seen
-  const CURIOUS_THRESHOLD = 0.4;     // suspicion needed to start investigating
+  const SUSPICION_FILL_FAR = 0.45; // per second, at the edge of the outer cone
+  const SUSPICION_FILL_NEAR = 1.4; // per second, right at the inner range
+  const SUSPICION_DECAY = 0.3; // per second when nothing is seen
+  const CURIOUS_THRESHOLD = 0.4; // suspicion needed to start investigating
 
-  const PLAYER_EXPOSED_MS = 150;     // how long after moving you count as "moving"
-  const ALERT_SIGHT_RANGE = 8;       // alerted enemies see farther, any angle
-  const ALERT_LOSE_TIME = 3000;      // ms without sight before giving up the chase
-  const CURIOUS_WAIT_MS = 1800;      // look around this long after arriving
-  const PATROL_WAIT_MS = 1200;       // pause at each patrol point
-  const HIDE_SEARCH_MS = 1200;       // how long an alert enemy checks a hiding spot
-  const HIDE_BREAK_DELAY_MS = 1500;     // enemy waits this long before smashing
+  const PLAYER_EXPOSED_MS = 150; // how long after moving you count as "moving"
+  const ALERT_SIGHT_RANGE = 8; // alerted enemies see farther, any angle
+  const ALERT_LOSE_TIME = 3000; // ms without sight before giving up the chase
+  const CURIOUS_WAIT_MS = 1800; // look around this long after arriving
+  const PATROL_WAIT_MS = 1200; // pause at each patrol point
+  const HIDE_SEARCH_MS = 1200; // how long an alert enemy checks a hiding spot
+  const HIDE_BREAK_DELAY_MS = 1500; // enemy waits this long before smashing
   const ENEMY_SPEED = { patrol: 1.2, curious: 2.0, alert: 2.6 }; // tiles/sec
-  const ENEMY_TURN_SPEED = 6;        // radians/sec
-  const NOISE_RADIUS_SPELL = 7;      // tiles
+  const ENEMY_TURN_SPEED = 6; // radians/sec
+  const NOISE_RADIUS_SPELL = 7; // tiles
   // --- footsteps & noise ripples ---------------------------------------------
-  const FOOTSTEP_RADIUS = { sneak: 0, walk: 0, run: 4.5 };      // tiles heard
+  const FOOTSTEP_RADIUS = { sneak: 0, walk: 0, run: 4.5 }; // tiles heard
   const FOOTSTEP_INTERVAL_MS = { walk: 700, run: 500 };
-  
-  const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
-  const ENEMY_ARRIVE_DIST = 0.15;    // how close counts as "reached" a point
-  const NAV_REPLAN_MS = 200;         // how often enemies re-route
 
-  const SHOW_VISION_CONES = true;    // set false to hide the cones
+  const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
+  const ENEMY_ARRIVE_DIST = 0.15; // how close counts as "reached" a point
+  const NAV_REPLAN_MS = 200; // how often enemies re-route
+
+  const SHOW_VISION_CONES = true; // set false to hide the cones
 
   let lastFootstepTime = -Infinity;
 
   const noiseRipples = []; // { x, y, radius, color, start, duration }
 
-   function spawnRipple(x, y, radius, color, duration = 500 + radius * 60, reach = null) {
+  function spawnRipple(
+    x,
+    y,
+    radius,
+    color,
+    duration = 500 + radius * 60,
+    reach = null
+  ) {
     noiseRipples.push({
       x: x + 0.5,
       y: y + 0.75,
@@ -1189,8 +1196,7 @@ function drawWallEdges(art, x, y, tx, ty) {
     for (const e of gameState.enemies) {
       if (e.state === "alert") continue;
 
-      const tileKey =
-        Math.floor(e.y + 0.5) * MAP_WIDTH + Math.floor(e.x + 0.5);
+      const tileKey = Math.floor(e.y + 0.5) * MAP_WIDTH + Math.floor(e.x + 0.5);
       if (!reach.has(tileKey)) continue;
 
       startInvestigating(e, x, y);
@@ -1270,7 +1276,12 @@ function drawWallEdges(art, x, y, tx, ty) {
     const startKey = key(sx, sy);
     const prev = new Map([[startKey, -1]]);
     const queue = [[sx, sy]];
-    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
 
     for (let head = 0; head < queue.length; head++) {
       const [x, y] = queue[head];
@@ -1308,8 +1319,10 @@ function drawWallEdges(art, x, y, tx, ty) {
     // stands on is floor(anchor + 0.5), and a waypoint at a tile centre has
     // anchor (tileX, tileY).
     const path = findPath(
-      Math.floor(e.x + 0.5), Math.floor(e.y + 0.5),
-      Math.floor(gx + 0.5), Math.floor(gy + 0.5)
+      Math.floor(e.x + 0.5),
+      Math.floor(e.y + 0.5),
+      Math.floor(gx + 0.5),
+      Math.floor(gy + 0.5)
     );
     if (!path || path.length === 0) {
       return { x: gx, y: gy, isGoal: true }; // nowhere better; slide along walls
@@ -1331,8 +1344,13 @@ function drawWallEdges(art, x, y, tx, ty) {
 
   // Walk toward a point in free space. Returns true once within arriveDist.
   function steerToward(
-    e, gx, gy, speed, dt,
-    arriveDist = ENEMY_ARRIVE_DIST, faceMovement = true
+    e,
+    gx,
+    gy,
+    speed,
+    dt,
+    arriveDist = ENEMY_ARRIVE_DIST,
+    faceMovement = true
   ) {
     if (Math.hypot(gx - e.x, gy - e.y) <= arriveDist) {
       e.steer = null;
@@ -1425,7 +1443,7 @@ function drawWallEdges(art, x, y, tx, ty) {
   function beginSearch(e) {
     e.searching = true;
     e.baseFacing = e.facing;
-    e.searchWait = SEARCH_WAIT_MS;   // look at the last-seen spot first
+    e.searchWait = SEARCH_WAIT_MS; // look at the last-seen spot first
     e.searchIndex = 0;
     e.searchPoints = pickSearchPoints(e.lastSeen.x, e.lastSeen.y);
   }
@@ -1457,7 +1475,7 @@ function drawWallEdges(art, x, y, tx, ty) {
   }
   // A sound at (x, y): everyone in range who isn't already hunting goes to check.
   // A sound at (x, y): everyone in range who isn't already hunting goes to check.
- 
+
   // Which tiles can a sound at (x, y) reach within `radius` tiles, travelling
   // only through open floor? Returns Map<tileKey, distance>. Walls block it.
   function soundReach(x, y, radius) {
@@ -1469,9 +1487,14 @@ function drawWallEdges(art, x, y, tx, ty) {
     if (!isWalkableTile(sx, sy)) return dist;
 
     const dirs = [
-      [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
-      [1, 1, Math.SQRT2], [-1, 1, Math.SQRT2],
-      [1, -1, Math.SQRT2], [-1, -1, Math.SQRT2],
+      [1, 0, 1],
+      [-1, 0, 1],
+      [0, 1, 1],
+      [0, -1, 1],
+      [1, 1, Math.SQRT2],
+      [-1, 1, Math.SQRT2],
+      [1, -1, Math.SQRT2],
+      [-1, -1, Math.SQRT2],
     ];
     const queue = [[sx, sy]];
 
@@ -1485,8 +1508,11 @@ function drawWallEdges(art, x, y, tx, ty) {
         if (!isWalkableTile(nx, ny)) continue;
 
         // No squeezing diagonally through wall corners.
-        if (dx !== 0 && dy !== 0 &&
-            (!isWalkableTile(cx + dx, cy) || !isWalkableTile(cx, cy + dy))) {
+        if (
+          dx !== 0 &&
+          dy !== 0 &&
+          (!isWalkableTile(cx + dx, cy) || !isWalkableTile(cx, cy + dy))
+        ) {
           continue;
         }
 
@@ -1546,15 +1572,9 @@ function drawWallEdges(art, x, y, tx, ty) {
 
       if (e.state === "alert") {
         e.canSeePlayer = true;
-      } else if (
-        dist <= ENEMY_INNER_RANGE &&
-        diff <= ENEMY_INNER_HALF_ANGLE
-      ) {
+      } else if (dist <= ENEMY_INNER_RANGE && diff <= ENEMY_INNER_HALF_ANGLE) {
         alertEnemy(e, now);
-      } else if (
-        diff <= ENEMY_OUTER_HALF_ANGLE &&
-        isPlayerExposed(now)
-      ) {
+      } else if (diff <= ENEMY_OUTER_HALF_ANGLE && isPlayerExposed(now)) {
         seenOuter = true;
       }
     }
@@ -1572,7 +1592,8 @@ function drawWallEdges(art, x, y, tx, ty) {
           )
         );
         const rate =
-          SUSPICION_FILL_FAR + closeness * (SUSPICION_FILL_NEAR - SUSPICION_FILL_FAR);
+          SUSPICION_FILL_FAR +
+          closeness * (SUSPICION_FILL_NEAR - SUSPICION_FILL_FAR);
         e.suspicion = Math.min(1, e.suspicion + rate * dt);
 
         if (e.suspicion >= 1) {
@@ -1594,7 +1615,7 @@ function drawWallEdges(art, x, y, tx, ty) {
     }
 
     // ---- 3. Behave according to state ---------------------------------------
-       if (e.state === "alert") {
+    if (e.state === "alert") {
       if (e.canSeePlayer) {
         e.lastSeen = { x: p.x, y: p.y };
         e.lastSeenTime = now;
@@ -1602,11 +1623,16 @@ function drawWallEdges(art, x, y, tx, ty) {
       }
 
       // Saw the player dive in: go and smash the hiding spot.
-           if (p.hidden && p.hidingSpot && e.attackSpot === p.hidingSpot) {
+      if (p.hidden && p.hidingSpot && e.attackSpot === p.hidingSpot) {
         e.lastSeenTime = now;
         const spot = p.hidingSpot;
         const arrived = steerToward(
-          e, spot.x, spot.y, ENEMY_SPEED.alert, dt, HIDE_ATTACK_REACH
+          e,
+          spot.x,
+          spot.y,
+          ENEMY_SPEED.alert,
+          dt,
+          HIDE_ATTACK_REACH
         );
 
         if (arrived) {
@@ -1654,7 +1680,14 @@ function drawWallEdges(art, x, y, tx, ty) {
     } else if (e.state === "curious") {
       if (!e.arrived) {
         if (
-          steerToward(e, e.investigate.x, e.investigate.y, ENEMY_SPEED.curious, dt, 0.3)
+          steerToward(
+            e,
+            e.investigate.x,
+            e.investigate.y,
+            ENEMY_SPEED.curious,
+            dt,
+            0.3
+          )
         ) {
           e.arrived = true;
           e.waitTimer = CURIOUS_WAIT_MS;
@@ -1725,15 +1758,7 @@ function drawWallEdges(art, x, y, tx, ty) {
   }
 
   // Pixel-art icons, 1 = filled.
-  const ICON_EXCLAIM = [
-    "111",
-    "111",
-    "111",
-    "111",
-    "010",
-    "000",
-    "010",
-  ];
+  const ICON_EXCLAIM = ["111", "111", "111", "111", "010", "000", "010"];
   const ICON_QUESTION = [
     "01110",
     "10001",
@@ -1743,13 +1768,7 @@ function drawWallEdges(art, x, y, tx, ty) {
     "00000",
     "00100",
   ];
-  const ICON_Z = [
-    "11111",
-    "00010",
-    "00100",
-    "01000",
-    "11111",
-  ];
+  const ICON_Z = ["11111", "00010", "00100", "01000", "11111"];
 
   function drawBitmap(rows, px, py, scale) {
     for (let r = 0; r < rows.length; r++) {
@@ -1763,7 +1782,12 @@ function drawWallEdges(art, x, y, tx, ty) {
 
   function drawPixelIcon(rows, px, py, scale, color) {
     context.fillStyle = "#000"; // outline so it reads on any floor
-    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    for (const [ox, oy] of [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ]) {
       drawBitmap(rows, px + ox, py + oy, scale);
     }
     context.fillStyle = color;
@@ -1774,23 +1798,15 @@ function drawWallEdges(art, x, y, tx, ty) {
     for (const spot of hidingSpots) {
       const px = spot.x * TILE_SIZE;
       const py = spot.y * TILE_SIZE;
-  const hidingSpots = []; // filled per level by placeHidingSpots()
-      context.fillStyle = spot.occupied
-        ? "#1e293b"
-        : HIDE_SPOT_COLOR;
+      const hidingSpots = []; // filled per level by placeHidingSpots()
+      context.fillStyle = spot.occupied ? "#1e293b" : HIDE_SPOT_COLOR;
 
-      context.fillRect(
-        px + 5,
-        py + 5,
-        TILE_SIZE - 10,
-        TILE_SIZE - 10
-      );
+      context.fillRect(px + 5, py + 5, TILE_SIZE - 10, TILE_SIZE - 10);
     }
   }
-  const HIDE_ATTACK_REACH = 0.9;        // how close an enemy gets to smash a spot
-  const HIDE_BREAK_NOISE_RADIUS = 5;    // smashing is loud
+  const HIDE_ATTACK_REACH = 0.9; // how close an enemy gets to smash a spot
+  const HIDE_BREAK_NOISE_RADIUS = 5; // smashing is loud
 
-  
   function enemyIsNearHiddenPlayer(e) {
     const ec = enemyCenter(e);
     const pc = playerCenter();
@@ -1814,7 +1830,8 @@ function drawWallEdges(art, x, y, tx, ty) {
     if (enemy.state !== "alert" && enemy.suspicion > 0.02) {
       context.fillStyle = "#000";
       context.fillRect(cx - 9, py - 4, 18, 4);
-      context.fillStyle = enemy.suspicion >= CURIOUS_THRESHOLD ? "#f59e0b" : "#facc15";
+      context.fillStyle =
+        enemy.suspicion >= CURIOUS_THRESHOLD ? "#f59e0b" : "#facc15";
       context.fillRect(cx - 8, py - 3, Math.round(16 * enemy.suspicion), 2);
     }
   }
@@ -1853,80 +1870,79 @@ function drawWallEdges(art, x, y, tx, ty) {
 
     if (p.hidden) return false;
 
-    const moving =
-      now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
+    const moving = now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
 
     return moving || isPlayerInLight();
   }
-
- 
 
   // (FIX: the duplicate playerCenter() that used to be here was removed.)
 
   function distanceToHidingSpot(spot) {
     const p = playerCenter();
-    return Math.hypot(
-      spot.x + 0.5 - p.x,
-      spot.y + 0.5 - p.y
-    );
+    return Math.hypot(spot.x + 0.5 - p.x, spot.y + 0.5 - p.y);
   }
 
   function getNearbyHidingSpot() {
     return hidingSpots.find(
-      spot => !spot.occupied &&
-        distanceToHidingSpot(spot) <= HIDE_INTERACT_DIST
+      (spot) =>
+        !spot.occupied && distanceToHidingSpot(spot) <= HIDE_INTERACT_DIST
     );
   }
-const HIDE_SPOTS_PER_ROOM = 1;
-const HIDE_SPOT_TYPES = ["closet", "crate"];
+  const HIDE_SPOTS_PER_ROOM = 1;
+  const HIDE_SPOT_TYPES = ["closet", "crate"];
 
-function placeHidingSpots(rooms, map) {
-  hidingSpots.length = 0; // mutate in place, it's a const
+  function placeHidingSpots(rooms, map) {
+    hidingSpots.length = 0; // mutate in place, it's a const
 
-  const isFloor = (x, y) =>
-    x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT &&
-    map[y][x] === TileType.FLOOR;
+    const isFloor = (x, y) =>
+      x >= 0 &&
+      x < MAP_WIDTH &&
+      y >= 0 &&
+      y < MAP_HEIGHT &&
+      map[y][x] === TileType.FLOOR;
 
-  for (const room of rooms) {
-    const candidates = [];
+    for (const room of rooms) {
+      const candidates = [];
 
-    for (let y = room.y; y < room.y + room.h; y++) {
-      for (let x = room.x; x < room.x + room.w; x++) {
-        const onLeft   = x === room.x;
-        const onRight  = x === room.x + room.w - 1;
-        const onTop    = y === room.y;
-        const onBottom = y === room.y + room.h - 1;
+      for (let y = room.y; y < room.y + room.h; y++) {
+        for (let x = room.x; x < room.x + room.w; x++) {
+          const onLeft = x === room.x;
+          const onRight = x === room.x + room.w - 1;
+          const onTop = y === room.y;
+          const onBottom = y === room.y + room.h - 1;
 
-        // Must be on the room's edge, but not a corner.
-        const edgeCount = onLeft + onRight + onTop + onBottom;
-        if (edgeCount !== 1) continue;
+          // Must be on the room's edge, but not a corner.
+          const edgeCount = onLeft + onRight + onTop + onBottom;
+          if (edgeCount !== 1) continue;
 
-        // Skip tiles where a corridor opens into the room: the tile
-        // just outside the wall must be solid.
-        const ox = x + (onLeft ? -1 : onRight ? 1 : 0);
-        const oy = y + (onTop ? -1 : onBottom ? 1 : 0);
-        if (isFloor(ox, oy)) continue;
+          // Skip tiles where a corridor opens into the room: the tile
+          // just outside the wall must be solid.
+          const ox = x + (onLeft ? -1 : onRight ? 1 : 0);
+          const oy = y + (onTop ? -1 : onBottom ? 1 : 0);
+          if (isFloor(ox, oy)) continue;
 
-        candidates.push({ x, y });
+          candidates.push({ x, y });
+        }
+      }
+
+      // Shuffle, then take up to N per room.
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+
+      for (const c of candidates.slice(0, HIDE_SPOTS_PER_ROOM)) {
+        hidingSpots.push({
+          x: c.x,
+          y: c.y,
+          type: HIDE_SPOT_TYPES[
+            Math.floor(Math.random() * HIDE_SPOT_TYPES.length)
+          ],
+          occupied: false,
+        });
       }
     }
-
-    // Shuffle, then take up to N per room.
-    for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-    }
-
-    for (const c of candidates.slice(0, HIDE_SPOTS_PER_ROOM)) {
-      hidingSpots.push({
-        x: c.x,
-        y: c.y,
-        type: HIDE_SPOT_TYPES[Math.floor(Math.random() * HIDE_SPOT_TYPES.length)],
-        occupied: false,
-      });
-    }
   }
-}
 
   // Is the player inside this enemy's inner (core) cone, with a clear line?
   function isPlayerInCoreCone(e) {
@@ -1962,7 +1978,7 @@ function placeHidingSpots(rooms, map) {
 
     makeNoise(spot.x, spot.y, HIDE_BREAK_NOISE_RADIUS, "#ef4444");
   }
-    function toggleHide() {
+  function toggleHide() {
     if (!gameState || !gameState.player) return;
     const p = gameState.player;
 
@@ -2029,11 +2045,7 @@ function placeHidingSpots(rooms, map) {
 
     if (p.hidden) {
       context.fillStyle = "#e2e8f0";
-      context.fillText(
-        "E: Exit",
-        p.x * TILE_SIZE,
-        p.y * TILE_SIZE - 8
-      );
+      context.fillText("E: Exit", p.x * TILE_SIZE, p.y * TILE_SIZE - 8);
       return;
     }
 
@@ -2041,11 +2053,7 @@ function placeHidingSpots(rooms, map) {
     if (!spot) return;
 
     context.fillStyle = "#e2e8f0";
-    context.fillText(
-      "E: Hide",
-      spot.x * TILE_SIZE,
-      spot.y * TILE_SIZE - 8
-    );
+    context.fillText("E: Hide", spot.x * TILE_SIZE, spot.y * TILE_SIZE - 8);
   }
 
   const RUN_DISPLAY_SCALE = 1.5;
@@ -2066,8 +2074,8 @@ function placeHidingSpots(rooms, map) {
       gait === "sneak"
         ? PLAYER_SNEAK_SPRITE
         : useRun
-          ? PLAYER_RUN_SPRITE
-          : PLAYER_SPRITE;
+        ? PLAYER_RUN_SPRITE
+        : PLAYER_SPRITE;
 
     if (!sheet.complete || sheet.naturalWidth === 0) return;
 
@@ -2077,56 +2085,47 @@ function placeHidingSpots(rooms, map) {
       gait === "sneak"
         ? PX_PER_SNEAK_FRAME
         : useRun
-          ? PX_PER_RUN_FRAME
-          : PX_PER_WALK_FRAME;
+        ? PX_PER_RUN_FRAME
+        : PX_PER_WALK_FRAME;
 
     const frameCount =
       gait === "sneak"
         ? SNEAK_FRAME_COUNT
         : useRun
-          ? RUN_FRAME_COUNT
-          : WALK_FRAME_COUNT;
+        ? RUN_FRAME_COUNT
+        : WALK_FRAME_COUNT;
 
     const hasIdleColumn =
-      gait === "sneak"
-        ? SNEAK_HAS_IDLE
-        : useRun
-          ? RUN_HAS_IDLE
-          : WALK_HAS_IDLE;
+      gait === "sneak" ? SNEAK_HAS_IDLE : useRun ? RUN_HAS_IDLE : WALK_HAS_IDLE;
 
     const animationFrame =
-      Math.floor((globalPlayer.walkDistance || 0) / pxPerFrame) %
-      frameCount;
+      Math.floor((globalPlayer.walkDistance || 0) / pxPerFrame) % frameCount;
 
     const sourceColumn = !isMoving
       ? 0
       : hasIdleColumn
-        ? animationFrame + 1
-        : animationFrame;
+      ? animationFrame + 1
+      : animationFrame;
 
     const row = PLAYER_DIRECTION_ROWS[globalPlayer.direction || "down"] ?? 0;
     const frameW = useRun
       ? RUN_FRAME_W
       : gait === "sneak"
-        ? SNEAK_FRAME_W
-        : FRAME_W;
+      ? SNEAK_FRAME_W
+      : FRAME_W;
 
     const frameH = useRun
       ? RUN_FRAME_H
       : gait === "sneak"
-        ? SNEAK_FRAME_H
-        : FRAME_H;
+      ? SNEAK_FRAME_H
+      : FRAME_H;
 
     const sourceX = sourceColumn * frameW;
     const sourceY = row * frameH;
 
-    const destW = useRun
-      ? FRAME_W * RUN_DISPLAY_SCALE
-      : FRAME_W;
+    const destW = useRun ? FRAME_W * RUN_DISPLAY_SCALE : FRAME_W;
 
-    const destH = useRun
-      ? FRAME_H * RUN_DISPLAY_SCALE
-      : FRAME_H;
+    const destH = useRun ? FRAME_H * RUN_DISPLAY_SCALE : FRAME_H;
 
     const pixelX = Math.round(
       globalPlayer.x * TILE_SIZE + (TILE_SIZE - destW) / 2
@@ -2136,8 +2135,8 @@ function placeHidingSpots(rooms, map) {
     const gaitYOffset = useRun
       ? RUN_Y_OFFSET
       : gait === "sneak"
-        ? SNEAK_Y_OFFSET
-        : 0;
+      ? SNEAK_Y_OFFSET
+      : 0;
 
     const pixelY = Math.round(
       globalPlayer.y * TILE_SIZE + TILE_SIZE - destH + gaitYOffset
@@ -2191,7 +2190,10 @@ function placeHidingSpots(rooms, map) {
         continue;
       }
 
-      const distance = Math.hypot(item.x - globalPlayer.x, item.y - globalPlayer.y);
+      const distance = Math.hypot(
+        item.x - globalPlayer.x,
+        item.y - globalPlayer.y
+      );
 
       if (distance < PICKUP_RADIUS) {
         addItemToInventory(item.idName);
@@ -2227,7 +2229,7 @@ function placeHidingSpots(rooms, map) {
   function drawInventory() {
     if (!inventoryOpen || !gameState) return;
 
-    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE;   // 768
+    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE; // 768
     const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
     const panelSize = 750;
     const invX = Math.floor((cssWidth - panelSize) / 2);
@@ -2246,8 +2248,14 @@ function placeHidingSpots(rooms, map) {
     if (itemSpritesheet.complete && itemSpritesheet.naturalWidth > 0) {
       context.drawImage(
         itemSpritesheet,
-        0, 0, itemSpritesheet.naturalWidth, itemSpritesheet.naturalHeight,
-        invX, invY, panelSize, panelSize
+        0,
+        0,
+        itemSpritesheet.naturalWidth,
+        itemSpritesheet.naturalHeight,
+        invX,
+        invY,
+        panelSize,
+        panelSize
       );
     }
 
@@ -2272,12 +2280,7 @@ function placeHidingSpots(rooms, map) {
           context.strokeStyle = "#ffeb3b";
           context.lineWidth = 2;
 
-          context.strokeRect(
-            slotX,
-            slotY,
-            SLOT_WIDTH,
-            SLOT_HEIGHT
-          );
+          context.strokeRect(slotX, slotY, SLOT_WIDTH, SLOT_HEIGHT);
         }
 
         if (slot) {
@@ -2430,7 +2433,9 @@ function placeHidingSpots(rooms, map) {
       const y = Math.floor(Math.random() * (MAP_HEIGHT - h - 2)) + 1;
       const newRoom = { x, y, w, h };
 
-      if (rooms.some((existingRoom) => roomsOverlap(newRoom, existingRoom, 1))) {
+      if (
+        rooms.some((existingRoom) => roomsOverlap(newRoom, existingRoom, 1))
+      ) {
         continue;
       }
 
@@ -2519,14 +2524,14 @@ function placeHidingSpots(rooms, map) {
         color: "#f57676",
 
         // --- detection / AI state ---
-        state: "patrol",            // "patrol" | "curious" | "alert"
-        suspicion: 0,               // 0..1 meter
+        state: "patrol", // "patrol" | "curious" | "alert"
+        suspicion: 0, // 0..1 meter
         facing: Math.floor(Math.random() * 4) * (Math.PI / 2), // radians
         baseFacing: 0,
         canSeePlayer: false,
-        steer: null,                // point currently being walked toward
-        navGoal: null,              // goal the steer point was planned for
-        navTimer: 0,                // ms until the next replan
+        steer: null, // point currently being walked toward
+        navGoal: null, // goal the steer point was planned for
+        navTimer: 0, // ms until the next replan
         searching: false,
         searchPoints: [],
         searchIndex: 0,
@@ -2541,7 +2546,7 @@ function placeHidingSpots(rooms, map) {
         ],
         patrolIndex: 0,
         waitTimer: 0,
-        investigate: null,          // {x, y} point being checked out
+        investigate: null, // {x, y} point being checked out
         arrived: false,
         lastSeen: null,
         lastSeenTime: 0,
@@ -2564,7 +2569,8 @@ function placeHidingSpots(rooms, map) {
     for (let i = 0; i < possibleScrolls.length; i++) {
       const scrollBlueprint = possibleScrolls[i];
       if (Math.random() > 0.5) {
-        const scrollRoom = itemRooms[Math.floor(Math.random() * itemRooms.length)];
+        const scrollRoom =
+          itemRooms[Math.floor(Math.random() * itemRooms.length)];
         items.push({
           id: `scroll-${level}-${scrollBlueprint.tag}`,
           x: scrollRoom.x + 1,
@@ -2611,10 +2617,10 @@ function placeHidingSpots(rooms, map) {
         });
       }
     }
-placeHidingSpots(rooms, newMap);
+    placeHidingSpots(rooms, newMap);
 
-return {
-  map: newMap,
+    return {
+      map: newMap,
       rooms: rooms,
       player: player,
       enemies: enemies,
