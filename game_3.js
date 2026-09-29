@@ -2632,4 +2632,4 @@ context.drawImage(
 
   window.startGame3 = startGame3;
   window.stopGame3 = stopGame3;
-}}
+}}}
