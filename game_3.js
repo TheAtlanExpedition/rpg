@@ -88,6 +88,93 @@
   itemSpritesheet.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/ui/inventory-large-0.1.png";
 
+  const TILESET = new Image();
+  TILESET.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/tiles/tileset-damp-dark-dungeon-floor-cobblestone-0.1.png"; // path relative to your HTML page
+
+  const LEDGE_W = 14; // thickness of a ledge strip (ledge + its shadow)
+  let tileArt = null;
+
+  // Cut a region of the tileset into its own canvas, optionally flipped.
+  function sliceTileset(sx, sy, w, h, flipX = false, flipY = false) {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const g = c.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    g.translate(flipX ? w : 0, flipY ? h : 0);
+    g.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+    g.drawImage(TILESET, sx, sy, w, h, 0, 0, w, h);
+    return c;
+  }
+
+  // Built once, after the image has loaded. Returns null until then.
+  function getTileArt() {
+    if (tileArt) return tileArt;
+    if (!TILESET.complete || TILESET.naturalWidth === 0) return null;
+
+    // Wall base: skip the 2 light ledge columns on the tile's left edge.
+    const wall = document.createElement("canvas");
+    wall.width = wall.height = TILE_SIZE;
+    const wg = wall.getContext("2d");
+    wg.imageSmoothingEnabled = false;
+    wg.drawImage(TILESET, 2, 192, 30, 32, 0, 0, 30, 32);
+    wg.drawImage(TILESET, 2, 192, 2, 32, 30, 0, 2, 32);
+
+    tileArt = {
+      floor: sliceTileset(64, 64, 32, 32),
+      wall,
+      // ledge strips, named for the side of the wall tile that faces the floor
+      west:  sliceTileset(32, 32, LEDGE_W, 32),
+      east:  sliceTileset(32, 32, LEDGE_W, 32, true, false),
+      south: sliceTileset(32, 146, 32, LEDGE_W),
+      north: sliceTileset(32, 146, 32, LEDGE_W, false, true),
+    };
+    return tileArt;
+  }
+
+  function isFloorAt(x, y) {
+    return (
+      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT &&
+      gameState.map[y][x] === TileType.FLOOR
+    );
+  }
+
+  function drawWallTile(art, x, y, tx, ty) {
+    const T = TILE_SIZE;
+    const L = LEDGE_W;
+
+    context.drawImage(art.wall, tx, ty);
+
+    const n = isFloorAt(x, y - 1);
+    const e = isFloorAt(x + 1, y);
+    const s = isFloorAt(x, y + 1);
+    const w = isFloorAt(x - 1, y);
+
+    if (w) context.drawImage(art.west, tx, ty);
+    if (e) context.drawImage(art.east, tx + T - L, ty);
+    if (n) context.drawImage(art.north, tx, ty);
+    if (s) context.drawImage(art.south, tx, ty + T - L);
+
+    // Room corner: floor only touches diagonally, so draw an L-shaped elbow
+    // that joins the two straight ledges.
+    if (!(n || e || s || w)) {
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        if (!isFloorAt(x + dx, y + dy)) continue;
+
+        const h = dy === -1 ? art.north : art.south;
+        const v = dx === -1 ? art.west : art.east;
+        const hy = dy === -1 ? ty : ty + T - L;
+        const vx = dx === -1 ? tx : tx + T - L;
+        const hsx = dx === 1 ? T - L : 0;
+        const vsy = dy === 1 ? T - L : 0;
+
+        context.drawImage(h, hsx, 0, L, L, tx + hsx, hy, L, L);
+        context.drawImage(v, 0, vsy, L, L, vx, ty + vsy, L, L);
+      }
+    }
+  }
+
+
   const ITEM_ANIMATIONS = {
     scrollFireBall: {
       image: ITEM_SPRITES.scrollFireBall,
@@ -796,134 +883,50 @@
   }
 
   function drawMap() {
+    const art = getTileArt();
+
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
         const tile = gameState.map[y][x];
-        let tx = Math.floor(x * TILE_SIZE);
-        let ty = Math.floor(y * TILE_SIZE);
+        const tx = Math.floor(x * TILE_SIZE);
+        const ty = Math.floor(y * TILE_SIZE);
 
         if (tile === TileType.WALL) {
+          // Only draw walls that touch a room or corridor (8 neighbours).
           let isRoomWall = false;
-          for (let dy = -1; dy <= 1; dy++) {
+          for (let dy = -1; dy <= 1 && !isRoomWall; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
-              let ny = y + dy;
-              let nx = x + dx;
-              if (ny >= 0 && ny < MAP_HEIGHT && nx >= 0 && nx < MAP_WIDTH) {
-                if (gameState.map[ny][nx] === TileType.FLOOR) {
-                  isRoomWall = true;
-                  break;
-                }
+              if (isFloorAt(x + dx, y + dy)) {
+                isRoomWall = true;
+                break;
               }
             }
-            if (isRoomWall) break;
           }
+          if (!isRoomWall) continue;
 
-          if (isRoomWall) {
+          if (art) {
+            drawWallTile(art, x, y, tx, ty);
+          } else {
             context.fillStyle = "#374151";
             context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-            context.strokeStyle = "#111827";
-            context.lineWidth = 1;
-
-            let leftFloor  = x > 0 && gameState.map[y][x - 1] === TileType.FLOOR;
-            let rightFloor = x < MAP_WIDTH - 1 && gameState.map[y][x + 1] === TileType.FLOOR;
-            let topFloor   = y > 0 && gameState.map[y - 1][x] === TileType.FLOOR;
-            let botFloor   = y < MAP_HEIGHT - 1 && gameState.map[y + 1][x] === TileType.FLOOR;
-
-            let tlFloor = x > 0 && y > 0 && gameState.map[y - 1][x - 1] === TileType.FLOOR;
-            let trFloor = x < MAP_WIDTH - 1 && y > 0 && gameState.map[y - 1][x + 1] === TileType.FLOOR;
-            let blFloor = x > 0 && y < MAP_HEIGHT - 1 && gameState.map[y + 1][x - 1] === TileType.FLOOR;
-            let brFloor = x < MAP_WIDTH - 1 && y < MAP_HEIGHT - 1 && gameState.map[y + 1][x + 1] === TileType.FLOOR;
-
-            let isTL = (tlFloor && !topFloor && !leftFloor) || (rightFloor && botFloor);
-            let isTR = (trFloor && !topFloor && !rightFloor) || (leftFloor && botFloor);
-            let isBL = (blFloor && !botFloor && !leftFloor) || (rightFloor && topFloor);
-            let isBR = (brFloor && !botFloor && !rightFloor) || (leftFloor && topFloor);
-
-            let cuts = [Math.floor(TILE_SIZE / 3), Math.floor((2 * TILE_SIZE) / 3)];
-
-            if (isBR) {
-              for (let c of cuts) {
-                context.beginPath();
-                context.moveTo(tx + c, ty + TILE_SIZE);
-                context.lineTo(tx + c, ty + c);
-                context.lineTo(tx + TILE_SIZE, ty + c);
-                context.stroke();
-              }
-            } else if (isBL) {
-              for (let c of cuts) {
-                context.beginPath();
-                context.moveTo(tx + TILE_SIZE - c, ty + TILE_SIZE);
-                context.lineTo(tx + TILE_SIZE - c, ty + c);
-                context.lineTo(tx, ty + c);
-                context.stroke();
-              }
-            } else if (isTR) {
-              for (let c of cuts) {
-                context.beginPath();
-                context.moveTo(tx + c, ty);
-                context.lineTo(tx + c, ty + TILE_SIZE - c);
-                context.lineTo(tx + TILE_SIZE, ty + TILE_SIZE - c);
-                context.stroke();
-              }
-            } else if (isTL) {
-              for (let c of cuts) {
-                context.beginPath();
-                context.moveTo(tx + TILE_SIZE - c, ty);
-                context.lineTo(tx + TILE_SIZE - c, ty + TILE_SIZE - c);
-                context.lineTo(tx, ty + TILE_SIZE - c);
-                context.stroke();
-              }
-            } else if (topFloor || botFloor) {
-              for (let c of cuts) {
-                context.beginPath();
-                context.moveTo(tx, ty + c);
-                context.lineTo(tx + TILE_SIZE, ty + c);
-                context.stroke();
-              }
-            } else {
-              for (let c of cuts) {
-                context.beginPath();
-                context.moveTo(tx + c, ty);
-                context.lineTo(tx + c, ty + TILE_SIZE);
-                context.stroke();
-              }
-            }
           }
-
           continue;
-        } else if (tile === TileType.FLOOR) {
-          context.fillStyle = "#9ca3af";
-          context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-
-          context.strokeStyle = "#374151";
-          context.lineWidth = 1;
-
-          let rowH = TILE_SIZE / 3;
-          for (let r = 1; r < 3; r++) {
-            context.beginPath();
-            context.moveTo(tx, ty + (r * rowH));
-            context.lineTo(tx + TILE_SIZE, ty + (r * rowH));
-            context.stroke();
-          }
-
-          context.beginPath();
-          context.moveTo(tx + TILE_SIZE / 2, ty);
-          context.lineTo(tx + TILE_SIZE / 2, ty + rowH);
-          context.moveTo(tx + TILE_SIZE / 3, ty + rowH);
-          context.lineTo(tx + TILE_SIZE / 3, ty + rowH * 2);
-          context.moveTo(tx + (TILE_SIZE / 3) * 2, ty + rowH);
-          context.lineTo(tx + (TILE_SIZE / 3) * 2, ty + rowH * 2);
-          context.moveTo(tx + TILE_SIZE / 2, ty + rowH * 2);
-          context.lineTo(tx + TILE_SIZE / 2, ty + TILE_SIZE);
-          context.stroke();
-          continue;
-        } else if (tile === TileType.TRAP) {
-          context.fillStyle = "#7f1d1d";
-        } else if (tile === TileType.DOOR) {
-          context.fillStyle = "#92400e";
-        } else if (tile === TileType.SWITCH) {
-          context.fillStyle = "#eab308";
         }
+
+        if (tile === TileType.FLOOR) {
+          if (art) {
+            context.drawImage(art.floor, tx, ty);
+          } else {
+            context.fillStyle = "#9ca3af";
+            context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+          }
+          continue;
+        }
+
+        if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
+        else if (tile === TileType.DOOR) context.fillStyle = "#92400e";
+        else if (tile === TileType.SWITCH) context.fillStyle = "#eab308";
+        else continue;
 
         context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
       }
