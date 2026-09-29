@@ -85,7 +85,7 @@
   ITEM_SPRITES.scrollChainLightning.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/items/scrolls/scrollChainLightning-inv.png";
   ITEM_SPRITES.healthPotion.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/bb830fd6234e9dbabdefddcc4d706d9aa52b3fd7/assets/sprites/items/Potion-1.svg";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/items/glowing-crystal-0.1-spritesheet.png";
 
   const itemSpritesheet = new Image();
   itemSpritesheet.src =
@@ -242,13 +242,13 @@
     },
     healthPotion: {
       image: ITEM_SPRITES.healthPotion,
-      frames: 1,
-      frameWidth: 25,
-      frameHeight: 11,
+      frames: 8,
+      frameWidth: 38,
+      frameHeight: 38,
     },
   };
 
-  const ITEM_ANIMATION_FPS = 2;
+  const ITEM_ANIMATION_FPS = 4;
   const PLAYER_SPEED = 3; // tiles per second
   const PLAYER_SNEAK_SPEED = 1.6;
   const PLAYER_RUN_SPEED = 5.2;
@@ -256,7 +256,7 @@
   const STAMINA_START_MIN = 0.35;
   const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
   const PROJECTILE_HIT_RADIUS = 0.75; // how close to an enemy's centre counts as a hit
-
+  
   let gameRunning = false;
   let gameStart = null;
   let globalPlayer = null;
@@ -301,7 +301,7 @@
       toggleHide();
     }
   });
-
+  
   // FIX: removed the placeholder movePlayer() stub ("Existing movement code...").
   // Movement is handled in updateFreePlayerMovement, which now checks p.hidden.
 
@@ -785,7 +785,7 @@
 
     if (DEBUG_SHEET) drawSheetDebug();
     context.imageSmoothingEnabled = false;
-    drawInventory();
+    drawInventory(timestamp);
   }
 
   // Temporary helper: draws the whole player sheet with a grid so you can
@@ -1006,40 +1006,70 @@
         drawTrap(item, timestamp);
         continue;
       }
-      const animation = ITEM_ANIMATIONS[item.idName];
-      if (!animation || !animation.image) continue;
-      if (!animation.image.complete || animation.image.naturalWidth === 0)
-        continue;
+     const animation = ITEM_ANIMATIONS[item.idName];
 
-      const worldW = animation.frameWidth; // 25
-      const worldH = animation.frameHeight; // 11
-      const bob = Math.round(Math.sin(timestamp / 400) * 2);
+if (!animation || !animation.image) continue;
 
-      const tileX = item.x * TILE_SIZE;
-      const tileY = item.y * TILE_SIZE;
-      const drawX = Math.floor(tileX + (TILE_SIZE - worldW) / 2);
-      const drawY = Math.floor(tileY + TILE_SIZE - worldH - 10) - bob;
+if (
+  !animation.image.complete ||
+  animation.image.naturalWidth === 0
+) {
+  continue;
+}
 
-      context.imageSmoothingEnabled = false;
-      context.shadowColor = "transparent";
-      context.shadowBlur = 0;
+const worldW = animation.frameWidth;
+const worldH = animation.frameHeight;
 
-      context.fillStyle = "rgba(0, 0, 0, 0.35)";
-      context.fillRect(drawX + 2, tileY + TILE_SIZE - 6, worldW - 4, 2);
+// Advance through the spritesheet at ITEM_ANIMATION_FPS.
+const frame = animation.frames > 1
+  ? Math.floor((timestamp / 1000) * ITEM_ANIMATION_FPS) %
+    animation.frames
+  : 0;
 
-      context.drawImage(
-        animation.image,
-        0,
-        0,
-        worldW,
-        worldH,
-        drawX,
-        drawY,
-        worldW,
-        worldH
-      );
-    }
-  }
+// Horizontal spritesheet layout:
+// frame 0 starts at x = 0,
+// frame 1 starts at x = frameWidth, etc.
+const sourceX = frame * animation.frameWidth;
+const sourceY = frame * animation.frameHeight;
+
+
+const bob = Math.round(Math.sin(timestamp / 400) * 2);
+
+const tileX = item.x * TILE_SIZE;
+const tileY = item.y * TILE_SIZE;
+
+const drawX = Math.floor(
+  tileX + (TILE_SIZE - worldW) / 2
+);
+
+const drawY = Math.floor(
+  tileY + TILE_SIZE - worldH - 10
+) - bob;
+
+context.imageSmoothingEnabled = false;
+context.shadowColor = "transparent";
+context.shadowBlur = 0;
+
+context.fillStyle = "rgba(0, 0, 0, 0.35)";
+context.fillRect(
+  drawX + 2,
+  tileY + TILE_SIZE - 6,
+  worldW - 4,
+  2
+);
+
+context.drawImage(
+  animation.image,
+  0,
+  sourceY,
+  animation.frameWidth,
+  animation.frameHeight,
+  drawX,
+  drawY,
+  worldW,
+  worldH
+);
+
 
   // ===========================================================================
   // TRAPS (items)
@@ -2134,7 +2164,7 @@
     const drawH = Math.round(destH);
 
     context.imageSmoothingEnabled = false;
-    context.drawImage(
+    
       sheet,
       Math.floor(sourceX),
       Math.floor(sourceY),
@@ -2212,90 +2242,70 @@
     return names[itemType] || itemType;
   }
 
-  function drawInventory() {
-    if (!inventoryOpen || !gameState) return;
+ function drawInventory(timestamp = performance.now()) {
+  if (!inventoryOpen || !gameState) return;
 
-    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE; // 768
-    const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
-    const panelSize = 750;
-    const invX = Math.floor((cssWidth - panelSize) / 2);
-    const invY = Math.floor((cssHeight - panelSize) / 2);
+  // Existing inventory setup code...
 
-    context.setTransform(
-      devicePixelRatioValue / CANVAS_SCALE,
-      0,
-      0,
-      devicePixelRatioValue / CANVAS_SCALE,
-      0,
-      0
-    );
-    context.imageSmoothingEnabled = false;
+  for (let row = 0; row < INV_ROWS; row++) {
+    for (let col = 0; col < INV_COLS; col++) {
+      const slot = slots[row * INV_COLS + col];
+      const slotX = invX + SLOT_X + col * SLOT_STEP_X;
+      const slotY = invY + SLOT_Y + row * SLOT_STEP_Y;
 
-    if (itemSpritesheet.complete && itemSpritesheet.naturalWidth > 0) {
+      if (col === selectedCol && row === selectedRow) {
+        context.strokeStyle = "#ffeb3b";
+        context.lineWidth = 2;
+        context.strokeRect(
+          slotX,
+          slotY,
+          SLOT_WIDTH,
+          SLOT_HEIGHT
+        );
+      }
+
+      if (!slot) continue;
+
+      const anim = ITEM_ANIMATIONS[slot.type];
+      if (!anim || !anim.image || !anim.image.complete) {
+        continue;
+      }
+
+      const frame = getItemAnimationFrame(anim, timestamp);
+      const sourceX = frame * anim.frameWidth;
+
+      const itemWidth = 90;
+      const itemHeight = Math.round(
+        itemWidth * (anim.frameHeight / anim.frameWidth)
+      );
+
+      const itemX = slotX + Math.floor(
+        (SLOT_WIDTH - itemWidth) / 2
+      );
+
+      const itemY = slotY + Math.floor(
+        (SLOT_HEIGHT - itemHeight) / 2
+      );
+
       context.drawImage(
-        itemSpritesheet,
+        anim.image,
+
+        // Source rectangle
+        sourceX,
         0,
-        0,
-        itemSpritesheet.naturalWidth,
-        itemSpritesheet.naturalHeight,
-        invX,
-        invY,
-        panelSize,
-        panelSize
+        anim.frameWidth,
+        anim.frameHeight,
+
+        // Destination rectangle
+        itemX,
+        itemY,
+        itemWidth,
+        itemHeight
       );
     }
+  }
+}
 
-    const SLOT_X = 164;
-    const SLOT_Y = 214;
-
-    const SLOT_WIDTH = 106;
-    const SLOT_HEIGHT = 108;
-
-    const SLOT_STEP_X = 106;
-    const SLOT_STEP_Y = 114;
-
-    const slots = getInventorySlots();
-
-    for (let row = 0; row < INV_ROWS; row++) {
-      for (let col = 0; col < INV_COLS; col++) {
-        const slot = slots[row * INV_COLS + col];
-        const slotX = invX + SLOT_X + col * SLOT_STEP_X;
-        const slotY = invY + SLOT_Y + row * SLOT_STEP_Y;
-
-        if (col === selectedCol && row === selectedRow) {
-          context.strokeStyle = "#ffeb3b";
-          context.lineWidth = 2;
-
-          context.strokeRect(slotX, slotY, SLOT_WIDTH, SLOT_HEIGHT);
-        }
-
-        if (slot) {
-          const anim = ITEM_ANIMATIONS[slot.type];
-
-          if (anim && anim.image && anim.image.complete) {
-            const itemWidth = 90;
-            const itemHeight = Math.round(
-              itemWidth * (anim.frameHeight / anim.frameWidth)
-            );
-
-            const itemX = slotX + Math.floor((SLOT_WIDTH - itemWidth) / 2);
-            const itemY = slotY + Math.floor((SLOT_HEIGHT - itemHeight) / 2);
-
-            context.drawImage(
-              anim.image,
-              0,
-              0,
-              anim.frameWidth,
-              anim.frameHeight,
-              itemX,
-              itemY,
-              itemWidth,
-              itemHeight
-            );
-          }
-        }
-      }
-    }
 
     const selected = slots[selectedRow * INV_COLS + selectedCol];
 
