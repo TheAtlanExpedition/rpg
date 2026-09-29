@@ -1467,12 +1467,16 @@
       // player. It searches for a short while, then carries on normally
       // (FIX: the timer used to stick at 0 and refresh lastSeenTime every
       // frame, so the enemy stood there forever and never gave up).
-            if (
-        p.hidden &&
-        enemyIsNearHiddenPlayer(e) &&
-        !e.canSeePlayer &&
-        e.hideSearchTimer > 0
-      ) {
+                  // Saw the player dive in: go and smash the hiding spot.
+      if (p.hidden && p.hidingSpot && e.attackSpot === p.hidingSpot) {
+        e.lastSeenTime = now; // don't give up while the target is known
+        const spot = p.hidingSpot;
+        const arrived = steerToward(
+          e, spot.x, spot.y, ENEMY_SPEED.alert, dt, HIDE_ATTACK_REACH
+        );
+        if (arrived) breakHidingSpot(spot);
+        return;
+      } {
         if (!e.searching) {
           e.searching = true;
           e.baseFacing = e.facing; // lock the sweep centre once
@@ -1654,7 +1658,10 @@
       );
     }
   }
+  const HIDE_ATTACK_REACH = 0.9;        // how close an enemy gets to smash a spot
+  const HIDE_BREAK_NOISE_RADIUS = 5;    // smashing is loud
 
+  
   function enemyIsNearHiddenPlayer(e) {
     const ec = enemyCenter(e);
     const pc = playerCenter();
@@ -1791,7 +1798,42 @@ function placeHidingSpots(rooms, map) {
     }
   }
 }
-  function toggleHide() {
+
+  // Is the player inside this enemy's inner (core) cone, with a clear line?
+  function isPlayerInCoreCone(e) {
+    const ec = enemyCenter(e);
+    const pc = playerCenter();
+    const dist = Math.hypot(pc.x - ec.x, pc.y - ec.y);
+    if (dist > ENEMY_INNER_RANGE) return false;
+
+    const angleToPlayer = Math.atan2(pc.y - ec.y, pc.x - ec.x);
+    if (Math.abs(angleDiff(angleToPlayer, e.facing)) > ENEMY_INNER_HALF_ANGLE) {
+      return false;
+    }
+    return hasLineOfSight(ec.x, ec.y, pc.x, pc.y);
+  }
+
+  // The spot is destroyed and the player is kicked out. No damage is dealt.
+  function breakHidingSpot(spot) {
+    const p = gameState.player;
+
+    const idx = hidingSpots.indexOf(spot);
+    if (idx !== -1) hidingSpots.splice(idx, 1);
+    spot.occupied = false;
+
+    if (p.hidingSpot === spot) {
+      p.hidden = false;
+      p.hidingSpot = null;
+      p.lastMovedTime = performance.now(); // exposed right away
+    }
+
+    for (const e of gameState.enemies) {
+      if (e.attackSpot === spot) e.attackSpot = null;
+    }
+
+    makeNoise(spot.x, spot.y, HIDE_BREAK_NOISE_RADIUS, "#ef4444");
+  }
+   function toggleHide() {
     if (!gameState || !gameState.player) return;
     const p = gameState.player;
 
@@ -1803,6 +1845,12 @@ function placeHidingSpots(rooms, map) {
     const spot = getNearbyHidingSpot();
     if (!spot) return;
 
+    // Who was looking straight at the player as they slipped in?
+    // (Checked before the snap, while the player is still where they were.)
+    const witnesses = gameState.enemies.filter(isPlayerInCoreCone);
+
+    for (const e of gameState.enemies) e.attackSpot = null;
+
     p.hidden = true;
     p.hidingSpot = spot;
     p.lastMovedTime = -Infinity;
@@ -1811,6 +1859,12 @@ function placeHidingSpots(rooms, map) {
     // Optional: snap the player to the hiding spot.
     p.x = spot.x;
     p.y = spot.y;
+
+    for (const e of witnesses) {
+      alertEnemy(e, performance.now());
+      e.lastSeen = { x: spot.x, y: spot.y };
+      e.attackSpot = spot; // this enemy knows exactly where you are
+    }
   }
 
   function leaveHidingSpot() {
@@ -1820,13 +1874,15 @@ function placeHidingSpots(rooms, map) {
 
     if (p.hidingSpot) {
       p.hidingSpot.occupied = false;
+      for (const e of gameState.enemies) {
+        if (e.attackSpot === p.hidingSpot) e.attackSpot = null;
+      }
     }
 
     p.hidden = false;
     p.hidingSpot = null;
     p.lastMovedTime = performance.now();
   }
-
   function drawHidePrompt() {
     if (!gameState || !gameState.player || inventoryOpen) return;
     const p = gameState.player;
@@ -2336,6 +2392,7 @@ function placeHidingSpots(rooms, map) {
         navGoal: null,              // goal the steer point was planned for
         navTimer: 0,                // ms until the next replan
         searching: false,
+        attackSpot: null,
         hideSearchTimer: 0,
         // fixed patrol route: two opposite corners of the room
         patrol: [
