@@ -1076,7 +1076,7 @@
   const NOISE_RADIUS_SPELL = 7;      // tiles
   // --- footsteps & noise ripples ---------------------------------------------
   const FOOTSTEP_RADIUS = { sneak: 0, walk: 0, run: 4.5 };      // tiles heard
-  const FOOTSTEP_INTERVAL_MS = { walk: 700, run: 280 };
+  const FOOTSTEP_INTERVAL_MS = { walk: 700, run: 500 };
   
   const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
   const ENEMY_ARRIVE_DIST = 0.15;    // how close counts as "reached" a point
