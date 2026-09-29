@@ -1153,7 +1153,7 @@
   const ENEMY_TURN_SPEED = 6; // radians/sec
   const NOISE_RADIUS_SPELL = 7; // tiles
   // --- footsteps & noise ripples ---------------------------------------------
-  const FOOTSTEP_RADIUS = { sneak: 0, walk: 0, run: 4.5 }; // tiles heard
+  const FOOTSTEP_RADIUS = { sneak: 0, walk: 1, run: 4.5 }; // tiles heard
   const FOOTSTEP_INTERVAL_MS = { walk: 700, run: 500 };
 
   const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
