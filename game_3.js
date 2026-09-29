@@ -139,40 +139,89 @@
     );
   }
 
-  function drawWallTile(art, x, y, tx, ty) {
-    const T = TILE_SIZE;
-    const L = LEDGE_W;
+ function drawWallCorner(art, tx, ty, dx, dy) {
+  const T = TILE_SIZE;
+  const L = LEDGE_W;
 
-    context.drawImage(art.wall, tx, ty);
+  // Select the horizontal and vertical ledge pieces.
+  const horizontal = dy < 0 ? art.north : art.south;
+  const vertical = dx < 0 ? art.west : art.east;
 
-    const n = isFloorAt(x, y - 1);
-    const e = isFloorAt(x + 1, y);
-    const s = isFloorAt(x, y + 1);
-    const w = isFloorAt(x - 1, y);
+  // Source regions inside the ledge canvases.
+  const hsx = dx < 0 ? 0 : T - L;
+  const vsy = dy < 0 ? 0 : T - L;
 
-    if (w) context.drawImage(art.west, tx, ty);
-    if (e) context.drawImage(art.east, tx + T - L, ty);
-    if (n) context.drawImage(art.north, tx, ty);
-    if (s) context.drawImage(art.south, tx, ty + T - L);
+  // Destination corner inside the wall tile.
+  const cornerX = dx < 0 ? tx : tx + T - L;
+  const cornerY = dy < 0 ? ty : ty + T - L;
 
-    // Room corner: floor only touches diagonally, so draw an L-shaped elbow
-    // that joins the two straight ledges.
-    if (!(n || e || s || w)) {
-      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        if (!isFloorAt(x + dx, y + dy)) continue;
+  // Horizontal part of the elbow.
+  context.drawImage(
+    horizontal,
+    hsx, 0, L, L,
+    cornerX, cornerY, L, L
+  );
 
-        const h = dy === -1 ? art.north : art.south;
-        const v = dx === -1 ? art.west : art.east;
-        const hy = dy === -1 ? ty : ty + T - L;
-        const vx = dx === -1 ? tx : tx + T - L;
-        const hsx = dx === 1 ? T - L : 0;
-        const vsy = dy === 1 ? T - L : 0;
+  // Vertical part of the elbow.
+  context.drawImage(
+    vertical,
+    0, vsy, L, L,
+    cornerX, cornerY, L, L
+  );
+}
 
-        context.drawImage(h, hsx, 0, L, L, tx + hsx, hy, L, L);
-        context.drawImage(v, 0, vsy, L, L, vx, ty + vsy, L, L);
-      }
+function drawWallTile(art, x, y, tx, ty) {
+  const T = TILE_SIZE;
+  const L = LEDGE_W;
+
+  context.drawImage(art.wall, tx, ty);
+
+  const n = isFloorAt(x, y - 1);
+  const e = isFloorAt(x + 1, y);
+  const s = isFloorAt(x, y + 1);
+  const w = isFloorAt(x - 1, y);
+
+  // Draw straight ledges first.
+  if (w) context.drawImage(art.west, tx, ty);
+  if (e) context.drawImage(art.east, tx + T - L, ty);
+  if (n) context.drawImage(art.north, tx, ty);
+  if (s) context.drawImage(art.south, tx, ty + T - L);
+
+  // Check each corner.
+  const corners = [
+    {
+      dx: -1,
+      dy: -1,
+      adjacent: n && w,
+    },
+    {
+      dx: 1,
+      dy: -1,
+      adjacent: n && e,
+    },
+    {
+      dx: -1,
+      dy: 1,
+      adjacent: s && w,
+    },
+    {
+      dx: 1,
+      dy: 1,
+      adjacent: s && e,
+    },
+  ];
+
+  for (const { dx, dy, adjacent } of corners) {
+    const diagonalFloor = isFloorAt(x + dx, y + dy);
+
+    // Draw a corner if floor touches both neighboring sides,
+    // or if it touches this wall only diagonally.
+    if (adjacent || (!n && !e && !s && !w && diagonalFloor)) {
+      drawWallCorner(art, tx, ty, dx, dy);
     }
   }
+}
+
 
 
   const ITEM_ANIMATIONS = {
