@@ -158,29 +158,7 @@
     );
   }
 
-  function drawWallCorner(art, tx, ty, dx, dy) {
-    const T = TILE_SIZE;
-    const L = LEDGE_W;
-
-    // Select the horizontal and vertical ledge pieces.
-    const horizontal = dy < 0 ? art.north : art.south;
-    const vertical = dx < 0 ? art.west : art.east;
-
-    // Source regions inside the ledge canvases.
-    const hsx = dx < 0 ? 0 : T - L;
-    const vsy = dy < 0 ? 0 : T - L;
-
-    // Destination corner inside the wall tile.
-    const cornerX = dx < 0 ? tx : tx + T - L;
-    const cornerY = dy < 0 ? ty : ty + T - L;
-
-    // Horizontal part of the elbow.
-    context.drawImage(horizontal, hsx, 0, L, L, cornerX, cornerY, L, L);
-
-    // Vertical part of the elbow.
-    context.drawImage(vertical, 0, vsy, L, L, cornerX, cornerY, L, L);
-  }
-
+ 
   function drawCorner(art, type, direction, tx, ty) {
     const T = TILE_SIZE;
     const L = LEDGE_W;
@@ -1116,7 +1094,6 @@
     context.textBaseline = "middle";
     context.fillText("YOU DIED", DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2);
   }
-  const hidingSpots = []; // filled per level by placeHidingSpots()
   // ===========================================================================
   // ENEMY VISION & DETECTION
   //
