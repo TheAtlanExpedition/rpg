@@ -120,14 +120,30 @@
     wg.drawImage(TILESET, 2, 192, 30, 32, 0, 0, 30, 32);
     wg.drawImage(TILESET, 2, 192, 2, 32, 30, 0, 2, 32);
 
-    tileArt = {
-      floor: sliceTileset(64, 64, 32, 32),
-      wall,
-      // ledge strips, named for the side of the wall tile that faces the floor
-      west:  sliceTileset(32, 32, LEDGE_W, 32),
-      east:  sliceTileset(32, 32, LEDGE_W, 32, true, false),
-      south: sliceTileset(32, 146, 32, LEDGE_W),
-      north: sliceTileset(32, 146, 32, LEDGE_W, false, true),
+   tileArt = {
+  floor: sliceTileset(64, 64, 32, 32),
+  wall,
+
+  west:  sliceTileset(32, 32, LEDGE_W, 32),
+  east:  sliceTileset(32, 32, LEDGE_W, 32, true, false),
+  south: sliceTileset(32, 146, 32, LEDGE_W),
+  north: sliceTileset(32, 146, 32, LEDGE_W, false, true),
+
+  // Replace these coordinates with the actual corner locations
+  // in your tileset.
+  outerNW: sliceTileset(/* sx */, /* sy */, 14, 14),
+  outerNE: sliceTileset(/* sx */, /* sy */, 14, 14),
+  outerSW: sliceTileset(/* sx */, /* sy */, 14, 14),
+  outerSE: sliceTileset(33, 64, 14, 14),
+
+  innerNW: sliceTileset(/* sx */, /* sy */, 14, 14),
+  innerNE: sliceTileset(/* sx */, /* sy */, 14, 14),
+  innerSW: sliceTileset(/* sx */, /* sy */, 14, 14),
+  innerSE: sliceTileset(/* sx */, /* sy */, 14, 14),
+};
+
+
+      
     };
     return tileArt;
   }
@@ -169,6 +185,23 @@
     cornerX, cornerY, L, L
   );
 }
+function drawCorner(art, name, tx, ty, dx, dy) {
+  const T = TILE_SIZE;
+  const L = LEDGE_W;
+
+  const corner = art[name];
+
+  const destX = dx < 0 ? tx : tx + T - L;
+  const destY = dy < 0 ? ty : ty + T - L;
+
+  context.drawImage(
+    corner,
+    destX,
+    destY,
+    L,
+    L
+  );
+}
 
 function drawWallTile(art, x, y, tx, ty) {
   const T = TILE_SIZE;
@@ -181,43 +214,71 @@ function drawWallTile(art, x, y, tx, ty) {
   const s = isFloorAt(x, y + 1);
   const w = isFloorAt(x - 1, y);
 
-  // Draw straight ledges first.
+  // Draw the straight ledges first.
   if (w) context.drawImage(art.west, tx, ty);
   if (e) context.drawImage(art.east, tx + T - L, ty);
   if (n) context.drawImage(art.north, tx, ty);
   if (s) context.drawImage(art.south, tx, ty + T - L);
 
-  // Check each corner.
   const corners = [
     {
+      name: "NW",
       dx: -1,
       dy: -1,
-      adjacent: n && w,
+      sideA: n,
+      sideB: w,
     },
     {
+      name: "NE",
       dx: 1,
       dy: -1,
-      adjacent: n && e,
+      sideA: n,
+      sideB: e,
     },
     {
+      name: "SW",
       dx: -1,
       dy: 1,
-      adjacent: s && w,
+      sideA: s,
+      sideB: w,
     },
     {
+      name: "SE",
       dx: 1,
       dy: 1,
-      adjacent: s && e,
+      sideA: s,
+      sideB: e,
     },
   ];
 
-  for (const { dx, dy, adjacent } of corners) {
-    const diagonalFloor = isFloorAt(x + dx, y + dy);
+  for (const corner of corners) {
+    const diagonalFloor = isFloorAt(
+      x + corner.dx,
+      y + corner.dy
+    );
 
-    // Draw a corner if floor touches both neighboring sides,
-    // or if it touches this wall only diagonally.
-    if (adjacent || (!n && !e && !s && !w && diagonalFloor)) {
-      drawWallCorner(art, tx, ty, dx, dy);
+    // Floor on both neighboring sides creates an inner corner.
+    if (corner.sideA && corner.sideB) {
+      drawCorner(
+        art,
+        `inner${corner.name}`,
+        tx,
+        ty,
+        corner.dx,
+        corner.dy
+      );
+    }
+
+    // Floor only diagonally creates an outer corner.
+    else if (!n && !e && !s && !w && diagonalFloor) {
+      drawCorner(
+        art,
+        `outer${corner.name}`,
+        tx,
+        ty,
+        corner.dx,
+        corner.dy
+      );
     }
   }
 }
