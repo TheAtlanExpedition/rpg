@@ -185,21 +185,23 @@
     cornerX, cornerY, L, L
   );
 }
-function drawCorner(art, name, tx, ty, dx, dy) {
+function drawCorner(art, type, direction, tx, ty) {
   const T = TILE_SIZE;
-  const L = LEDGE_W;
 
-  const corner = art[name];
+  const positions = {
+    NW: [tx, ty],
+    NE: [tx + TILE_SIZE, ty],
+    SW: [tx, ty + TILE_SIZE],
+    SE: [tx + TILE_SIZE, ty + TILE_SIZE],
 
-  const destX = dx < 0 ? tx : tx + T - L;
-  const destY = dy < 0 ? ty : ty + T - L;
+  };
+
+  const [drawX, drawY] = positions[direction];
 
   context.drawImage(
-    corner,
-    destX,
-    destY,
-    L,
-    L
+    art[`${type}${direction}`],
+    drawX,
+    drawY
   );
 }
 
@@ -214,71 +216,34 @@ function drawWallTile(art, x, y, tx, ty) {
   const s = isFloorAt(x, y + 1);
   const w = isFloorAt(x - 1, y);
 
-  // Draw the straight ledges first.
+  // Straight ledges.
   if (w) context.drawImage(art.west, tx, ty);
   if (e) context.drawImage(art.east, tx + T - L, ty);
   if (n) context.drawImage(art.north, tx, ty);
   if (s) context.drawImage(art.south, tx, ty + T - L);
 
-  const corners = [
-    {
-      name: "NW",
-      dx: -1,
-      dy: -1,
-      sideA: n,
-      sideB: w,
-    },
-    {
-      name: "NE",
-      dx: 1,
-      dy: -1,
-      sideA: n,
-      sideB: e,
-    },
-    {
-      name: "SW",
-      dx: -1,
-      dy: 1,
-      sideA: s,
-      sideB: w,
-    },
-    {
-      name: "SE",
-      dx: 1,
-      dy: 1,
-      sideA: s,
-      sideB: e,
-    },
-  ];
+  // Inner corners: floor touches two neighboring sides.
+  if (n && w) drawCorner(art, "inner", "NW", tx, ty);
+  if (n && e) drawCorner(art, "inner", "NE", tx, ty);
+  if (s && w) drawCorner(art, "inner", "SW", tx, ty);
+  if (s && e) drawCorner(art, "inner", "SE", tx, ty);
 
-  for (const corner of corners) {
-    const diagonalFloor = isFloorAt(
-      x + corner.dx,
-      y + corner.dy
-    );
-
-    // Floor on both neighboring sides creates an inner corner.
-    if (corner.sideA && corner.sideB) {
-      drawCorner(
-        art,
-        `inner${corner.name}`,
-        tx,
-        ty,
-        corner.dx,
-        corner.dy
-      );
+  // Outer corners: floor touches diagonally only.
+  if (!n && !e && !s && !w) {
+    if (isFloorAt(x - 1, y - 1)) {
+      drawCorner(art, "outer", "NW", tx, ty);
     }
 
-    // Floor only diagonally creates an outer corner.
-    else if (!n && !e && !s && !w && diagonalFloor) {
-      drawCorner(
-        art,
-        `outer${corner.name}`,
-        tx,
-        ty,
-        corner.dx,
-        corner.dy
-      );
+    if (isFloorAt(x + 1, y - 1)) {
+      drawCorner(art, "outer", "NE", tx, ty);
+    }
+
+    if (isFloorAt(x - 1, y + 1)) {
+      drawCorner(art, "outer", "SW", tx, ty);
+    }
+
+    if (isFloorAt(x + 1, y + 1)) {
+      drawCorner(art, "outer", "SE", tx, ty);
     }
   }
 }
