@@ -675,51 +675,60 @@
     return isBoxClear(x, y, HITBOX);
   }
   function drawRipples() {
-    const now = performance.now();
+  const now = performance.now();
+  const pad = 2; // half lineWidth — keeps the stroke inside the clip
 
-    for (let i = noiseRipples.length - 1; i >= 0; i--) {
-      const r = noiseRipples[i];
-      const t = (now - r.start) / r.duration;
-      if (t >= 1) {
-        noiseRipples.splice(i, 1);
-        continue;
-      }
-
-      context.save();
-
-      // Confine the ripple to where the sound can actually travel.
-      if (r.reach) {
-        context.beginPath();
-        for (const k of r.reach.keys()) {
-          const tx = k % MAP_WIDTH;
-          const ty = Math.floor(k / MAP_WIDTH);
-          context.rect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        }
-        context.clip();
-      }
-
-      context.strokeStyle = r.color;
-      context.lineWidth = 2;
-
-      for (const lag of [0, 0.18]) {
-        const tt = Math.max(0, t - lag);
-        if (tt <= 0) continue;
-        const eased = 1 - (1 - tt) * (1 - tt);
-        context.globalAlpha = (1 - t) * (lag === 0 ? 0.7 : 0.4);
-        context.beginPath();
-        context.arc(
-          Math.round(r.x * TILE_SIZE),
-          Math.round(r.y * TILE_SIZE),
-          r.radius * TILE_SIZE * eased,
-          0,
-          Math.PI * 2
-        );
-        context.stroke();
-      }
-
-      context.restore(); // also resets globalAlpha
+  for (let i = noiseRipples.length - 1; i >= 0; i--) {
+    const r = noiseRipples[i];
+    const t = (now - r.start) / r.duration;
+    if (t >= 1) {
+      noiseRipples.splice(i, 1);
+      continue;
     }
+
+    context.save();
+
+    // Clip to tiles the sound can reach, slightly expanded so the
+    // stroke isn't chopped off at the tile edge (looks "under" the floor).
+    if (r.reach && r.reach.size > 0) {
+      context.beginPath();
+      for (const k of r.reach.keys()) {
+        const tx = k % MAP_WIDTH;
+        const ty = Math.floor(k / MAP_WIDTH);
+        context.rect(
+          tx * TILE_SIZE - pad,
+          ty * TILE_SIZE - pad,
+          TILE_SIZE + pad * 2,
+          TILE_SIZE + pad * 2
+        );
+      }
+      context.clip();
+    }
+
+    context.strokeStyle = r.color;
+    context.lineWidth = 2;
+    context.lineJoin = "round";
+    context.lineCap = "round";
+
+    for (const lag of [0, 0.18]) {
+      const tt = Math.max(0, t - lag);
+      if (tt <= 0) continue;
+      const eased = 1 - (1 - tt) * (1 - tt);
+      context.globalAlpha = (1 - t) * (lag === 0 ? 0.7 : 0.4);
+      context.beginPath();
+      context.arc(
+        Math.round(r.x * TILE_SIZE),
+        Math.round(r.y * TILE_SIZE),
+        r.radius * TILE_SIZE * eased,
+        0,
+        Math.PI * 2
+      );
+      context.stroke();
+    }
+
+    context.restore(); // resets clip + globalAlpha
   }
+}
   function drawGame(timestamp) {
     if (!gameState || !gameState.player) {
       return;
@@ -754,13 +763,13 @@
     context.translate(-Math.round(camera.x), -Math.round(camera.y));
 
     drawMap();
+    drawRipples();
     drawHidingSpots();
     drawVisionCones();
     drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
     drawPlayer(timestamp);
-    drawRipples();
     drawHidePrompt();
 
     context.restore();
