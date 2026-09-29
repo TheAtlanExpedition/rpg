@@ -988,6 +988,9 @@
   const TRAP_TRIGGER_RADIUS = 0.4; // tiles, straight-line distance
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
+  const SEARCH_POINT_COUNT = 3;     // spots an alerted enemy checks after losing you
+  const SEARCH_RADIUS = 4;          // tiles around the last-seen position
+  const SEARCH_WAIT_MS = 800;       // look around at each spot
 
   function damagePlayer(amount) {
     const p = gameState.player;
@@ -1316,7 +1319,67 @@
     e.hideSearchTimer = 0;
     e.steer = null;
   }
+  // Random reachable floor tiles around a position.
+  function pickSearchPoints(cx, cy) {
+    const tx = Math.floor(cx + 0.5);
+    const ty = Math.floor(cy + 0.5);
+    const candidates = [];
 
+    for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
+      for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
+        const d = Math.hypot(dx, dy);
+        if (d < 1.5 || d > SEARCH_RADIUS) continue;
+        if (!isWalkableTile(tx + dx, ty + dy)) continue;
+        candidates.push({ x: tx + dx, y: ty + dy });
+      }
+    }
+
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const points = [];
+    for (const c of candidates) {
+      if (points.length >= SEARCH_POINT_COUNT) break;
+      if (findPath(tx, ty, c.x, c.y)) points.push(c); // must be reachable
+    }
+    return points;
+  }
+
+  function beginSearch(e) {
+    e.searching = true;
+    e.baseFacing = e.facing;
+    e.searchWait = SEARCH_WAIT_MS;   // look at the last-seen spot first
+    e.searchIndex = 0;
+    e.searchPoints = pickSearchPoints(e.lastSeen.x, e.lastSeen.y);
+  }
+
+  function updateSearch(e, dt, now) {
+    if (e.searchWait > 0) {
+      e.searchWait -= dt * 1000;
+      lookAround(e, now);
+      return;
+    }
+
+    const target = e.searchPoints[e.searchIndex];
+
+    if (!target) {
+      // Checked everywhere: give up and go back to the patrol route.
+      e.searching = false;
+      e.state = "patrol";
+      e.suspicion = Math.min(e.suspicion, 0.3);
+      e.waitTimer = 0;
+      e.steer = null;
+      return;
+    }
+
+    if (steerToward(e, target.x, target.y, ENEMY_SPEED.curious, dt, 0.3)) {
+      e.searchIndex++;
+      e.searchWait = SEARCH_WAIT_MS;
+      e.baseFacing = e.facing;
+    }
+  }
   // A sound at (x, y): everyone in range who isn't already hunting goes to check.
   // A sound at (x, y): everyone in range who isn't already hunting goes to check.
  
@@ -1456,40 +1519,31 @@
     }
 
     // ---- 3. Behave according to state ---------------------------------------
-    if (e.state === "alert") {
+       if (e.state === "alert") {
       if (e.canSeePlayer) {
         e.lastSeen = { x: p.x, y: p.y };
         e.lastSeenTime = now;
         turnToward(e, angleToPlayer, dt);
       }
 
-      // The enemy reaches the hiding spot but cannot immediately detect the
-      // player. It searches for a short while, then carries on normally
-      // (FIX: the timer used to stick at 0 and refresh lastSeenTime every
-      // frame, so the enemy stood there forever and never gave up).
-                  // Saw the player dive in: go and smash the hiding spot.
+      // Saw the player dive in: go and smash the hiding spot.
       if (p.hidden && p.hidingSpot && e.attackSpot === p.hidingSpot) {
-        e.lastSeenTime = now; // don't give up while the target is known
+        e.lastSeenTime = now;
         const spot = p.hidingSpot;
         const arrived = steerToward(
           e, spot.x, spot.y, ENEMY_SPEED.alert, dt, HIDE_ATTACK_REACH
         );
         if (arrived) breakHidingSpot(spot);
-        return;
-      } {
-        if (!e.searching) {
-          e.searching = true;
-          e.baseFacing = e.facing; // lock the sweep centre once
-        }
-        lookAround(e, now);
-
-        e.hideSearchTimer -= dt * 1000;
-        return;
+        return;                      // <- only OK because it's inside the if above
       }
 
       if (e.canSeePlayer && dist < 0.8) {
         onEnemyReachedPlayer(e);
+      } else if (e.searching && !e.canSeePlayer) {
+        updateSearch(e, dt, now);
       } else {
+        e.searching = false;
+
         const arrived = steerToward(
           e,
           e.lastSeen.x,
@@ -1500,25 +1554,14 @@
           !e.canSeePlayer
         );
 
-        if (arrived) {
-          if (!e.searching) {
-            e.searching = true;
-            e.baseFacing = e.facing;
-          }
-
-          if (!e.canSeePlayer) {
-            lookAround(e, now);
-          }
-        } else {
-          e.searching = false;
-        }
+        if (arrived && !e.canSeePlayer) beginSearch(e);
       }
 
-      // FIX: removed a stray nested startInvestigating() copy and a chunk of
-      // "door indicator" drawing code that used undefined px/py (ReferenceError).
-
-      // Lost them for too long: go check where they were last seen.
-      if (!e.canSeePlayer && now - e.lastSeenTime > ALERT_LOSE_TIME) {
+      if (
+        !e.canSeePlayer &&
+        !e.searching &&
+        now - e.lastSeenTime > ALERT_LOSE_TIME
+      ) {
         startInvestigating(e, e.lastSeen.x, e.lastSeen.y);
         e.suspicion = 0.6;
       }
@@ -2392,6 +2435,9 @@ function placeHidingSpots(rooms, map) {
         navGoal: null,              // goal the steer point was planned for
         navTimer: 0,                // ms until the next replan
         searching: false,
+        searchPoints: [],
+        searchIndex: 0,
+        searchWait: 0,
         attackSpot: null,
         hideSearchTimer: 0,
         // fixed patrol route: two opposite corners of the room
