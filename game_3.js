@@ -132,15 +132,14 @@
   // Replace these coordinates with the actual corner locations
   // in your tileset.
   outerNW: sliceTileset(33, 130, 14, 14),
-  outerNE: sliceTileset(96, 67, 14, 14),
-  outerSW: sliceTileset(62, 1, 32, 32),
-  outerSE: sliceTileset(33, 64, 14, 14),
+  outerNE: sliceTileset(96,  67, 14, 14),
+  outerSW: sliceTileset(62,   1, 14, 14),  // was 32×32
+  outerSE: sliceTileset(33,  64, 14, 14),
 
-  innerNW: sliceTileset(4, 129, 14, 14),
+  innerNW: sliceTileset( 4, 129, 14, 14),
   innerNE: sliceTileset(96, 194, 14, 14),
-  innerSW: sliceTileset(0, 0, 14, 14),
+  innerSW: sliceTileset( 0,   0, 14, 14),
   innerSE: sliceTileset(34, 194, 14, 14),
-      
     };
     return tileArt;
   }
@@ -182,66 +181,67 @@
     cornerX, cornerY, L, L
   );
 }
-function drawCorner(art, type, direction, tx, ty) {
-  const T = TILE_SIZE;
-
-  const positions = {
-    NW: [tx, ty],
-    NE: [tx + TILE_SIZE, ty],
-    SW: [tx, ty + TILE_SIZE],
-    SE: [tx + TILE_SIZE, ty + TILE_SIZE],
-
-  };
-
-  const [drawX, drawY] = positions[direction];
-
-  context.drawImage(
-    art[`${type}${direction}`],
-    drawX,
-    drawY
-  );
-}
-
-function drawWallTile(art, x, y, tx, ty) {
+  
+  function drawCorner(art, type, direction, tx, ty) {
   const T = TILE_SIZE;
   const L = LEDGE_W;
+  const positions = {
+    NW: [tx,         ty],
+    NE: [tx + T - L, ty],
+    SW: [tx,         ty + T - L],
+    SE: [tx + T - L, ty + T - L],
+  };
+  const [drawX, drawY] = positions[direction];
+  context.drawImage(art[`${type}${direction}`], drawX, drawY);
+}
 
-  context.drawImage(art.wall, tx, ty);
+  
+function drawWallEdges(art, x, y, tx, ty) {
+  const T = TILE_SIZE;
+  const L = LEDGE_W;
 
   const n = isFloorAt(x, y - 1);
   const e = isFloorAt(x + 1, y);
   const s = isFloorAt(x, y + 1);
   const w = isFloorAt(x - 1, y);
 
-  // Straight ledges.
-  if (w) context.drawImage(art.west, tx, ty);
-  if (e) context.drawImage(art.east, tx + T - L, ty);
-  if (n) context.drawImage(art.north, tx, ty);
-  if (s) context.drawImage(art.south, tx, ty + T - L);
+  // Nothing touches a room → leave this cell black
+  if (!n && !e && !s && !w) {
+    // optional: still check diagonals for outer corners only
+    if (
+      !isFloorAt(x - 1, y - 1) &&
+      !isFloorAt(x + 1, y - 1) &&
+      !isFloorAt(x - 1, y + 1) &&
+      !isFloorAt(x + 1, y + 1)
+    ) {
+      return;
+    }
+  }
 
-  // Inner corners: floor touches two neighboring sides.
+  // Straight ledges on the room-facing sides
+  if (w) context.drawImage(art.west,  tx,         ty);
+  if (e) context.drawImage(art.east,  tx + T - L, ty);
+  if (n) context.drawImage(art.north, tx,         ty);
+  if (s) context.drawImage(art.south, tx,         ty + T - L);
+
+  // Inner corners
   if (n && w) drawCorner(art, "inner", "NW", tx, ty);
   if (n && e) drawCorner(art, "inner", "NE", tx, ty);
   if (s && w) drawCorner(art, "inner", "SW", tx, ty);
   if (s && e) drawCorner(art, "inner", "SE", tx, ty);
 
-  // Outer corners: floor touches diagonally only.
-  if (!n && !e && !s && !w) {
-    if (isFloorAt(x - 1, y - 1)) {
-      drawCorner(art, "outer", "NW", tx, ty);
-    }
-
-    if (isFloorAt(x + 1, y - 1)) {
-      drawCorner(art, "outer", "NE", tx, ty);
-    }
-
-    if (isFloorAt(x - 1, y + 1)) {
-      drawCorner(art, "outer", "SW", tx, ty);
-    }
-
-    if (isFloorAt(x + 1, y + 1)) {
-      drawCorner(art, "outer", "SE", tx, ty);
-    }
+  // Outer corners (diagonal floor only)
+  if (!n && !w && isFloorAt(x - 1, y - 1)) {
+    drawCorner(art, "outer", "NW", tx, ty);
+  }
+  if (!n && !e && isFloorAt(x + 1, y - 1)) {
+    drawCorner(art, "outer", "NE", tx, ty);
+  }
+  if (!s && !w && isFloorAt(x - 1, y + 1)) {
+    drawCorner(art, "outer", "SW", tx, ty);
+  }
+  if (!s && !e && isFloorAt(x + 1, y + 1)) {
+    drawCorner(art, "outer", "SE", tx, ty);
   }
 }
 
@@ -768,9 +768,9 @@ function drawWallTile(art, x, y, tx, ty) {
     );
 
     context.imageSmoothingEnabled = false;
-    context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-    context.fillStyle = "#222";
-    context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+   context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     context.save();
 
@@ -955,55 +955,55 @@ function drawWallTile(art, x, y, tx, ty) {
   }
 
   function drawMap() {
-    const art = getTileArt();
+  const art = getTileArt();
 
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      for (let x = 0; x < MAP_WIDTH; x++) {
-        const tile = gameState.map[y][x];
-        const tx = Math.floor(x * TILE_SIZE);
-        const ty = Math.floor(y * TILE_SIZE);
+  for (let y = 0; y < MAP_HEIGHT; y++) {
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      const tile = gameState.map[y][x];
+      const tx = Math.floor(x * TILE_SIZE);
+      const ty = Math.floor(y * TILE_SIZE);
 
-        if (tile === TileType.WALL) {
-          // Only draw walls that touch a room or corridor (8 neighbours).
-          let isRoomWall = false;
-          for (let dy = -1; dy <= 1 && !isRoomWall; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (isFloorAt(x + dx, y + dy)) {
-                isRoomWall = true;
-                break;
-              }
+      if (tile === TileType.WALL) {
+        // Only edge treatment on walls that touch a room (8-neighbour check).
+        // Everything else stays black (void).
+        let isRoomWall = false;
+        for (let dy = -1; dy <= 1 && !isRoomWall; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            if (isFloorAt(x + dx, y + dy)) {
+              isRoomWall = true;
+              break;
             }
           }
-          if (!isRoomWall) continue;
-
-          if (art) {
-            drawWallTile(art, x, y, tx, ty);
-          } else {
-            context.fillStyle = "#374151";
-            context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-          }
-          continue;
         }
+        if (!isRoomWall) continue;
 
-        if (tile === TileType.FLOOR) {
-          if (art) {
-            context.drawImage(art.floor, tx, ty);
-          } else {
-            context.fillStyle = "#9ca3af";
-            context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-          }
-          continue;
+        if (art) {
+          drawWallEdges(art, x, y, tx, ty);
         }
-
-        if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
-        else if (tile === TileType.DOOR) context.fillStyle = "#92400e";
-        else if (tile === TileType.SWITCH) context.fillStyle = "#eab308";
-        else continue;
-
-        context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+        // no solid fill → outside of the wall is black
+        continue;
       }
+
+      if (tile === TileType.FLOOR) {
+        if (art) {
+          context.drawImage(art.floor, tx, ty);
+        } else {
+          context.fillStyle = "#9ca3af";
+          context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+        }
+        continue;
+      }
+
+      if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
+      else if (tile === TileType.DOOR) context.fillStyle = "#92400e";
+      else if (tile === TileType.SWITCH) context.fillStyle = "#eab308";
+      else continue;
+
+      context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
     }
   }
+}
 
   function drawProjectiles() {
     if (!gameState || !gameState.projectiles) return;
