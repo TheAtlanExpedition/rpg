@@ -1073,7 +1073,7 @@
   const CURIOUS_WAIT_MS = 1800;      // look around this long after arriving
   const PATROL_WAIT_MS = 1200;       // pause at each patrol point
   const HIDE_SEARCH_MS = 1200;       // how long an alert enemy checks a hiding spot
-
+  const HIDE_BREAK_DELAY_MS = 2000;     // enemy waits this long before smashing
   const ENEMY_SPEED = { patrol: 1.2, curious: 2.0, alert: 2.6 }; // tiles/sec
   const ENEMY_TURN_SPEED = 6;        // radians/sec
   const NOISE_RADIUS_SPELL = 7;      // tiles
@@ -1527,14 +1527,25 @@
       }
 
       // Saw the player dive in: go and smash the hiding spot.
-      if (p.hidden && p.hidingSpot && e.attackSpot === p.hidingSpot) {
+           if (p.hidden && p.hidingSpot && e.attackSpot === p.hidingSpot) {
         e.lastSeenTime = now;
         const spot = p.hidingSpot;
         const arrived = steerToward(
           e, spot.x, spot.y, ENEMY_SPEED.alert, dt, HIDE_ATTACK_REACH
         );
-        if (arrived) breakHidingSpot(spot);
-        return;                      // <- only OK because it's inside the if above
+
+        if (arrived) {
+          // Stand at the spot, face it, and count down before smashing.
+          e.breakTimer ??= HIDE_BREAK_DELAY_MS;
+          e.breakTimer -= dt * 1000;
+          turnToward(e, Math.atan2(spot.y - e.y, spot.x - e.x), dt);
+
+          if (e.breakTimer <= 0) {
+            e.breakTimer = null;
+            breakHidingSpot(spot);
+          }
+        }
+        return;
       }
 
       if (e.canSeePlayer && dist < 0.8) {
@@ -1876,7 +1887,7 @@ function placeHidingSpots(rooms, map) {
 
     makeNoise(spot.x, spot.y, HIDE_BREAK_NOISE_RADIUS, "#ef4444");
   }
-   function toggleHide() {
+    function toggleHide() {
     if (!gameState || !gameState.player) return;
     const p = gameState.player;
 
@@ -1892,7 +1903,11 @@ function placeHidingSpots(rooms, map) {
     // (Checked before the snap, while the player is still where they were.)
     const witnesses = gameState.enemies.filter(isPlayerInCoreCone);
 
-    for (const e of gameState.enemies) e.attackSpot = null;
+    // Fresh hide: clear any old attack targets and countdowns.
+    for (const e of gameState.enemies) {
+      e.attackSpot = null;
+      e.breakTimer = null;
+    }
 
     p.hidden = true;
     p.hidingSpot = spot;
@@ -1918,7 +1933,10 @@ function placeHidingSpots(rooms, map) {
     if (p.hidingSpot) {
       p.hidingSpot.occupied = false;
       for (const e of gameState.enemies) {
-        if (e.attackSpot === p.hidingSpot) e.attackSpot = null;
+        if (e.attackSpot === p.hidingSpot) {
+          e.attackSpot = null;
+          e.breakTimer = null;
+        }
       }
     }
 
@@ -2439,6 +2457,7 @@ function placeHidingSpots(rooms, map) {
         searchIndex: 0,
         searchWait: 0,
         attackSpot: null,
+        breakTimer: null,
         hideSearchTimer: 0,
         // fixed patrol route: two opposite corners of the room
         patrol: [
