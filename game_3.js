@@ -140,9 +140,6 @@
   innerNE: sliceTileset(96, 194, 14, 14),
   innerSW: sliceTileset(0, 0, 14, 14),
   innerSE: sliceTileset(34, 194, 14, 14),
-};
-
-
       
     };
     return tileArt;
