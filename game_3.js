@@ -135,15 +135,15 @@
 
       // Replace these coordinates with the actual corner locations
       // in your tileset.
-       outerNW: sliceTileset(33, 130, 14, 14),
-  outerNE: sliceTileset(96, 67, 14, 14),
-  outerSW: sliceTileset(62, 1, 14, 14),
-  outerSE: sliceTileset(33, 64, 14, 14),
+      outerNW: sliceTileset(33, 130, 14, 14),
+      outerNE: sliceTileset(96,  67, 14, 14),
+      outerSW: sliceTileset(62,   1, 14, 14),  // was 32×32
+      outerSE: sliceTileset(33,  64, 14, 14),
 
-      innerNW: sliceTileset(4, 129, 14, 14),
+      innerNW: sliceTileset( 4, 129, 14, 14),
       innerNE: sliceTileset(96, 194, 14, 14),
-      innerSW: sliceTileset(0, 0, 14, 14),
-      innerSE: sliceTileset(33, 130, 14, 14),
+      innerSW: sliceTileset( 0,   0, 14, 14),
+      innerSE: sliceTileset(30, 190, 14, 14),
     };
     return tileArt;
   }
