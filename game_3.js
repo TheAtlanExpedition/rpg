@@ -715,16 +715,16 @@
       if (tt <= 0) continue;
       const eased = 1 - (1 - tt) * (1 - tt);
       context.globalAlpha = (1 - t) * (lag === 0 ? 0.7 : 0.4);
-      context.beginPath();
-      context.arc(
-        Math.round(r.x * TILE_SIZE),
-        Math.round(r.y * TILE_SIZE),
-        r.radius * TILE_SIZE * eased,
-        0,
-        Math.PI * 2
-      );
-      context.stroke();
-    }
+    context.beginPath();
+context.arc(
+  (r.x + 0.5) * TILE_SIZE,
+  (r.y + 0.5) * TILE_SIZE,
+  r.radius * TILE_SIZE * eased,
+  0,
+  Math.PI * 2
+);
+context.stroke();
+
 
     context.restore(); // resets clip + globalAlpha
   }
@@ -2174,7 +2174,6 @@ context.drawImage(
       drawY,
       drawW,
       drawH
-    );
   }
 
   function addItemToInventory(itemType) {
@@ -2633,4 +2632,4 @@ context.drawImage(
 
   window.startGame3 = startGame3;
   window.stopGame3 = stopGame3;
-}
+}}
