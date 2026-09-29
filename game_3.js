@@ -1857,7 +1857,7 @@ function placeHidingSpots(rooms, map) {
   }
 
   const RUN_DISPLAY_SCALE = 1.5;
-  const RUN_Y_OFFSET = 6;
+  const RUN_Y_OFFSET = 4;
 
   function drawPlayer(timestamp) {
     if (!globalPlayer) return;
