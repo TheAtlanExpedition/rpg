@@ -1779,12 +1779,12 @@
     context.fillStyle = color;
     drawBitmap(rows, px, py, scale);
   }
-
+  const hidingSpots = [];
   function drawHidingSpots() {
     for (const spot of hidingSpots) {
       const px = spot.x * TILE_SIZE;
       const py = spot.y * TILE_SIZE;
-      const hidingSpots = []; // filled per level by placeHidingSpots()
+   
       context.fillStyle = spot.occupied ? "#1e293b" : HIDE_SPOT_COLOR;
 
       context.fillRect(px + 5, py + 5, TILE_SIZE - 10, TILE_SIZE - 10);
