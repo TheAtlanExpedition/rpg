@@ -13,16 +13,20 @@
   const DISPLAY_WIDTH = VIEW_TILES_X * TILE_SIZE;
   const DISPLAY_HEIGHT = VIEW_TILES_Y * TILE_SIZE;
 
-  const devicePixelRatioValue = window.devicePixelRatio || 1;
-  const RENDER_SCALE = 3;
+  // Integer DPR only: fractional values (125%, 150%) cause uneven sprite pixels.
+  const devicePixelRatioValue = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const CANVAS_SCALE = 3;
 
   canvas.style.width = `${DISPLAY_WIDTH * CANVAS_SCALE}px`;
   canvas.style.height = `${DISPLAY_HEIGHT * CANVAS_SCALE}px`;
   canvas.style.imageRendering = "pixelated";
+  // Stop page CSS / flex parents from squashing the canvas on one axis.
+  canvas.style.maxWidth = "none";
+  canvas.style.maxHeight = "none";
+  canvas.style.flex = "none";
 
-  canvas.width = Math.round(DISPLAY_WIDTH * devicePixelRatioValue);
-  canvas.height = Math.round(DISPLAY_HEIGHT * devicePixelRatioValue);
+  canvas.width = DISPLAY_WIDTH * devicePixelRatioValue;
+  canvas.height = DISPLAY_HEIGHT * devicePixelRatioValue;
 
   context.setTransform(
     devicePixelRatioValue,
@@ -35,8 +39,8 @@
 
   context.imageSmoothingEnabled = false;
 
-  const PLAYER_WIDTH = 16;
-  const PLAYER_HEIGHT = 30;
+  const PLAYER_WIDTH = 32;
+  const PLAYER_HEIGHT = 32;
   const ITEM_SIZE = 32;
 
   let zoom = 1;
@@ -51,12 +55,18 @@
 
   let gameLoopId = null;
 
-  const PLAYER_SPRITES = {
-    up: new Image(),
-    down: new Image(),
-    left: new Image(),
-    right: new Image(),
-  };
+  const PLAYER_SPRITE = new Image();
+
+  PLAYER_SPRITE.src =
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/player-idle-walk-0.1.png";
+
+  const PLAYER_SNEAK_SPRITE = new Image();
+  PLAYER_SNEAK_SPRITE.src =
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/player-sneak-0.1.png"; // 8 rows × 6 cols, 32×32, col0 idle, col1–5 walk
+
+  const PLAYER_RUN_SPRITE = new Image();
+  PLAYER_RUN_SPRITE.src =
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/player-running-0.1.png"; // same grid; you can draw it larger if you want
 
   const ITEM_SPRITES = {
     healthPotion: new Image(),
@@ -64,18 +74,6 @@
     scrollFreezeCloud: new Image(),
     scrollChainLightning: new Image(),
   };
-
-  const SPRITE_FRAME_WIDTH = 13;
-  const SPRITE_FRAME_HEIGHT = 30;
-
-  PLAYER_SPRITES.up.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-up-idle-4frame.png";
-  PLAYER_SPRITES.down.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/mage-colours(STILL)(13x30).png";
-  PLAYER_SPRITES.left.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-left-4frame.png";
-  PLAYER_SPRITES.right.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/characters/player/green-mage-idle-right-4frame.png";
 
   ITEM_SPRITES.scrollFireBall.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/items/scrolls/scrollFireBall-inv.png";
@@ -88,51 +86,58 @@
 
   const itemSpritesheet = new Image();
   itemSpritesheet.src =
-    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/ui/inventoryScreen%2Bhealth-0.1.png";
+    "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/ui/inventory-large-0.1.png";
 
   const ITEM_ANIMATIONS = {
     scrollFireBall: {
       image: ITEM_SPRITES.scrollFireBall,
       frames: 1,
-      frameWidth:25,
+      frameWidth: 25,
       frameHeight: 11,
     },
     scrollFreezeCloud: {
       image: ITEM_SPRITES.scrollFreezeCloud,
       frames: 1,
-      frameWidth:25,
+      frameWidth: 25,
       frameHeight: 11,
     },
     scrollChainLightning: {
       image: ITEM_SPRITES.scrollChainLightning,
       frames: 1,
-      frameWidth:25,
+      frameWidth: 25,
       frameHeight: 11,
     },
     healthPotion: {
       image: ITEM_SPRITES.healthPotion,
       frames: 1,
-      frameWidth:25,
+      frameWidth: 25,
       frameHeight: 11,
     },
   };
 
   const ITEM_ANIMATION_FPS = 2;
-  const PLAYER_MOVE_INTERVAL = 150;
-  const PROJECTILE_MOVE_INTERVAL = PLAYER_MOVE_INTERVAL / 2;
-  let lastPlayerMoveTime = 0;
+  const PLAYER_SPEED = 3; // tiles per second
+  const PLAYER_SNEAK_SPEED = 1.6;
+  const PLAYER_RUN_SPEED = 5.2;
+  const STAMINA_MAX = 3;
+  const STAMINA_START_MIN = 0.35;
+  const PROJECTILE_SPEED = 5;        // tiles per second (continuous, any angle)
+  const PROJECTILE_HIT_RADIUS = 0.75; // how close to an enemy's centre counts as a hit
 
   let gameRunning = false;
   let gameStart = null;
   let globalPlayer = null;
   let gameState = null;
+  let lastFrameTime = null;
+  let lastEnemyTime = null;
+  let lastProjectileTime = null;
 
   let inventoryOpen = false;
   let selectedCol = 0;
   let selectedRow = 0;
 
-  const INV_COLS = 8;
-  const INV_ROWS = 7;
+  const INV_COLS = 4;
+  const INV_ROWS = 3;
 
   const moveKeys = {
     w: [0, -1],
@@ -148,34 +153,123 @@
     ArrowRight: [1, 0],
   };
 
-  let movementInterval = null;
-  const heldMoveKeys = [];
+  // FIX: this is a Set everywhere. (Other handlers used push/indexOf/splice/
+  // length = 0, which don't exist on a Set and threw TypeErrors.)
+  const heldMoveKeys = new Set();
 
-  function currentMoveDirection() {
-    if (heldMoveKeys.length === 0) return null;
-    return moveKeys[heldMoveKeys[heldMoveKeys.length - 1]] || null;
-  }
+  const movementKeys = new Set(["w", "a", "s", "d"]);
 
-  function startMovementLoop() {
-    if (movementInterval === null) {
-      moveWhileHeld();
-      movementInterval = setInterval(moveWhileHeld, 150);
+  const heldGaitKeys = { sneak: false, run: false };
+
+  window.addEventListener("keydown", event => {
+    if (event.code === "KeyE" && !event.repeat) {
+      // FIX: don't touch gameState before the game exists / while in the menu.
+      if (!gameRunning || !gameState || inventoryOpen) return;
+      toggleHide();
     }
-  }
+  });
 
-  function stopMovementLoop() {
-    if (movementInterval !== null) {
-      clearInterval(movementInterval);
-      movementInterval = null;
+  // FIX: removed the placeholder movePlayer() stub ("Existing movement code...").
+  // Movement is handled in updateFreePlayerMovement, which now checks p.hidden.
+
+  window.addEventListener("keydown", (event) => {
+    if (event.repeat) return;
+    if (event.key === "c") heldGaitKeys.sneak = true;
+    if (event.code === "ShiftLeft") heldGaitKeys.run = true;
+  });
+
+  window.addEventListener("keyup", (event) => {
+    if (event.key === "c") heldGaitKeys.sneak = false;
+    if (event.code === "ShiftLeft") heldGaitKeys.run = false;
+  });
+
+  window.addEventListener("blur", () => {
+    heldGaitKeys.sneak = false;
+    heldGaitKeys.run = false;
+  });
+
+  window.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+
+    if (movementKeys.has(key)) {
+      event.preventDefault();
+      heldMoveKeys.add(key);
     }
-  }
+  });
 
-  function moveWhileHeld() {
-    const direction = currentMoveDirection();
-    if (!direction || inventoryOpen) return;
-    const [dx, dy] = direction;
-    movePlayer(dx, dy, performance.now());
-  }
+  window.addEventListener("keyup", (event) => {
+    const key = event.key.toLowerCase();
+
+    if (movementKeys.has(key)) {
+      event.preventDefault();
+      heldMoveKeys.delete(key);
+    }
+  });
+
+  // Prevent movement getting stuck when the window loses focus
+  window.addEventListener("blur", () => {
+    heldMoveKeys.clear();
+  });
+
+  // ---------------------------------------------------------------------------
+  // PLAYER SPRITESHEET (8 directions)
+  // Layout: 32x32 cells. Column 0 = idle, columns 1-5 = walk frames.
+  // Each row is one facing (order verified against the actual sheet).
+  // ---------------------------------------------------------------------------
+  const FRAME_W = 32;
+  const FRAME_H = 32;
+  const WALK_FRAME_COUNT = 5;
+  const RUN_FRAME_COUNT = 6;
+  const RUN_FRAME_W = 48;
+  const RUN_FRAME_H = 48;
+  const SNEAK_FRAME_COUNT = 6;
+  const SNEAK_FRAME_W = 32;
+  const SNEAK_FRAME_H = 32;
+
+  const WALK_HAS_IDLE = true;
+  const RUN_HAS_IDLE = false;
+  const SNEAK_HAS_IDLE = false;
+  // Desired on-screen player size.
+  // Set these to the size your normal player currently appears.
+  const PLAYER_DRAW_W = FRAME_W;
+  const PLAYER_DRAW_H = FRAME_H;
+  // Walk animation advances by DISTANCE walked (not time) so the feet match
+  // the ground. Lower = faster stepping, higher = slower.
+  const PX_PER_WALK_FRAME = 8;
+  const PX_PER_SNEAK_FRAME = 6;
+  const PX_PER_RUN_FRAME = 10;
+
+  // Keep the walking pose this long after the last movement so brief stalls
+  // (corners, key changes) don't flick to idle and back.
+  const MOVE_GRACE_MS = 90;
+
+  const PLAYER_DIRECTION_ROWS = {
+    down: 0,
+    downLeft: 5,
+    left: 1,
+    upLeft: 6,
+    up: 3,
+    upRight: 7,
+    right: 2,
+    downRight: 4,
+  };
+
+  // "dx,dy" -> facing name
+  const DIR_FROM_VECTOR = {
+    "0,1": "down",
+    "-1,1": "downLeft",
+    "-1,0": "left",
+    "-1,-1": "upLeft",
+    "0,-1": "up",
+    "1,-1": "upRight",
+    "1,0": "right",
+    "1,1": "downRight",
+  };
+
+  // Set true temporarily to draw the raw sheet with a grid over the game.
+  const DEBUG_SHEET = false;
+  let lastFireTime = -Infinity;
+  const FIRE_COOLDOWN = 2000;
 
   window.addEventListener("keydown", (event) => {
     if (!gameRunning) return;
@@ -209,41 +303,45 @@
       return;
     }
 
+    // FIX: movement keys are already tracked by the Set handler above.
+    // The old heldMoveKeys.push(...) here threw because a Set has no push().
     if (moveKeys[key]) {
       event.preventDefault();
-      if (!heldMoveKeys.includes(key)) {
-        heldMoveKeys.push(key);
-      }
-      startMovementLoop();
       return;
     }
 
     const fireDirection = fireKeys[event.key];
+
     if (fireDirection) {
       event.preventDefault();
+
+      // Ignore keyboard auto-repeat while the key is held
+      if (event.repeat) return;
+
+      const now = performance.now();
+
+      // Wait 2 seconds between casts
+      if (now - lastFireTime < FIRE_COOLDOWN) {
+        return;
+      }
+
+      lastFireTime = now;
+
       const [dx, dy] = fireDirection;
       castSpell(dx, dy);
     }
   });
 
-  window.addEventListener("keyup", (event) => {
-    const key = event.key.toLowerCase();
-
-    if (moveKeys[key]) {
-      const index = heldMoveKeys.indexOf(key);
-      if (index !== -1) {
-        heldMoveKeys.splice(index, 1);
-      }
-
-      if (heldMoveKeys.length === 0) {
-        stopMovementLoop();
-      }
-    }
-  });
-
+  // FIX: the old keyup handler here used indexOf/splice on the Set (crash),
+  // and duplicated the one above, so it was removed. Same for the extra blur
+  // handler that did heldMoveKeys.length = 0.
 
   function startGame3() {
     gameStart = performance.now();
+    lastFrameTime = null;
+    lastEnemyTime = null;
+    lastProjectileTime = null;
+    heldMoveKeys.clear();
 
     const newGameState = createGameState(1, null, []);
 
@@ -255,7 +353,7 @@
     gameState = newGameState;
     gameRunning = true;
     gameLoopId = requestAnimationFrame(gameLoop);
-        gameState.items.push({
+    gameState.items.push({
       id: "debug-scroll",
       x: gameState.player.x,
       y: gameState.player.y + 1,
@@ -266,6 +364,7 @@
 
   function stopGame3() {
     gameRunning = false;
+    heldMoveKeys.clear();
     if (gameLoopId) {
       cancelAnimationFrame(gameLoopId);
       gameLoopId = null;
@@ -291,6 +390,9 @@
   function gameLoop(timestamp) {
     if (!gameRunning) return;
 
+    updateFreePlayerMovement(timestamp);
+    updateTraps(timestamp);
+    updateEnemies(timestamp);
     updateProjectiles(timestamp);
     pickupNearbyItems();
     drawGame(timestamp);
@@ -298,12 +400,145 @@
     gameLoopId = requestAnimationFrame(gameLoop);
   }
 
-  const playerAnimation = {
-    currentFrame: 0,
-    totalFrames: 4,
-    tickCount: 0,
-    ticksPerFrame: 30,
-  };
+  function updateFreePlayerMovement(timestamp) {
+    // Track frame time EVERY frame so the first step after standing still
+    // doesn't get a huge delta. Clamp so tab-switching can't cause a jump.
+    const deltaTime =
+      lastFrameTime === null
+        ? 0
+        : Math.min((timestamp - lastFrameTime) / 1000, 0.05);
+    lastFrameTime = timestamp;
+
+    if (!gameState || !gameState.player) return;
+
+    const player = gameState.player;
+    player.isMoving = false;
+
+    // FIX: a hidden player can't walk around.
+    if (gameState.gameOver || inventoryOpen || player.hidden) return;
+
+    let dx = 0;
+    let dy = 0;
+
+    if (heldMoveKeys.has("a")) dx -= 1;
+    if (heldMoveKeys.has("d")) dx += 1;
+    if (heldMoveKeys.has("w")) dy -= 1;
+    if (heldMoveKeys.has("s")) dy += 1;
+
+    const sneak = heldGaitKeys.sneak;
+    const wantRun = heldGaitKeys.run && !sneak;
+    const canRun = player.stamina > (player.wasRunning ? 0 : STAMINA_START_MIN);
+
+    if (sneak) {
+      player.gait = "sneak";
+      player.wasRunning = false;
+      player.stamina = Math.min(STAMINA_MAX, player.stamina + deltaTime);
+    } else if (wantRun && canRun && (dx !== 0 || dy !== 0)) {
+      player.gait = "run";
+      player.stamina = Math.max(0, player.stamina - deltaTime);
+      player.wasRunning = player.stamina > 0;
+    } else {
+      player.gait = "walk";
+      player.wasRunning = false;
+      player.stamina = Math.min(STAMINA_MAX, player.stamina + deltaTime);
+    }
+    if (dx === 0 && dy === 0) {
+      return;
+    }
+
+    // Face the pressed direction (8-way) before normalizing.
+    player.direction =
+      DIR_FROM_VECTOR[`${Math.sign(dx)},${Math.sign(dy)}`] || player.direction;
+
+    // Normalize diagonal movement so it is not faster
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    dx /= length;
+    dy /= length;
+
+    const speed =
+      player.gait === "sneak"
+        ? PLAYER_SNEAK_SPEED
+        : player.gait === "run"
+          ? PLAYER_RUN_SPEED
+          : PLAYER_SPEED;
+
+    const movementAmount = speed * deltaTime;
+
+    const oldX = player.x;
+    const oldY = player.y;
+
+    const newX = player.x + dx * movementAmount;
+    const newY = player.y + dy * movementAmount;
+
+    if (canMoveTo(newX, player.y)) {
+      player.x = newX;
+    }
+
+    if (canMoveTo(player.x, newY)) {
+      player.y = newY;
+    }
+
+    // Track real movement: distance drives the walk animation frame.
+    const moved = Math.hypot(player.x - oldX, player.y - oldY) * TILE_SIZE;
+    if (moved > 0) {
+      player.walkDistance = (player.walkDistance || 0) + moved;
+      player.lastMovedTime = timestamp;
+    }
+    globalPlayer = player;
+  }
+
+  // Player hitbox inside their tile (0..1). Tweak to change how close you can
+  // get to walls.
+  const HITBOX = { left: 0.25, right: 0.75, top: 0.5, bottom: 0.9 };
+
+  function isWalkableTile(tileX, tileY) {
+    if (
+      tileX < 0 ||
+      tileX >= MAP_WIDTH ||
+      tileY < 0 ||
+      tileY >= MAP_HEIGHT
+    ) {
+      return false;
+    }
+    return gameState.map[tileY][tileX] !== TileType.WALL;
+  }
+
+  // The map's walls are the only thing that uses tiles. Entities themselves
+  // move freely: any position, any angle, blocked only by wall geometry.
+  function isBoxClear(x, y, hb) {
+    if (!gameState || !gameState.map) return false;
+    return (
+      isWalkableTile(Math.floor(x + hb.left), Math.floor(y + hb.top)) &&
+      isWalkableTile(Math.floor(x + hb.right), Math.floor(y + hb.top)) &&
+      isWalkableTile(Math.floor(x + hb.left), Math.floor(y + hb.bottom)) &&
+      isWalkableTile(Math.floor(x + hb.right), Math.floor(y + hb.bottom))
+    );
+  }
+
+  // Can a hitbox slide from A to B without touching a wall?
+  function isSegmentClear(ax, ay, bx, by, hb) {
+    const dist = Math.hypot(bx - ax, by - ay);
+    const steps = Math.max(1, Math.ceil(dist / 0.15));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (!isBoxClear(ax + (bx - ax) * t, ay + (by - ay) * t, hb)) return false;
+    }
+    return true;
+  }
+
+  // Move with wall sliding. Returns the distance actually travelled.
+  function tryMove(entity, dx, dy, hb) {
+    const ox = entity.x;
+    const oy = entity.y;
+    if (isBoxClear(entity.x + dx, entity.y, hb)) entity.x += dx;
+    if (isBoxClear(entity.x, entity.y + dy, hb)) entity.y += dy;
+    return Math.hypot(entity.x - ox, entity.y - oy);
+  }
+
+  function canMoveTo(x, y) {
+    return isBoxClear(x, y, HITBOX);
+  }
 
   function drawGame(timestamp) {
     if (!gameState || !gameState.player) {
@@ -327,34 +562,85 @@
     context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     context.save();
+
     context.translate(
       Math.floor(DISPLAY_WIDTH / 2),
       Math.floor(DISPLAY_HEIGHT / 2)
     );
-    context.scale(zoom, zoom);
-    context.translate(-Math.floor(camera.x), -Math.floor(camera.y));
+
+    // Use only integer zoom values for pixel-perfect sprites.
+    context.scale(Math.round(zoom), Math.round(zoom));
+
+    context.translate(
+      -Math.round(camera.x),
+      -Math.round(camera.y)
+    );
 
     drawMap();
+    drawHidingSpots();
+    drawVisionCones();
     drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
-    drawPlayer();
+    drawPlayer(timestamp);
+    drawHidePrompt(); // FIX: was defined but never called
 
     context.restore();
+    if (gameState.gameOver) drawGameOver();
     context.setTransform(
-  devicePixelRatioValue / CANVAS_SCALE,
-  0,
-  0,
-  devicePixelRatioValue / CANVAS_SCALE,
-  0,
-  0
-);
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0,
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0
+    );
+
+    if (DEBUG_SHEET) drawSheetDebug();
+    context.imageSmoothingEnabled = false;
     drawInventory();
   }
 
-  const ZOOM_KEY = "shift";
+  // Temporary helper: draws the whole player sheet with a grid so you can
+  // verify frame size and row order. Enable with DEBUG_SHEET = true.
+  function drawSheetDebug() {
+    context.setTransform(
+      devicePixelRatioValue,
+      0,
+      0,
+      devicePixelRatioValue,
+      0,
+      0
+    );
+    context.fillStyle = "#f0f";
+    context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    if (PLAYER_SPRITE.complete && PLAYER_SPRITE.naturalWidth > 0) {
+      context.drawImage(PLAYER_SPRITE, 0, 0);
+    }
+    context.strokeStyle = "lime";
+    context.fillStyle = "yellow";
+    context.font = "8px Arial";
+    context.textAlign = "left";
+    context.textBaseline = "alphabetic";
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 6; c++) {
+        context.strokeRect(c * FRAME_W + 0.5, r * FRAME_H + 0.5, FRAME_W - 1, FRAME_H - 1);
+      }
+      context.fillText(String(r), 2, r * FRAME_H + 10);
+    }
+    context.setTransform(
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0,
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0
+    );
+  }
+
+  const ZOOM_KEY = "f";
   const NORMAL_ZOOM = 1;
-  const ZOOM_OUT_MIN = VIEW_TILES_X / (VIEW_TILES_X + 3);
+  const ZOOM_OUT_MIN = 1;
   const ZOOM_OUT_TIME = 2000;
   const ZOOM_IN_TIME = 20;
   const MIN_HOLD_TIME = 1000;
@@ -446,15 +732,138 @@
     returnFromZoom();
   });
 
+  function seededRandom(x, y) {
+    let seed = x * 49632 + y * 325178;
+    return function() {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+  }
+
   function drawMap() {
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
         const tile = gameState.map[y][x];
+        let tx = Math.floor(x * TILE_SIZE);
+        let ty = Math.floor(y * TILE_SIZE);
 
         if (tile === TileType.WALL) {
-          context.fillStyle = "#1f2937";
+          let isRoomWall = false;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              let ny = y + dy;
+              let nx = x + dx;
+              if (ny >= 0 && ny < MAP_HEIGHT && nx >= 0 && nx < MAP_WIDTH) {
+                if (gameState.map[ny][nx] === TileType.FLOOR) {
+                  isRoomWall = true;
+                  break;
+                }
+              }
+            }
+            if (isRoomWall) break;
+          }
+
+          if (isRoomWall) {
+            context.fillStyle = "#374151";
+            context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            context.strokeStyle = "#111827";
+            context.lineWidth = 1;
+
+            let leftFloor  = x > 0 && gameState.map[y][x - 1] === TileType.FLOOR;
+            let rightFloor = x < MAP_WIDTH - 1 && gameState.map[y][x + 1] === TileType.FLOOR;
+            let topFloor   = y > 0 && gameState.map[y - 1][x] === TileType.FLOOR;
+            let botFloor   = y < MAP_HEIGHT - 1 && gameState.map[y + 1][x] === TileType.FLOOR;
+
+            let tlFloor = x > 0 && y > 0 && gameState.map[y - 1][x - 1] === TileType.FLOOR;
+            let trFloor = x < MAP_WIDTH - 1 && y > 0 && gameState.map[y - 1][x + 1] === TileType.FLOOR;
+            let blFloor = x > 0 && y < MAP_HEIGHT - 1 && gameState.map[y + 1][x - 1] === TileType.FLOOR;
+            let brFloor = x < MAP_WIDTH - 1 && y < MAP_HEIGHT - 1 && gameState.map[y + 1][x + 1] === TileType.FLOOR;
+
+            let isTL = (tlFloor && !topFloor && !leftFloor) || (rightFloor && botFloor);
+            let isTR = (trFloor && !topFloor && !rightFloor) || (leftFloor && botFloor);
+            let isBL = (blFloor && !botFloor && !leftFloor) || (rightFloor && topFloor);
+            let isBR = (brFloor && !botFloor && !rightFloor) || (leftFloor && topFloor);
+
+            let cuts = [Math.floor(TILE_SIZE / 3), Math.floor((2 * TILE_SIZE) / 3)];
+
+            if (isBR) {
+              for (let c of cuts) {
+                context.beginPath();
+                context.moveTo(tx + c, ty + TILE_SIZE);
+                context.lineTo(tx + c, ty + c);
+                context.lineTo(tx + TILE_SIZE, ty + c);
+                context.stroke();
+              }
+            } else if (isBL) {
+              for (let c of cuts) {
+                context.beginPath();
+                context.moveTo(tx + TILE_SIZE - c, ty + TILE_SIZE);
+                context.lineTo(tx + TILE_SIZE - c, ty + c);
+                context.lineTo(tx, ty + c);
+                context.stroke();
+              }
+            } else if (isTR) {
+              for (let c of cuts) {
+                context.beginPath();
+                context.moveTo(tx + c, ty);
+                context.lineTo(tx + c, ty + TILE_SIZE - c);
+                context.lineTo(tx + TILE_SIZE, ty + TILE_SIZE - c);
+                context.stroke();
+              }
+            } else if (isTL) {
+              for (let c of cuts) {
+                context.beginPath();
+                context.moveTo(tx + TILE_SIZE - c, ty);
+                context.lineTo(tx + TILE_SIZE - c, ty + TILE_SIZE - c);
+                context.lineTo(tx, ty + TILE_SIZE - c);
+                context.stroke();
+              }
+            } else if (topFloor || botFloor) {
+              for (let c of cuts) {
+                context.beginPath();
+                context.moveTo(tx, ty + c);
+                context.lineTo(tx + TILE_SIZE, ty + c);
+                context.stroke();
+              }
+            } else {
+              for (let c of cuts) {
+                context.beginPath();
+                context.moveTo(tx + c, ty);
+                context.lineTo(tx + c, ty + TILE_SIZE);
+                context.stroke();
+              }
+            }
+          }
+
+          continue;
         } else if (tile === TileType.FLOOR) {
           context.fillStyle = "#9ca3af";
+          context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+
+          context.strokeStyle = "#374151";
+          context.lineWidth = 1;
+
+          let rowH = TILE_SIZE / 3;
+          for (let r = 1; r < 3; r++) {
+            context.beginPath();
+            context.moveTo(tx, ty + (r * rowH));
+            context.lineTo(tx + TILE_SIZE, ty + (r * rowH));
+            context.stroke();
+          }
+
+          context.beginPath();
+          context.moveTo(tx + TILE_SIZE / 2, ty);
+          context.lineTo(tx + TILE_SIZE / 2, ty + rowH);
+          context.moveTo(tx + TILE_SIZE / 3, ty + rowH);
+          context.lineTo(tx + TILE_SIZE / 3, ty + rowH * 2);
+          context.moveTo(tx + (TILE_SIZE / 3) * 2, ty + rowH);
+          context.lineTo(tx + (TILE_SIZE / 3) * 2, ty + rowH * 2);
+          context.moveTo(tx + TILE_SIZE / 2, ty + rowH * 2);
+          context.lineTo(tx + TILE_SIZE / 2, ty + TILE_SIZE);
+          context.stroke();
+          continue;
         } else if (tile === TileType.TRAP) {
           context.fillStyle = "#7f1d1d";
         } else if (tile === TileType.DOOR) {
@@ -463,9 +872,7 @@
           context.fillStyle = "#eab308";
         }
 
-        context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        context.strokeStyle = "#111827";
-        context.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
       }
     }
   }
@@ -482,11 +889,15 @@
       context.fill();
     }
   }
- 
+
   function drawItems(timestamp = performance.now()) {
     if (!gameState || !gameState.items) return;
 
     for (const item of gameState.items) {
+      if (item.type === "trap") {
+        drawTrap(item, timestamp);
+        continue;
+      }
       const animation = ITEM_ANIMATIONS[item.idName];
       if (!animation || !animation.image) continue;
       if (!animation.image.complete || animation.image.naturalWidth === 0) continue;
@@ -515,75 +926,919 @@
     }
   }
 
-  function drawEnemies() {
-    for (const enemy of gameState.enemies || []) {
-      context.fillStyle = enemy.color || "#ef4444";
+  // ===========================================================================
+  // TRAPS (items)
+  // A trap is an item in gameState.items with type "trap". Standing on an
+  // armed one springs it: damage + a noise that draws nearby enemies.
+  // ===========================================================================
+  const TRAP_DAMAGE = 10;
+  const TRAP_TRIGGER_RADIUS = 0.4; // tiles, straight-line distance
+  const TRAP_REARM_MS = 2500;
+  const TRAP_NOISE_RADIUS = 6;
+
+  function damagePlayer(amount) {
+    const p = gameState.player;
+    p.hp = Math.max(0, p.hp - amount);
+    if (p.hp <= 0) gameState.gameOver = true;
+  }
+
+  function updateTraps(timestamp) {
+    if (!gameState || !gameState.items || !gameState.player) return;
+    if (gameState.gameOver) return;
+
+    const p = gameState.player;
+    for (const item of gameState.items) {
+      if (item.type !== "trap") continue;
+      if (timestamp < item.sprungUntil) continue; // still re-arming
+
+      if (Math.hypot(p.x - item.x, p.y - item.y) < TRAP_TRIGGER_RADIUS) {
+        item.sprungUntil = timestamp + TRAP_REARM_MS;
+        damagePlayer(TRAP_DAMAGE);
+        makeNoise(item.x, item.y, TRAP_NOISE_RADIUS);
+      }
+    }
+  }
+
+  function drawTrap(trap, now) {
+    const cx = Math.round(trap.x * TILE_SIZE + TILE_SIZE / 2);
+    const cy = Math.round(trap.y * TILE_SIZE + TILE_SIZE * 0.7);
+    const sprung = now < trap.sprungUntil;
+
+    context.fillStyle = "#18181b";
+    context.fillRect(cx - 10, cy - 6, 20, 12);
+    context.fillStyle = "#3f3f46";
+    context.fillRect(cx - 9, cy - 5, 18, 10);
+
+    const h = sprung ? 9 : 3;
+    context.fillStyle = sprung ? "#ef4444" : "#a1a1aa";
+    for (const ox of [-6, -1, 4]) {
+      context.fillRect(cx + ox, cy - h + 2, 3, h);
+    }
+  }
+
+  function drawGameOver() {
+    context.fillStyle = "rgba(0, 0, 0, 0.6)";
+    context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    context.fillStyle = "#ef4444";
+    context.font = "16px Arial";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("YOU DIED", DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2);
+  }
+  const hidingSpots = []; // filled per level by placeHidingSpots()
+  // ===========================================================================
+  // ENEMY VISION & DETECTION
+  //
+  // Everything here works in continuous world space. Enemies walk in any
+  // direction and are blocked only by wall geometry. Tiles are used for just
+  // one thing: as a rough navigation graph to route around walls when a
+  // straight line is blocked. Enemies then cut straight across open floor
+  // toward the furthest waypoint they can see.
+  //
+  // Two vision cones per enemy:
+  //   OUTER (wide, long)    - fills a suspicion meter, but only if the player is
+  //                           "exposed" (moving, or standing in light).
+  //   INNER (narrow, short) - instant alert.
+  // States: patrol (Zz) -> curious (yellow ?) -> alert (red !)
+  // ===========================================================================
+  const ENEMY_OUTER_RANGE = 5.5;                    // tiles
+  const ENEMY_OUTER_HALF_ANGLE = Math.PI / 3.2;     // ~56 deg each side
+  const ENEMY_INNER_RANGE = 2.5;                    // tiles
+  const ENEMY_INNER_HALF_ANGLE = Math.PI / 9;       // 20 deg each side
+
+  const SUSPICION_FILL_FAR = 0.45;   // per second, at the edge of the outer cone
+  const SUSPICION_FILL_NEAR = 1.4;   // per second, right at the inner range
+  const SUSPICION_DECAY = 0.3;       // per second when nothing is seen
+  const CURIOUS_THRESHOLD = 0.4;     // suspicion needed to start investigating
+
+  const PLAYER_EXPOSED_MS = 150;     // how long after moving you count as "moving"
+  const ALERT_SIGHT_RANGE = 8;       // alerted enemies see farther, any angle
+  const ALERT_LOSE_TIME = 3000;      // ms without sight before giving up the chase
+  const CURIOUS_WAIT_MS = 1800;      // look around this long after arriving
+  const PATROL_WAIT_MS = 1200;       // pause at each patrol point
+  const HIDE_SEARCH_MS = 1200;       // how long an alert enemy checks a hiding spot
+
+  const ENEMY_SPEED = { patrol: 1.2, curious: 2.0, alert: 2.6 }; // tiles/sec
+  const ENEMY_TURN_SPEED = 6;        // radians/sec
+  const NOISE_RADIUS_SPELL = 7;      // tiles
+
+  const ENEMY_HITBOX = { left: 0.2, right: 0.8, top: 0.2, bottom: 0.8 };
+  const ENEMY_ARRIVE_DIST = 0.15;    // how close counts as "reached" a point
+  const NAV_REPLAN_MS = 200;         // how often enemies re-route
+
+  const SHOW_VISION_CONES = true;    // set false to hide the cones
+
+  // Hook: put a "torch lit area" test here later. While the player is lit, the
+  // outer cone can see them even when standing still.
+  function isPlayerInLight() {
+    return false;
+  }
+
+  function enemyCenter(e) {
+    return { x: e.x + 0.5, y: e.y + 0.5 };
+  }
+
+  // Middle of the player's hitbox, so sight lines aim at their body.
+  // (FIX: this was declared twice in the same block, which is a SyntaxError in
+  // strict mode and stopped the whole script from loading. One copy remains.)
+  function playerCenter() {
+    const p = gameState.player;
+    return { x: p.x + 0.5, y: p.y + 0.7 };
+  }
+
+  function isWallAt(x, y) {
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return true;
+    return gameState.map[ty][tx] === TileType.WALL;
+  }
+
+  // Distance a ray travels from (x, y) at `angle` before hitting a wall.
+  function castRay(x, y, angle, maxDist) {
+    const step = 0.1;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    for (let d = step; d <= maxDist; d += step) {
+      if (isWallAt(x + cos * d, y + sin * d)) return d - step;
+    }
+    return maxDist;
+  }
+
+  function hasLineOfSight(ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const dist = Math.hypot(dx, dy);
+    if (dist === 0) return true;
+    return castRay(ax, ay, Math.atan2(dy, dx), dist) >= dist - 0.001;
+  }
+
+  function angleDiff(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+
+  function turnToward(e, targetAngle, dt) {
+    const d = angleDiff(targetAngle, e.facing);
+    const maxTurn = ENEMY_TURN_SPEED * dt;
+    e.facing += Math.abs(d) <= maxTurn ? d : Math.sign(d) * maxTurn;
+  }
+
+  // Idle head sweep so enemies don't stare blankly at one spot.
+  function lookAround(e, now) {
+    e.facing = e.baseFacing + Math.sin(now / 450) * 0.9;
+  }
+
+  // --- navigation ------------------------------------------------------------
+  // 4-way BFS over walkable tiles. Only used to find a route AROUND walls.
+  function findPath(sx, sy, gx, gy) {
+    if (!isWalkableTile(gx, gy) || !isWalkableTile(sx, sy)) return null;
+    if (sx === gx && sy === gy) return [];
+
+    const key = (x, y) => y * MAP_WIDTH + x;
+    const startKey = key(sx, sy);
+    const prev = new Map([[startKey, -1]]);
+    const queue = [[sx, sy]];
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    for (let head = 0; head < queue.length; head++) {
+      const [x, y] = queue[head];
+      for (const [dx, dy] of dirs) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const k = key(nx, ny);
+        if (!isWalkableTile(nx, ny) || prev.has(k)) continue;
+        prev.set(k, key(x, y));
+
+        if (nx === gx && ny === gy) {
+          const path = [];
+          let cur = k;
+          while (cur !== startKey) {
+            path.push({ x: cur % MAP_WIDTH, y: Math.floor(cur / MAP_WIDTH) });
+            cur = prev.get(cur);
+          }
+          return path.reverse();
+        }
+        queue.push([nx, ny]);
+      }
+    }
+    return null;
+  }
+
+  // Decide the next point to head for. Straight to the goal if the way is
+  // open; otherwise route around walls and aim at the furthest waypoint that
+  // can be reached in a straight line (so paths look natural, not gridded).
+  function planSteer(e, gx, gy) {
+    if (isSegmentClear(e.x, e.y, gx, gy, ENEMY_HITBOX)) {
+      return { x: gx, y: gy, isGoal: true };
+    }
+
+    // An entity's anchor is its top-left; its centre is +0.5, so the tile it
+    // stands on is floor(anchor + 0.5), and a waypoint at a tile centre has
+    // anchor (tileX, tileY).
+    const path = findPath(
+      Math.floor(e.x + 0.5), Math.floor(e.y + 0.5),
+      Math.floor(gx + 0.5), Math.floor(gy + 0.5)
+    );
+    if (!path || path.length === 0) {
+      return { x: gx, y: gy, isGoal: true }; // nowhere better; slide along walls
+    }
+
+    let best = path[0];
+    let foundClear = false;
+    const limit = Math.min(path.length, 16);
+    for (let i = 0; i < limit; i++) {
+      if (isSegmentClear(e.x, e.y, path[i].x, path[i].y, ENEMY_HITBOX)) {
+        best = path[i];
+        foundClear = true;
+      } else if (foundClear) {
+        break;
+      }
+    }
+    return { x: best.x, y: best.y, isGoal: false };
+  }
+
+  // Walk toward a point in free space. Returns true once within arriveDist.
+  function steerToward(
+    e, gx, gy, speed, dt,
+    arriveDist = ENEMY_ARRIVE_DIST, faceMovement = true
+  ) {
+    if (Math.hypot(gx - e.x, gy - e.y) <= arriveDist) {
+      e.steer = null;
+      return true;
+    }
+
+    e.navTimer -= dt * 1000;
+    const goalMoved =
+      !e.navGoal || Math.hypot(e.navGoal.x - gx, e.navGoal.y - gy) > 1;
+
+    if (!e.steer || e.navTimer <= 0 || goalMoved) {
+      e.steer = planSteer(e, gx, gy);
+      e.navGoal = { x: gx, y: gy };
+      e.navTimer = NAV_REPLAN_MS;
+    } else if (e.steer.isGoal) {
+      e.steer.x = gx; // chasing something that moves
+      e.steer.y = gy;
+    }
+
+    const dx = e.steer.x - e.x;
+    const dy = e.steer.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 0.05) {
+      e.navTimer = 0; // reached this waypoint: plan the next one
+      return false;
+    }
+
+    if (faceMovement) turnToward(e, Math.atan2(dy, dx), dt);
+
+    const step = Math.min(speed * dt, d);
+    if (step > 0) {
+      const moved = tryMove(e, (dx / d) * step, (dy / d) * step, ENEMY_HITBOX);
+      if (moved < step * 0.25) e.navTimer = 0; // blocked: re-route next frame
+    }
+    return false;
+  }
+
+  // --- state changes ---------------------------------------------------------
+  function alertEnemy(e, now) {
+    const p = gameState.player;
+    e.state = "alert";
+    e.suspicion = 1;
+    e.canSeePlayer = true;
+    e.lastSeen = { x: p.x, y: p.y };
+    e.lastSeenTime = now;
+    e.arrived = false;
+    e.searching = false;
+    e.hideSearchTimer = HIDE_SEARCH_MS; // fresh hiding-spot search each alert
+    e.steer = null;
+  }
+
+  // FIX: there was a second copy of this nested inside updateEnemyAI's alert
+  // branch. That one shadowed this one there; its extra line is merged here.
+  function startInvestigating(e, x, y) {
+    e.state = "curious";
+    e.investigate = { x, y };
+    e.arrived = false;
+    e.waitTimer = 0;
+    e.hideSearchTimer = 0;
+    e.steer = null;
+  }
+
+  // A sound at (x, y): everyone in range who isn't already hunting goes to check.
+  function makeNoise(x, y, radius) {
+    if (!gameState || !gameState.enemies) return;
+    for (const e of gameState.enemies) {
+      if (e.state === "alert") continue;
+      if (Math.hypot(e.x - x, e.y - y) > radius) continue;
+      startInvestigating(e, x, y);
+      e.suspicion = Math.max(e.suspicion, CURIOUS_THRESHOLD);
+    }
+  }
+
+  // Hook for when an alerted enemy catches the player (damage, game over...).
+  function onEnemyReachedPlayer(e) {
+    // e.g. damagePlayer(10);
+  }
+
+  // --- per-frame AI ----------------------------------------------------------
+  function updateEnemies(timestamp) {
+    const dt =
+      lastEnemyTime === null
+        ? 0
+        : Math.min((timestamp - lastEnemyTime) / 1000, 0.05);
+    lastEnemyTime = timestamp;
+
+    if (!gameState || !gameState.enemies || !gameState.player) return;
+    if (gameState.gameOver) return;
+
+    for (const e of gameState.enemies) {
+      updateEnemyAI(e, dt, timestamp);
+    }
+  }
+
+  function updateEnemyAI(e, dt, now) {
+    const p = gameState.player;
+    const ec = enemyCenter(e);
+    const pc = playerCenter();
+    const dist = Math.hypot(pc.x - ec.x, pc.y - ec.y);
+    const angleToPlayer = Math.atan2(pc.y - ec.y, pc.x - ec.x);
+    const playerHidden = p.hidden === true;
+
+    // ---- 1. What can I see right now? --------------------------------------
+    e.canSeePlayer = false;
+    let seenOuter = false;
+
+    const sightRange =
+      e.state === "alert" ? ALERT_SIGHT_RANGE : ENEMY_OUTER_RANGE;
+
+    if (
+      !playerHidden &&
+      dist <= sightRange &&
+      hasLineOfSight(ec.x, ec.y, pc.x, pc.y)
+    ) {
+      const diff = Math.abs(angleDiff(angleToPlayer, e.facing));
+
+      if (e.state === "alert") {
+        e.canSeePlayer = true;
+      } else if (
+        dist <= ENEMY_INNER_RANGE &&
+        diff <= ENEMY_INNER_HALF_ANGLE
+      ) {
+        alertEnemy(e, now);
+      } else if (
+        diff <= ENEMY_OUTER_HALF_ANGLE &&
+        isPlayerExposed(now)
+      ) {
+        seenOuter = true;
+      }
+    }
+
+    // ---- 2. Suspicion meter ------------------------------------------------
+    if (e.state !== "alert") {
+      if (seenOuter) {
+        const closeness = Math.min(
+          1,
+          Math.max(
+            0,
+            1 -
+              (dist - ENEMY_INNER_RANGE) /
+                (ENEMY_OUTER_RANGE - ENEMY_INNER_RANGE)
+          )
+        );
+        const rate =
+          SUSPICION_FILL_FAR + closeness * (SUSPICION_FILL_NEAR - SUSPICION_FILL_FAR);
+        e.suspicion = Math.min(1, e.suspicion + rate * dt);
+
+        if (e.suspicion >= 1) {
+          alertEnemy(e, now);
+        } else if (e.state === "patrol" && e.suspicion >= CURIOUS_THRESHOLD) {
+          startInvestigating(e, p.x, p.y);
+        } else if (
+          e.state === "curious" &&
+          (!e.investigate ||
+            Math.hypot(e.investigate.x - p.x, e.investigate.y - p.y) > 0.5)
+        ) {
+          // Still glimpsing them: follow the latest position.
+          e.investigate = { x: p.x, y: p.y };
+          e.arrived = false;
+        }
+      } else {
+        e.suspicion = Math.max(0, e.suspicion - SUSPICION_DECAY * dt);
+      }
+    }
+
+    // ---- 3. Behave according to state ---------------------------------------
+    if (e.state === "alert") {
+      if (e.canSeePlayer) {
+        e.lastSeen = { x: p.x, y: p.y };
+        e.lastSeenTime = now;
+        turnToward(e, angleToPlayer, dt);
+      }
+
+      // The enemy reaches the hiding spot but cannot immediately detect the
+      // player. It searches for a short while, then carries on normally
+      // (FIX: the timer used to stick at 0 and refresh lastSeenTime every
+      // frame, so the enemy stood there forever and never gave up).
+      if (
+        p.hidden &&
+        enemyIsNearHiddenPlayer(e) &&
+        !e.canSeePlayer &&
+        e.hideSearchTimer > 0
+      ) {
+        e.searching = true;
+        e.baseFacing = e.facing;
+        lookAround(e, now);
+
+        e.hideSearchTimer -= dt * 1000;
+        return;
+      }
+
+      if (e.canSeePlayer && dist < 0.8) {
+        onEnemyReachedPlayer(e);
+      } else {
+        const arrived = steerToward(
+          e,
+          e.lastSeen.x,
+          e.lastSeen.y,
+          ENEMY_SPEED.alert,
+          dt,
+          0.3,
+          !e.canSeePlayer
+        );
+
+        if (arrived) {
+          if (!e.searching) {
+            e.searching = true;
+            e.baseFacing = e.facing;
+          }
+
+          if (!e.canSeePlayer) {
+            lookAround(e, now);
+          }
+        } else {
+          e.searching = false;
+        }
+      }
+
+      // FIX: removed a stray nested startInvestigating() copy and a chunk of
+      // "door indicator" drawing code that used undefined px/py (ReferenceError).
+
+      // Lost them for too long: go check where they were last seen.
+      if (!e.canSeePlayer && now - e.lastSeenTime > ALERT_LOSE_TIME) {
+        startInvestigating(e, e.lastSeen.x, e.lastSeen.y);
+        e.suspicion = 0.6;
+      }
+    } else if (e.state === "curious") {
+      if (!e.arrived) {
+        if (
+          steerToward(e, e.investigate.x, e.investigate.y, ENEMY_SPEED.curious, dt, 0.3)
+        ) {
+          e.arrived = true;
+          e.waitTimer = CURIOUS_WAIT_MS;
+          e.baseFacing = e.facing;
+        }
+      } else {
+        e.waitTimer -= dt * 1000;
+        lookAround(e, now);
+        if (e.waitTimer <= 0) {
+          // Nothing here. Back to the route, still a little on edge.
+          e.state = "patrol";
+          e.suspicion = Math.min(e.suspicion, 0.2);
+          e.waitTimer = 0;
+          e.steer = null;
+        }
+      }
+    } else {
+      // patrol: walk a fixed route between points, pausing at each one
+      if (e.waitTimer > 0) {
+        e.waitTimer -= dt * 1000;
+        lookAround(e, now);
+      } else {
+        const wp = e.patrol[e.patrolIndex];
+        if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
+          e.patrolIndex = (e.patrolIndex + 1) % e.patrol.length;
+          e.waitTimer = PATROL_WAIT_MS;
+          e.baseFacing = e.facing;
+        }
+      }
+    }
+  }
+
+  // --- drawing ---------------------------------------------------------------
+  function drawVisionCone(e, range, halfAngle, fill) {
+    const c = enemyCenter(e);
+    const steps = 20;
+
+    context.beginPath();
+    context.moveTo(c.x * TILE_SIZE, c.y * TILE_SIZE);
+    for (let i = 0; i <= steps; i++) {
+      const a = e.facing - halfAngle + (2 * halfAngle * i) / steps;
+      const d = castRay(c.x, c.y, a, range); // cones stop at walls
+      context.lineTo(
+        (c.x + Math.cos(a) * d) * TILE_SIZE,
+        (c.y + Math.sin(a) * d) * TILE_SIZE
+      );
+    }
+    context.closePath();
+    context.fillStyle = fill;
+    context.fill();
+  }
+
+  function drawVisionCones() {
+    if (!SHOW_VISION_CONES || !gameState || !gameState.enemies) return;
+
+    for (const e of gameState.enemies) {
+      let outer = "rgba(250, 204, 21, 0.10)";
+      let inner = "rgba(239, 68, 68, 0.16)";
+      if (e.state === "curious") {
+        outer = "rgba(250, 204, 21, 0.20)";
+      } else if (e.state === "alert") {
+        outer = "rgba(239, 68, 68, 0.18)";
+        inner = "rgba(239, 68, 68, 0.30)";
+      }
+      drawVisionCone(e, ENEMY_OUTER_RANGE, ENEMY_OUTER_HALF_ANGLE, outer);
+      drawVisionCone(e, ENEMY_INNER_RANGE, ENEMY_INNER_HALF_ANGLE, inner);
+    }
+  }
+
+  // Pixel-art icons, 1 = filled.
+  const ICON_EXCLAIM = [
+    "111",
+    "111",
+    "111",
+    "111",
+    "010",
+    "000",
+    "010",
+  ];
+  const ICON_QUESTION = [
+    "01110",
+    "10001",
+    "00001",
+    "00110",
+    "00100",
+    "00000",
+    "00100",
+  ];
+  const ICON_Z = [
+    "11111",
+    "00010",
+    "00100",
+    "01000",
+    "11111",
+  ];
+
+  function drawBitmap(rows, px, py, scale) {
+    for (let r = 0; r < rows.length; r++) {
+      for (let c = 0; c < rows[r].length; c++) {
+        if (rows[r][c] === "1") {
+          context.fillRect(px + c * scale, py + r * scale, scale, scale);
+        }
+      }
+    }
+  }
+
+  function drawPixelIcon(rows, px, py, scale, color) {
+    context.fillStyle = "#000"; // outline so it reads on any floor
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      drawBitmap(rows, px + ox, py + oy, scale);
+    }
+    context.fillStyle = color;
+    drawBitmap(rows, px, py, scale);
+  }
+
+  function drawHidingSpots() {
+    for (const spot of hidingSpots) {
+      const px = spot.x * TILE_SIZE;
+      const py = spot.y * TILE_SIZE;
+  const hidingSpots = []; // filled per level by placeHidingSpots()
+      context.fillStyle = spot.occupied
+        ? "#1e293b"
+        : HIDE_SPOT_COLOR;
+
       context.fillRect(
-        enemy.x * TILE_SIZE + 4,
-        enemy.y * TILE_SIZE + 4,
-        TILE_SIZE - 8,
-        TILE_SIZE - 8
+        px + 5,
+        py + 5,
+        TILE_SIZE - 10,
+        TILE_SIZE - 10
       );
     }
   }
 
-  function drawPlayer() {
-    if (!globalPlayer) return;
+  function enemyIsNearHiddenPlayer(e) {
+    const ec = enemyCenter(e);
+    const pc = playerCenter();
+    return Math.hypot(pc.x - ec.x, pc.y - ec.y) <= HIDE_SEARCH_RANGE;
+  }
 
-    const activeSprite = PLAYER_SPRITES[globalPlayer.direction];
-    if (!activeSprite || !activeSprite.complete) return;
+  function drawEnemyStateIcon(enemy, px, py, now) {
+    const cx = px + TILE_SIZE / 2;
 
-    const xOffset = (TILE_SIZE - globalPlayer.width) / 2;
-    const pixelX = globalPlayer.x * TILE_SIZE + xOffset;
-    const pixelY = globalPlayer.y * TILE_SIZE;
-
-    playerAnimation.tickCount++;
-    if (playerAnimation.tickCount >= playerAnimation.ticksPerFrame) {
-      playerAnimation.tickCount = 0;
-      playerAnimation.currentFrame =
-        (playerAnimation.currentFrame + 1) % playerAnimation.totalFrames;
+    if (enemy.state === "alert") {
+      const bob = Math.round(Math.sin(now / 90));
+      drawPixelIcon(ICON_EXCLAIM, cx - 3, py - 20 + bob, 2, "#ef4444");
+    } else if (enemy.state === "curious") {
+      drawPixelIcon(ICON_QUESTION, cx - 5, py - 20, 2, "#facc15");
+    } else {
+      drawPixelIcon(ICON_Z, cx - 7, py - 16, 2, "#93c5fd");
+      drawPixelIcon(ICON_Z, cx + 4, py - 22, 1, "#bfdbfe");
     }
 
-    const framesPerRow = 4;
-    const col = playerAnimation.currentFrame % framesPerRow;
-    const row = Math.floor(playerAnimation.currentFrame / framesPerRow);
+    // suspicion meter
+    if (enemy.state !== "alert" && enemy.suspicion > 0.02) {
+      context.fillStyle = "#000";
+      context.fillRect(cx - 9, py - 4, 18, 4);
+      context.fillStyle = enemy.suspicion >= CURIOUS_THRESHOLD ? "#f59e0b" : "#facc15";
+      context.fillRect(cx - 8, py - 3, Math.round(16 * enemy.suspicion), 2);
+    }
+  }
 
-    context.imageSmoothingEnabled = false;
-    context.drawImage(
-      activeSprite,
-      col * SPRITE_FRAME_WIDTH,
-      row * SPRITE_FRAME_HEIGHT,
-      SPRITE_FRAME_WIDTH,
-      SPRITE_FRAME_HEIGHT,
-      pixelX,
-      pixelY,
-      globalPlayer.width,
-      globalPlayer.height
+  function drawEnemies() {
+    const now = performance.now();
+
+    for (const enemy of gameState.enemies || []) {
+      const px = Math.round(enemy.x * TILE_SIZE);
+      const py = Math.round(enemy.y * TILE_SIZE);
+
+      let body = enemy.color || "#ef4444";
+      if (enemy.state === "curious") body = "#f59e0b";
+      else if (enemy.state === "alert") body = "#b91c1c";
+
+      context.fillStyle = body;
+      context.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+
+      // "eye" showing which way the enemy is facing
+      const eyeX = Math.round(px + TILE_SIZE / 2 + Math.cos(enemy.facing) * 8);
+      const eyeY = Math.round(py + TILE_SIZE / 2 + Math.sin(enemy.facing) * 8);
+      context.fillStyle = "#fff";
+      context.fillRect(eyeX - 2, eyeY - 2, 4, 4);
+
+      drawEnemyStateIcon(enemy, px, py, now);
+    }
+  }
+
+  /* HIDING */
+  const HIDE_INTERACT_DIST = 0.9;
+  const HIDE_SEARCH_RANGE = 1.1;
+  const HIDE_SPOT_COLOR = "#334155";
+
+  function isPlayerExposed(now) {
+    const p = gameState.player;
+
+    if (p.hidden) return false;
+
+    const moving =
+      now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
+
+    return moving || isPlayerInLight();
+  }
+
+ 
+
+  // (FIX: the duplicate playerCenter() that used to be here was removed.)
+
+  function distanceToHidingSpot(spot) {
+    const p = playerCenter();
+    return Math.hypot(
+      spot.x + 0.5 - p.x,
+      spot.y + 0.5 - p.y
     );
   }
 
-  function movePlayer(dx, dy, timestamp) {
-    if (!gameState || !gameState.player || gameState.gameOver) return;
-    if (timestamp - lastPlayerMoveTime < PLAYER_MOVE_INTERVAL) return;
+  function getNearbyHidingSpot() {
+    return hidingSpots.find(
+      spot => !spot.occupied &&
+        distanceToHidingSpot(spot) <= HIDE_INTERACT_DIST
+    );
+  }
+const HIDE_SPOTS_PER_ROOM = 1;
+const HIDE_SPOT_TYPES = ["closet", "crate"];
 
-    lastPlayerMoveTime = timestamp;
+function placeHidingSpots(rooms, map) {
+  hidingSpots.length = 0; // mutate in place, it's a const
 
-    const player = gameState.player;
-    const newX = player.x + dx;
-    const newY = player.y + dy;
+  const isFloor = (x, y) =>
+    x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT &&
+    map[y][x] === TileType.FLOOR;
 
-    if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT) return;
-    if (gameState.map[newY][newX] === TileType.WALL) return;
+  for (const room of rooms) {
+    const candidates = [];
 
-    player.x = newX;
-    player.y = newY;
+    for (let y = room.y; y < room.y + room.h; y++) {
+      for (let x = room.x; x < room.x + room.w; x++) {
+        const onLeft   = x === room.x;
+        const onRight  = x === room.x + room.w - 1;
+        const onTop    = y === room.y;
+        const onBottom = y === room.y + room.h - 1;
 
-    if (dx < 0) player.direction = "left";
-    else if (dx > 0) player.direction = "right";
-    else if (dy < 0) player.direction = "up";
-    else if (dy > 0) player.direction = "down";
+        // Must be on the room's edge, but not a corner.
+        const edgeCount = onLeft + onRight + onTop + onBottom;
+        if (edgeCount !== 1) continue;
 
-    globalPlayer = player;
+        // Skip tiles where a corridor opens into the room: the tile
+        // just outside the wall must be solid.
+        const ox = x + (onLeft ? -1 : onRight ? 1 : 0);
+        const oy = y + (onTop ? -1 : onBottom ? 1 : 0);
+        if (isFloor(ox, oy)) continue;
+
+        candidates.push({ x, y });
+      }
+    }
+
+    // Shuffle, then take up to N per room.
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    for (const c of candidates.slice(0, HIDE_SPOTS_PER_ROOM)) {
+      hidingSpots.push({
+        x: c.x,
+        y: c.y,
+        type: HIDE_SPOT_TYPES[Math.floor(Math.random() * HIDE_SPOT_TYPES.length)],
+        occupied: false,
+      });
+    }
+  }
+}
+  function toggleHide() {
+    if (!gameState || !gameState.player) return;
+    const p = gameState.player;
+
+    if (p.hidden) {
+      leaveHidingSpot();
+      return;
+    }
+
+    const spot = getNearbyHidingSpot();
+    if (!spot) return;
+
+    p.hidden = true;
+    p.hidingSpot = spot;
+    p.lastMovedTime = -Infinity;
+    spot.occupied = true;
+
+    // Optional: snap the player to the hiding spot.
+    p.x = spot.x;
+    p.y = spot.y;
+  }
+
+  function leaveHidingSpot() {
+    const p = gameState.player;
+
+    if (!p.hidden) return;
+
+    if (p.hidingSpot) {
+      p.hidingSpot.occupied = false;
+    }
+
+    p.hidden = false;
+    p.hidingSpot = null;
+    p.lastMovedTime = performance.now();
+  }
+
+  function drawHidePrompt() {
+    if (!gameState || !gameState.player || inventoryOpen) return;
+    const p = gameState.player;
+
+    context.font = "12px monospace";
+    context.textAlign = "left";
+    context.textBaseline = "alphabetic";
+
+    if (p.hidden) {
+      context.fillStyle = "#e2e8f0";
+      context.fillText(
+        "E: Exit",
+        p.x * TILE_SIZE,
+        p.y * TILE_SIZE - 8
+      );
+      return;
+    }
+
+    const spot = getNearbyHidingSpot();
+    if (!spot) return;
+
+    context.fillStyle = "#e2e8f0";
+    context.fillText(
+      "E: Hide",
+      spot.x * TILE_SIZE,
+      spot.y * TILE_SIZE - 8
+    );
+  }
+
+  const RUN_DISPLAY_SCALE = 1.5;
+  const RUN_Y_OFFSET = 6;
+
+  function drawPlayer(timestamp) {
+    if (!globalPlayer) return;
+    const p = gameState.player;
+
+    if (p.hidden) return;
+    const gait = globalPlayer.gait || "walk";
+    const isMoving =
+      timestamp - (globalPlayer.lastMovedTime ?? -Infinity) < MOVE_GRACE_MS;
+
+    // Idle + run held still uses the walk/idle sheet, like Ashlane.
+    const useRun = gait === "run" && isMoving;
+    const sheet =
+      gait === "sneak"
+        ? PLAYER_SNEAK_SPRITE
+        : useRun
+          ? PLAYER_RUN_SPRITE
+          : PLAYER_SPRITE;
+
+    if (!sheet.complete || sheet.naturalWidth === 0) return;
+
+    if (!isMoving) globalPlayer.walkDistance = 0;
+
+    const pxPerFrame =
+      gait === "sneak"
+        ? PX_PER_SNEAK_FRAME
+        : useRun
+          ? PX_PER_RUN_FRAME
+          : PX_PER_WALK_FRAME;
+
+    const frameCount =
+      gait === "sneak"
+        ? SNEAK_FRAME_COUNT
+        : useRun
+          ? RUN_FRAME_COUNT
+          : WALK_FRAME_COUNT;
+
+    const hasIdleColumn =
+      gait === "sneak"
+        ? SNEAK_HAS_IDLE
+        : useRun
+          ? RUN_HAS_IDLE
+          : WALK_HAS_IDLE;
+
+    const animationFrame =
+      Math.floor((globalPlayer.walkDistance || 0) / pxPerFrame) %
+      frameCount;
+
+    const sourceColumn = !isMoving
+      ? 0
+      : hasIdleColumn
+        ? animationFrame + 1
+        : animationFrame;
+
+    const row = PLAYER_DIRECTION_ROWS[globalPlayer.direction || "down"] ?? 0;
+    const frameW = useRun
+      ? RUN_FRAME_W
+      : gait === "sneak"
+        ? SNEAK_FRAME_W
+        : FRAME_W;
+
+    const frameH = useRun
+      ? RUN_FRAME_H
+      : gait === "sneak"
+        ? SNEAK_FRAME_H
+        : FRAME_H;
+
+    const sourceX = sourceColumn * frameW;
+    const sourceY = row * frameH;
+
+    const destW = useRun
+      ? FRAME_W * RUN_DISPLAY_SCALE
+      : FRAME_W;
+
+    const destH = useRun
+      ? FRAME_H * RUN_DISPLAY_SCALE
+      : FRAME_H;
+
+    const pixelX = Math.round(
+      globalPlayer.x * TILE_SIZE + (TILE_SIZE - destW) / 2
+    );
+    const SNEAK_Y_OFFSET = 1;
+
+    const gaitYOffset = useRun
+      ? RUN_Y_OFFSET
+      : gait === "sneak"
+        ? SNEAK_Y_OFFSET
+        : 0;
+
+    const pixelY = Math.round(
+      globalPlayer.y * TILE_SIZE + TILE_SIZE - destH + gaitYOffset
+    );
+
+    const drawX = Math.round(pixelX);
+    const drawY = Math.round(pixelY);
+    const drawW = Math.round(destW);
+    const drawH = Math.round(destH);
+
+    context.imageSmoothingEnabled = false;
+    context.drawImage(
+      sheet,
+      Math.floor(sourceX),
+      Math.floor(sourceY),
+      Math.floor(frameW),
+      Math.floor(frameH),
+      drawX,
+      drawY,
+      drawW,
+      drawH
+    );
   }
 
   function addItemToInventory(itemType) {
@@ -601,15 +1856,23 @@
     stacks.push(1);
   }
 
+  const PICKUP_RADIUS = 0.6; // tiles, straight-line distance
+
   function pickupNearbyItems() {
     if (!gameState || !globalPlayer) return;
 
     const remainingItems = [];
     for (const item of gameState.items) {
-      const distance =
-        Math.abs(item.x - globalPlayer.x) + Math.abs(item.y - globalPlayer.y);
+      // Traps are items too, but they're triggered by stepping on them
+      // (see updateTraps), never picked up.
+      if (item.type === "trap") {
+        remainingItems.push(item);
+        continue;
+      }
 
-      if (distance <= 0) {
+      const distance = Math.hypot(item.x - globalPlayer.x, item.y - globalPlayer.y);
+
+      if (distance < PICKUP_RADIUS) {
         addItemToInventory(item.idName);
         console.log("Picked up:", item.idName);
       } else {
@@ -640,153 +1903,179 @@
     return names[itemType] || itemType;
   }
 
- function drawInventory() {
-  if (!inventoryOpen || !gameState) return;
+  function drawInventory() {
+    if (!inventoryOpen || !gameState) return;
 
-  const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE;   // 768
-  const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
-  const panelSize = 750;
-  const invX = Math.floor((cssWidth - panelSize) / 2);
-  const invY = Math.floor((cssHeight - panelSize) / 2);
+    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE;   // 768
+    const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
+    const panelSize = 750;
+    const invX = Math.floor((cssWidth - panelSize) / 2);
+    const invY = Math.floor((cssHeight - panelSize) / 2);
 
-  context.setTransform(
-    devicePixelRatioValue / CANVAS_SCALE,
-    0,
-    0,
-    devicePixelRatioValue / CANVAS_SCALE,
-    0,
-    0
-  );
-  context.imageSmoothingEnabled = false;
-
-  if (itemSpritesheet.complete && itemSpritesheet.naturalWidth > 0) {
-    context.drawImage(
-      itemSpritesheet,
-      0, 0, itemSpritesheet.naturalWidth, itemSpritesheet.naturalHeight,
-      invX, invY, panelSize, panelSize
+    context.setTransform(
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0,
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0
     );
-  }
+    context.imageSmoothingEnabled = false;
 
-  const SLOT_SRC_X = 164;
-  const SLOT_SRC_Y = 213;
-  const SLOT_SRC_SIZE = 49;
-  const SLOT_SRC_STEP_X = 53;
-  const SLOT_SRC_STEP_Y = 57;
-  const ITEM_SRC_SIZE = 32;
+    if (itemSpritesheet.complete && itemSpritesheet.naturalWidth > 0) {
+      context.drawImage(
+        itemSpritesheet,
+        0, 0, itemSpritesheet.naturalWidth, itemSpritesheet.naturalHeight,
+        invX, invY, panelSize, panelSize
+      );
+    }
 
-  const slots = getInventorySlots();
+    const SLOT_X = 164;
+    const SLOT_Y = 214;
 
-  for (let row = 0; row < INV_ROWS; row++) {
-    for (let col = 0; col < INV_COLS; col++) {
-      const slot = slots[row * INV_COLS + col];
-      const sx = invX + SLOT_SRC_X + col * SLOT_SRC_STEP_X;
-      const sy = invY + SLOT_SRC_Y + row * SLOT_SRC_STEP_Y;
+    const SLOT_WIDTH = 106;
+    const SLOT_HEIGHT = 108;
 
-      if (col === selectedCol && row === selectedRow) {
-        context.strokeStyle = "#ffeb3b";
-        context.lineWidth = 2;
-        context.strokeRect(sx, sy, SLOT_SRC_SIZE, SLOT_SRC_SIZE);
-      }
+    const SLOT_STEP_X = 106;
+    const SLOT_STEP_Y = 114;
 
-      if (slot) {
-        const anim = ITEM_ANIMATIONS[slot.type];
-        const destX = sx + Math.floor((SLOT_SRC_SIZE - ITEM_SRC_SIZE) / 2);
-        const destY = sy + Math.floor((SLOT_SRC_SIZE - ITEM_SRC_SIZE) / 2);
+    const slots = getInventorySlots();
 
-                if (anim && anim.image && anim.image.complete) {
-          const itemSizeW = SLOT_SRC_SIZE - 8;
-          const itemSizeH = Math.round(itemSizeW * (anim.frameHeight / anim.frameWidth));
-          const destX = sx + Math.floor((SLOT_SRC_SIZE - itemSizeW) / 2);
-          const destY = sy + Math.floor((SLOT_SRC_SIZE - itemSizeH) / 2);
+    for (let row = 0; row < INV_ROWS; row++) {
+      for (let col = 0; col < INV_COLS; col++) {
+        const slot = slots[row * INV_COLS + col];
+        const slotX = invX + SLOT_X + col * SLOT_STEP_X;
+        const slotY = invY + SLOT_Y + row * SLOT_STEP_Y;
 
-          context.drawImage(
-            anim.image,
-            0, 0, anim.frameWidth, anim.frameHeight,
-            destX, destY,
-            itemSizeW, itemSizeH
+        if (col === selectedCol && row === selectedRow) {
+          context.strokeStyle = "#ffeb3b";
+          context.lineWidth = 2;
+
+          context.strokeRect(
+            slotX,
+            slotY,
+            SLOT_WIDTH,
+            SLOT_HEIGHT
           );
         }
 
-        if (slot.count > 1) {
-          context.fillStyle = "#fff";
-          context.font = "16px Arial";
-          context.textAlign = "right";
-          context.textBaseline = "bottom";
-          context.fillText(String(slot.count), sx + SLOT_SRC_SIZE - 2, sy + SLOT_SRC_SIZE - 2);
+        if (slot) {
+          const anim = ITEM_ANIMATIONS[slot.type];
+
+          if (anim && anim.image && anim.image.complete) {
+            const itemWidth = 90;
+            const itemHeight = Math.round(
+              itemWidth * (anim.frameHeight / anim.frameWidth)
+            );
+
+            const itemX = slotX + Math.floor((SLOT_WIDTH - itemWidth) / 2);
+            const itemY = slotY + Math.floor((SLOT_HEIGHT - itemHeight) / 2);
+
+            context.drawImage(
+              anim.image,
+              0,
+              0,
+              anim.frameWidth,
+              anim.frameHeight,
+              itemX,
+              itemY,
+              itemWidth,
+              itemHeight
+            );
+          }
         }
       }
     }
-  }
 
-  const selected = slots[selectedRow * INV_COLS + selectedCol];
-  context.fillStyle = "#fff";
-  context.font = "16px Arial";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(
-    selected ? formatItemName(selected.type) : "Empty",
-    invX + panelSize / 2,
-    invY + panelSize - 36
-  );
-}
+    const selected = slots[selectedRow * INV_COLS + selectedCol];
+
+    const inventoryScale = panelSize / 512;
+
+    const nameBoxX = invX + Math.round(116 * inventoryScale);
+    const nameBoxY = invY + Math.round(384 * inventoryScale);
+    const nameBoxWidth = Math.round(280 * inventoryScale);
+    const nameBoxHeight = Math.round(31 * inventoryScale);
+
+    context.fillStyle = "#ffffff";
+    context.font = `${Math.round(24 * inventoryScale)}px Arial`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+
+    context.fillText(
+      selected ? formatItemName(selected.type) : "Empty",
+      nameBoxX + nameBoxWidth / 2,
+      nameBoxY + nameBoxHeight / 2 + 3
+    );
+  }
 
   function castSpell(dx, dy) {
     if (!gameState || !gameState.player || gameState.gameOver) return;
 
     const player = gameState.player;
-    player.direction =
-      dx < 0 ? "left" : dx > 0 ? "right" : dy < 0 ? "up" : "down";
+    player.direction = DIR_FROM_VECTOR[`${dx},${dy}`] || player.direction;
 
+    const len = Math.hypot(dx, dy) || 1;
+
+    // Spawn at the middle of the player's body (their hitbox centre is 0.7
+    // down the sprite; projectiles draw centred on x+0.5, y+0.5).
     gameState.projectiles.push({
       x: player.x,
-      y: player.y,
-      dx,
-      dy,
-      speed: 1,
-      moveInterval: PROJECTILE_MOVE_INTERVAL,
-      nextMoveTime: 0,
+      y: player.y + 0.2,
+      dx: dx / len,
+      dy: dy / len,
       damage: 10,
       color: "#facc15",
     });
+
+    // Casting is loud: nearby enemies come to investigate.
+    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL);
   }
 
   function updateProjectiles(timestamp) {
+    const dt =
+      lastProjectileTime === null
+        ? 0
+        : Math.min((timestamp - lastProjectileTime) / 1000, 0.05);
+    lastProjectileTime = timestamp;
+
     if (!gameState || !gameState.projectiles) return;
 
     for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
-      const projectile = gameState.projectiles[i];
-      if (timestamp < projectile.nextMoveTime) continue;
+      const pr = gameState.projectiles[i];
 
-      projectile.nextMoveTime = timestamp + projectile.moveInterval;
-      projectile.x += projectile.dx;
-      projectile.y += projectile.dy;
+      // Move in small sub-steps so fast projectiles can't skip past a wall
+      // or an enemy between frames.
+      const total = PROJECTILE_SPEED * dt;
+      const steps = Math.max(1, Math.ceil(total / 0.2));
+      const stepX = (pr.dx * total) / steps;
+      const stepY = (pr.dy * total) / steps;
+      let remove = false;
 
-      if (
-        projectile.x < 0 ||
-        projectile.x >= MAP_WIDTH ||
-        projectile.y < 0 ||
-        projectile.y >= MAP_HEIGHT
-      ) {
-        gameState.projectiles.splice(i, 1);
-        continue;
-      }
+      for (let s = 0; s < steps && !remove; s++) {
+        pr.x += stepX;
+        pr.y += stepY;
 
-      if (gameState.map[projectile.y][projectile.x] === TileType.WALL) {
-        gameState.projectiles.splice(i, 1);
-        continue;
-      }
-
-      const enemy = gameState.enemies.find(
-        (enemy) => enemy.x === projectile.x && enemy.y === projectile.y
-      );
-
-      if (enemy) {
-        enemy.hp -= projectile.damage;
-        if (enemy.hp <= 0) {
-          gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
+        if (isWallAt(pr.x + 0.5, pr.y + 0.5)) {
+          remove = true;
+          break;
         }
-        gameState.projectiles.splice(i, 1);
+
+        const enemy = gameState.enemies.find(
+          (en) => Math.hypot(en.x - pr.x, en.y - pr.y) < PROJECTILE_HIT_RADIUS
+        );
+
+        if (enemy) {
+          enemy.hp -= pr.damage;
+          if (enemy.hp <= 0) {
+            gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
+          } else {
+            alertEnemy(enemy, timestamp); // getting shot blows your cover
+          }
+          remove = true;
+        }
       }
+
+      if (remove) gameState.projectiles.splice(i, 1);
     }
   }
 
@@ -794,6 +2083,9 @@
     const newMap = Array.from({ length: MAP_HEIGHT }, () =>
       Array(MAP_WIDTH).fill(TileType.WALL)
     );
+    // FIX: removed "gameState.player.hidden = false; ..." from here. gameState
+    // is null on the first call, so it threw. The player objects below already
+    // set hidden/hidingSpot.
 
     const rooms = [];
     const ROOM_COUNT = 6;
@@ -847,18 +2139,7 @@
       }
     }
 
-    for (let i = 1; i < rooms.length; i++) {
-      const room = rooms[i];
-      for (let t = 0; t < 4; t++) {
-        const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
-        const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
-        const roomCenterX = Math.floor(room.x + room.w / 2);
-        const roomCenterY = Math.floor(room.y + room.h / 2);
-        if (trapX !== roomCenterX || trapY !== roomCenterY) {
-          newMap[trapY][trapX] = TileType.TRAP;
-        }
-      }
-    }
+    // (Traps are no longer map tiles. They're placed as items below.)
 
     if (rooms.length === 0) {
       console.error("No rooms were generated.");
@@ -873,8 +2154,14 @@
           y: startRoom.y + 1,
           hp: Math.max(existingPlayer.hp, 1),
           direction: existingPlayer.direction || "down",
+          isMoving: false,
           width: PLAYER_WIDTH,
           height: PLAYER_HEIGHT,
+          stamina: existingPlayer.stamina ?? STAMINA_MAX,
+          gait: existingPlayer.gait || "walk",
+          wasRunning: false,
+          hidden: false,
+          hidingSpot: null,
         }
       : {
           id: "player",
@@ -884,9 +2171,15 @@
           maxHp: 100,
           type: "player",
           direction: "down",
+          isMoving: false,
           color: "#3b82f6",
           width: PLAYER_WIDTH,
           height: PLAYER_HEIGHT,
+          stamina: STAMINA_MAX,
+          gait: "walk",
+          wasRunning: false,
+          hidden: false,
+          hidingSpot: null,
         };
 
     globalPlayer = player;
@@ -903,6 +2196,29 @@
         maxHp: enemyHp,
         type: "enemy",
         color: "#f57676",
+
+        // --- detection / AI state ---
+        state: "patrol",            // "patrol" | "curious" | "alert"
+        suspicion: 0,               // 0..1 meter
+        facing: Math.floor(Math.random() * 4) * (Math.PI / 2), // radians
+        baseFacing: 0,
+        canSeePlayer: false,
+        steer: null,                // point currently being walked toward
+        navGoal: null,              // goal the steer point was planned for
+        navTimer: 0,                // ms until the next replan
+        searching: false,
+        hideSearchTimer: 0,
+        // fixed patrol route: two opposite corners of the room
+        patrol: [
+          { x: room.x + 1, y: room.y + 1 },
+          { x: room.x + room.w - 2, y: room.y + room.h - 2 },
+        ],
+        patrolIndex: 0,
+        waitTimer: 0,
+        investigate: null,          // {x, y} point being checked out
+        arrived: false,
+        lastSeen: null,
+        lastSeenTime: 0,
       });
     }
 
@@ -943,8 +2259,36 @@
       color: "#980002",
     });
 
-    return {
-      map: newMap,
+    // Traps are items: free-standing hazards placed like any other item,
+    // triggered by the player overlapping them (see updateTraps).
+    for (let i = 1; i < rooms.length; i++) {
+      const room = rooms[i];
+      const roomCenterX = Math.floor(room.x + room.w / 2);
+      const roomCenterY = Math.floor(room.y + room.h / 2);
+
+      for (let t = 0; t < 4; t++) {
+        const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
+        const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
+
+        const taken =
+          (trapX === roomCenterX && trapY === roomCenterY) ||
+          items.some((it) => it.x === trapX && it.y === trapY);
+        if (taken) continue;
+
+        items.push({
+          id: `trap-${level}-${i}-${t}`,
+          x: trapX,
+          y: trapY,
+          type: "trap",
+          idName: "trap",
+          sprungUntil: 0,
+        });
+      }
+    }
+placeHidingSpots(rooms, newMap);
+
+return {
+  map: newMap,
       rooms: rooms,
       player: player,
       enemies: enemies,
