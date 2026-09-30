@@ -1002,17 +1002,17 @@ function isNavTile(tileX, tileY, avoidTraps = false) {
 }
 
 
- function isBoxClear(x, y, hb, avoidTraps = false) {
-    if (!gameState || !gameState.map) return false;
-    const ok = (tx, ty) =>
-      isNavTile(tx, ty, avoidTraps) && !isDoorClosedAt(tx, ty);
-    return (
-      ok(Math.floor(x + hb.left), Math.floor(y + hb.top)) &&
-      ok(Math.floor(x + hb.right), Math.floor(y + hb.top)) &&
-      ok(Math.floor(x + hb.left), Math.floor(y + hb.bottom)) &&
-      ok(Math.floor(x + hb.right), Math.floor(y + hb.bottom))
-    );
-  }
+function isBoxClear(x, y, hb, avoidTraps = false) {
+  if (!gameState || !gameState.map) return false;
+  const ok = (tx, ty) => isNavTile(tx, ty, avoidTraps);
+  return (
+    ok(Math.floor(x + hb.left), Math.floor(y + hb.top)) &&
+    ok(Math.floor(x + hb.right), Math.floor(y + hb.top)) &&
+    ok(Math.floor(x + hb.left), Math.floor(y + hb.bottom)) &&
+    ok(Math.floor(x + hb.right), Math.floor(y + hb.bottom)) &&
+    !isBoxBlockedByDoor(x, y, hb)
+  );
+}
 function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
   const dist = Math.hypot(bx - ax, by - ay);
   const steps = Math.max(1, Math.ceil(dist / 0.15));
@@ -1253,6 +1253,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawRipples();
     drawHidingSpots();
     drawStairs(); 
+    drawBrokenDoors();
     drawDoors(timestamp);
 //  drawVisionCones(); // hide this in final version
     drawPlayer(timestamp);
@@ -2172,7 +2173,8 @@ function steerToward(
               hitDoor(door, ENEMY_DOOR_DAMAGE);
             }
           } else {
-            steerToward(e, door.x, door.y, ENEMY_SPEED.alert, dt, 0.3);
+            const spot = doorApproachPoint(door, e);
+            steerToward(e, spot.x, spot.y, ENEMY_SPEED.alert, dt, 0.2);
           }
           return;
         }
@@ -2579,50 +2581,226 @@ function steerToward(
 // ---------------------------------------------------------------------------
 // DOORS
 // ---------------------------------------------------------------------------
-function isDoorClosedAt(tx, ty) {
+const BROKEN_DOOR_CHANCE = 0.1; // chance a door is already broken when the level is made
+  
+function drawDoors(timestamp) {
+  if (!gameState || !gameState.doors) return;
+
+  for (const door of gameState.doors) {
+    const px = door.x * TILE_SIZE;
+    const py = door.y * TILE_SIZE;
+    const t = Math.round(DOOR_THICKNESS * TILE_SIZE);
+    const flash = timestamp < door.flashUntil;
+    const east = door.dir === "h"; // passage runs east-west
+
+    if (door.open) {
+      // Swung back against the passage wall.
+      context.fillStyle = "#78350f";
+      if (east) context.fillRect(px, py + 1, TILE_SIZE, 4);
+      else context.fillRect(px + 1, py, 4, TILE_SIZE);
+      continue;
+    }
+
+    const x = east ? px + Math.round((TILE_SIZE - t) / 2) : px;
+    const y = east ? py : py + Math.round((TILE_SIZE - t) / 2);
+    const w = east ? t : TILE_SIZE;
+    const h = east ? TILE_SIZE : t;
+
+    context.fillStyle = "#000";
+    context.fillRect(x - 1, y - 1, w + 2, h + 2);
+    context.fillStyle = flash ? "#fef3c7" : "#92400e";
+    context.fillRect(x, y, w, h);
+
+    // Damage bar once it's been hit.
+    if (door.hp < door.maxHp) {
+      const bw = TILE_SIZE - 8;
+      const bx = px + 4;
+      const by = py - 4;
+      context.fillStyle = "#000";
+      context.fillRect(bx - 1, by - 1, bw + 2, 4);
+      context.fillStyle = "#ef4444";
+      context.fillRect(bx, by, Math.round(bw * (door.hp / door.maxHp)), 2);
+    }
+  }
+}
+
+  // ---------------------------------------------------------------------------
+// BROKEN DOOR ART (placeholder)
+// ---------------------------------------------------------------------------
+function drawBrokenDoors() {
+  if (!gameState || !gameState.brokenDoors) return;
+
+  for (const door of gameState.brokenDoors) {
+    drawBrokenDoorSprite(door, door.x * TILE_SIZE, door.y * TILE_SIZE);
+  }
+}
+
+// REPLACE THIS with a drawImage call once you have a sprite.
+// (px, py) is the top-left pixel of the door's tile; door.dir is "h" or "v".
+// Example later:
+//   context.drawImage(BROKEN_DOOR_SPRITE, 0, door.dir === "h" ? 0 : 32, 32, 32, px, py, 32, 32);
+function drawBrokenDoorSprite(door, px, py) {
+  const east = door.dir === "h"; // passage runs east-west
+
+  // Splintered planks scattered across the doorway (fixed, so it doesn't flicker).
+  const planks = east
+    ? [[13, 3, 3, 9], [17, 14, 4, 7], [12, 23, 3, 6], [20, 6, 2, 5]]
+    : [[3, 13, 9, 3], [14, 17, 7, 4], [23, 12, 6, 3], [6, 20, 5, 2]];
+
+  for (const [ox, oy, w, h] of planks) {
+    context.fillStyle = "#000";
+    context.fillRect(px + ox - 1, py + oy - 1, w + 2, h + 2);
+    context.fillStyle = "#78350f";
+    context.fillRect(px + ox, py + oy, w, h);
+  }
+
+  // Bent hinge stub on the door frame.
+  context.fillStyle = "#71717a";
+  if (east) context.fillRect(px + 14, py, 4, 3);
+  else context.fillRect(px, py + 14, 3, 4);
+}
+  
+  function isDoorClosedAt(tx, ty) {
   if (!gameState || !gameState.doorMap) return false;
-  const d = gameState.doorMap.get(ty * MAP_WIDTH + tx);
-  return !!d && !d.open;
+
+  const door = gameState.doorMap.get(ty * MAP_WIDTH + tx);
+  return !!door && !door.open;
 }
 
 function getNearbyDoor() {
   if (!gameState || !gameState.doors) return null;
+
   const pc = playerCenter();
-  let best = null;
-  let bestDist = DOOR_INTERACT_DIST;
-  for (const d of gameState.doors) {
-    const dist = Math.hypot(d.x + 0.5 - pc.x, d.y + 0.5 - pc.y);
-    if (dist <= bestDist) {
-      best = d;
-      bestDist = dist;
+  let closestDoor = null;
+  let closestDistance = DOOR_INTERACT_DIST;
+
+  for (const door of gameState.doors) {
+    const doorCenterX = door.x + 0.5;
+    const doorCenterY = door.y + 0.5;
+
+    const distance = Math.hypot(
+      doorCenterX - pc.x,
+      doorCenterY - pc.y
+    );
+
+    if (distance <= closestDistance) {
+      closestDoor = door;
+      closestDistance = distance;
     }
   }
-  return best;
+
+  return closestDoor;
 }
 
 function breakDoor(door) {
-  gameState.doors.splice(gameState.doors.indexOf(door), 1);
+  const index = gameState.doors.indexOf(door);
+  if (index !== -1) gameState.doors.splice(index, 1);
+
   gameState.doorMap.delete(door.y * MAP_WIDTH + door.x);
+
+  door.hp = 0;
+  door.open = true;
+  (gameState.brokenDoors ||= []).push(door);
+
   makeNoise(door.x, door.y, DOOR_BREAK_NOISE_RADIUS, "#ef4444");
 }
 
 function hitDoor(door, damage) {
+  if (!door || door.open) return;
+
   door.hp -= damage;
   door.flashUntil = performance.now() + 120;
-  if (door.hp <= 0) breakDoor(door);
+
+  if (door.hp <= 0) {
+    breakDoor(door);
+  }
 }
 
-// The room on the far side of a door, looking outward from the player's side.
+// Returns the room on the opposite side of the door
+// relative to the supplied side direction.
 function roomBeyondDoor(door, sideX, sideY) {
   for (let step = 1; step <= 3; step++) {
     const tx = door.x + sideX * step;
     const ty = door.y + sideY * step;
-    const room = gameState.rooms.find(
-      (r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h
-    );
+
+    const room = gameState.rooms.find((room) => {
+      return (
+        tx >= room.x &&
+        tx < room.x + room.w &&
+        ty >= room.y &&
+        ty < room.y + room.h
+      );
+    });
+
     if (room) return room;
   }
+
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// DOOR COLLISION
+// ---------------------------------------------------------------------------
+const DOOR_THICKNESS = 0.1; // tiles
+
+// Thin slab across the middle of the door tile, perpendicular to the passage.
+function getDoorSlab(door) {
+  const t = DOOR_THICKNESS;
+  return door.dir === "h"
+    ? { x: door.x + 0.5 - t / 2, y: door.y, w: t, h: 1 } // east-west passage -> vertical slab
+    : { x: door.x, y: door.y + 0.5 - t / 2, w: 1, h: t }; // north-south passage -> horizontal slab
+}
+
+// Does an entity at (x, y) with hitbox `hb` overlap rect `r`?
+function boxHitsRect(x, y, hb, r) {
+  return (
+    x + hb.right > r.x &&
+    x + hb.left < r.x + r.w &&
+    y + hb.bottom > r.y &&
+    y + hb.top < r.y + r.h
+  );
+}
+
+function isBoxBlockedByDoor(x, y, hb) {
+  if (!gameState || !gameState.doors) return false;
+  for (const door of gameState.doors) {
+    if (door.open) continue;
+    if (Math.abs(door.x - x) > 2 || Math.abs(door.y - y) > 2) continue; // cheap reject
+    if (boxHitsRect(x, y, hb, getDoorSlab(door))) return true;
+  }
+  return false;
+}
+
+const DOOR_PUSH_EPS = 0.02;
+
+// If an entity overlaps the door's slab, slide it to whichever side its
+// centre is already on. Returns false if there's no room to do that.
+function nudgeOutOfDoor(entity, hb, door) {
+  const slab = getDoorSlab(door);
+  if (!boxHitsRect(entity.x, entity.y, hb, slab)) return true;
+
+  let nx = entity.x;
+  let ny = entity.y;
+
+  if (door.dir === "h") {
+    const cx = entity.x + (hb.left + hb.right) / 2;
+    nx =
+      cx >= door.x + 0.5
+        ? slab.x + slab.w - hb.left + DOOR_PUSH_EPS
+        : slab.x - hb.right - DOOR_PUSH_EPS;
+  } else {
+    const cy = entity.y + (hb.top + hb.bottom) / 2;
+    ny =
+      cy >= door.y + 0.5
+        ? slab.y + slab.h - hb.top + DOOR_PUSH_EPS
+        : slab.y - hb.bottom - DOOR_PUSH_EPS;
+  }
+
+  if (!isBoxClear(nx, ny, hb)) return false; // would push into a wall
+  entity.x = nx;
+  entity.y = ny;
+  entity.steer = null;
+  return true;
 }
 
 function toggleNearbyDoor() {
@@ -2634,94 +2812,59 @@ function toggleNearbyDoor() {
     return;
   }
 
-  // Can't close a door on top of someone.
- // Keep the detection box accurate to the door asset size
-const DOOR_THRESHOLD = 0.05; 
-// Force the player completely outside the 1.0 tile bounds
-const ESCAPE_DISTANCE = 0.75; 
-
-const enemyInDoorway = gameState.enemies.some(
-  (en) => Math.abs(en.x - door.x) < DOOR_THRESHOLD && Math.abs(en.y - door.y) < DOOR_THRESHOLD
-);
-if (enemyInDoorway) return;
-
-const p = gameState.player;
-const pc = playerCenter();
-const sideX = door.dir === "v" ? (pc.x > door.x + 0.5 ? 1 : -1) : 0;
-const sideY = door.dir === "h" ? (pc.y > door.y + 0.5 ? 1 : -1) : 0;
-
-const playerInDoorway = Math.abs(p.x - door.x) < DOOR_THRESHOLD && 
-                        Math.abs(p.y - door.y) < DOOR_THRESHOLD;
-
-if (playerInDoorway) {
-  if (door.dir === "h") {
-    const direction = sideX !== 0 ? sideX : 1;
-    // Uses ESCAPE_DISTANCE to guarantee the player lands outside the tile radius
-    p.x = door.x + 0.5 + (direction * ESCAPE_DISTANCE);
-  } else {
-    const direction = sideY !== 0 ? sideY : 1;
-    p.y = door.y + 0.5 + (direction * ESCAPE_DISTANCE);
+  // Close it even if someone is clipping the frame: slide them to their side.
+  // Do this while the door is still open so the slab isn't in the way.
+  if (!nudgeOutOfDoor(gameState.player, HITBOX, door)) return;
+  for (const e of gameState.enemies) {
+    if (!nudgeOutOfDoor(e, ENEMY_HITBOX, door)) return;
   }
-}
-
-door.open = false;
-
-
-
-  // Alert enemies that can see the player right now are witnesses.
-  const witnesses = gameState.enemies.filter(
-    (e) => e.state === "alert" && e.canSeePlayer
-  );
 
   door.open = false;
+  enemiesReactToDoorClose(door);
+}
 
-  for (const e of witnesses) {
-    const ec = enemyCenter(e);
-    // If they can still see the player, the door isn't in the way.
-    if (hasLineOfSight(ec.x, ec.y, pc.x, pc.y)) continue;
+// Alert enemies that were watching the player make them bash the door down.
+function enemiesReactToDoorClose(door) {
+  const pc = playerCenter();
+  const dcx = door.x + 0.5;
+  const dcy = door.y + 0.5;
 
+  // Which side of the door the player is on = the room enemies will search.
+  const sideX = door.dir === "h" ? (pc.x >= dcx ? 1 : -1) : 0;
+  const sideY = door.dir === "v" ? (pc.y >= dcy ? 1 : -1) : 0;
+  const room = roomBeyondDoor(door, sideX, sideY);
+
+  for (const e of gameState.enemies) {
+    if (e.state !== "alert" || !e.canSeePlayer) continue;
     e.doorTarget = door;
-    e.doorRoom = roomBeyondDoor(door, sideX, sideY);
-    e.doorHitTimer = null;
-    e.lastSeen = { x: p.x, y: p.y };
-    e.lastSeenTime = performance.now();
+    e.doorRoom = room;
+    e.doorHitTimer = ENEMY_DOOR_HIT_INTERVAL_MS;
+    e.steer = null;
   }
 }
 
-function drawDoors(timestamp = performance.now()) {
-  if (!gameState || !gameState.doors) return;
-
-  for (const d of gameState.doors) {
-    const px = d.x * TILE_SIZE;
-    const py = d.y * TILE_SIZE;
-    const horizontal = d.dir === "h";
-    const hurt = 1 - d.hp / d.maxHp;
-    const flash = timestamp < d.flashUntil;
-
-    let x, y, w, h;
-    if (d.open) {
-      // Swung back against the wall.
-      [x, y, w, h] = horizontal ? [px + 12, py, 8, 6] : [px, py + 12, 6, 8];
-    } else {
-      [x, y, w, h] = horizontal
-        ? [px + 12, py + 1, 8, TILE_SIZE - 2]
-        : [px + 1, py + 12, TILE_SIZE - 2, 8];
-    }
-
-    context.fillStyle = "#451a03";
-    context.fillRect(x - 1, y - 1, w + 2, h + 2);
-    context.fillStyle = flash ? "#fde68a" : hurt > 0.5 ? "#9a3412" : "#b45309";
-    context.fillRect(x, y, w, h);
-
-    if (!d.open && hurt > 0) {
-      context.fillStyle = "#1c0a00";
-      const cracks = Math.ceil(hurt * 3);
-      for (let i = 0; i < cracks; i++) {
-        if (horizontal) context.fillRect(x + 2, y + 5 + i * 9, w - 4, 1);
-        else context.fillRect(x + 5 + i * 9, y + 2, 1, h - 4);
-      }
-    }
+// Where an enemy should stand to hit the door: on its own side of it.
+function doorApproachPoint(door, e) {
+  const off = 0.8;
+  if (door.dir === "h") {
+    const side = e.x + 0.5 >= door.x + 0.5 ? 1 : -1;
+    return { x: door.x + side * off, y: door.y };
   }
+  const side = e.y + 0.5 >= door.y + 0.5 ? 1 : -1;
+  return { x: door.x, y: door.y + side * off };
+}
+
+  // Do not close the door if an enemy is standing in its collision area.
+  if (isEnemyBlockingDoor(door)) {
+    return;
+  }
+
+  // Move the player out before closing the door.
+  if (isPlayerInsideDoorTile(door)) {
+    movePlayerOutsideDoor(door);
+  }
+
+  door.open = false;
 }
 
   // ---------------------------------------------------------------------------
@@ -3322,6 +3465,7 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
 
     // One door on the 1-wide connectors (wide ones stay open).
     const doors = [];
+   const brokenDoors = [];
     for (const c of connectors) {
       if (c.wide) continue;
       const cells = [];
@@ -3331,15 +3475,21 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
         }
       }
       const cell = cells[randInt(0, cells.length - 1)];
-      doors.push({
-        x: cell.x,
-        y: cell.y,
-        dir: c.horizontal ? "h" : "v", // h = passage runs east-west
-        open: false,
-        hp: DOOR_HP,
-        maxHp: DOOR_HP,
-        flashUntil: 0,
-      });
+      const door = {
+  x: cell.x,
+  y: cell.y,
+  dir: c.horizontal ? "h" : "v", // h = passage runs east-west
+  open: false,
+  hp: DOOR_HP,
+  maxHp: DOOR_HP,
+  flashUntil: 0,
+};
+
+if (Math.random() < BROKEN_DOOR_CHANCE) {
+  brokenDoors.push(door); // never enters doors/doorMap, so it's just an open gap
+} else {
+  doors.push(door);
+}
     }
     if (rooms.length === 0) {
       console.error("No rooms were generated.");
@@ -3536,6 +3686,7 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
       map: newMap,
       rooms: rooms,
       doors: doors,
+      brokenDoors: brokenDoors,
       doorMap: new Map(doors.map((d) => [d.y * MAP_WIDTH + d.x, d])),
       player: player,
       enemies: enemies,
