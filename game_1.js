@@ -3188,19 +3188,26 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
       color: "#980002",
     });
 
+        // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
+    const blocked = new Set();
+    const blockTile = (x, y) => blocked.add(`${x},${y}`);
+
+    for (const it of items) blockTile(it.x, it.y);
+    for (const s of stairs) blockTile(s.x, s.y);
+    for (const e of enemies) {
+      blockTile(e.x, e.y);
+      for (const wp of e.patrol) blockTile(wp.x, wp.y);
+    }
+
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i];
-      const roomCenterX = Math.floor(room.x + room.w / 2);
-      const roomCenterY = Math.floor(room.y + room.h / 2);
 
       for (let t = 0; t < 4; t++) {
         const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
         const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
 
-        const taken =
-          (trapX === roomCenterX && trapY === roomCenterY) ||
-          items.some((it) => it.x === trapX && it.y === trapY) ||
-          stairs.some((s) => s.x === trapX && s.y === trapY);
+        if (blocked.has(`${trapX},${trapY}`)) continue;
+        blockTile(trapX, trapY); // also stops two traps sharing a tile
 
         items.push({
           id: `trap-${level}-${i}-${t}`,
