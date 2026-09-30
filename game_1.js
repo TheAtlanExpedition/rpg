@@ -17,7 +17,9 @@
     1,
     Math.floor(window.devicePixelRatio || 1)
   );
-  const CANVAS_SCALE = 3;
+  const CANVAS_SCALE = 1;
+  const INV_SPACE = 768;                        // the inventory is designed on a 768x768 grid
+  const INV_SCALE = DISPLAY_WIDTH / INV_SPACE;  // maps that grid onto the canvas
 
   canvas.style.width = `${DISPLAY_WIDTH * CANVAS_SCALE}px`;
   canvas.style.height = `${DISPLAY_HEIGHT * CANVAS_SCALE}px`;
@@ -264,6 +266,8 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const STAMINA_WALK_RECHARGE_RATE =
     STAMINA_DEPLETION_RATE / 1.5; // 0.667 per second
   const STAMINA_SNEAK_RECHARGE_RATE =
+    STAMINA_DEPLETION_RATE;
+    const STAMINA_HIDING_RECHARGE_RATE =
     STAMINA_DEPLETION_RATE; // 1 per second
   const STAMINA_RECHARGE_DELAY = 1.5; // seconds
   const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
@@ -354,16 +358,188 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const DEBUG_SHEET = false;
   let lastFireTime = -Infinity;
   const FIRE_COOLDOWN = 2000;
+// ---------------------------------------------------------------------------
+// STAIRS
+// ---------------------------------------------------------------------------
+
+// Decides what the down stairs of a new dungeon lead to.
+function rollDownPlans(plan) {
+  if (plan.type === "deadEnd") {
+    // chainLeft counts this dungeon, so the last one gets no down stairs.
+    return plan.chainLeft > 1
+      ? [{ type: "deadEnd", chainLeft: plan.chainLeft - 1 }]
+      : [];
+  }
+
+  if (Math.random() < STAIRS_BRANCH_CHANCE) {
+    const depth =
+      DEAD_END_MIN_DEPTH +
+      Math.floor(
+        Math.random() * (DEAD_END_MAX_DEPTH - DEAD_END_MIN_DEPTH + 1)
+      );
+    const plans = [{ type: "deadEnd", chainLeft: depth }, { type: "main" }];
+    if (Math.random() < 0.5) plans.reverse(); // don't always put the dead end first
+    return plans;
+  }
+
+  return [{ type: "main" }];
+}
+
+function createDungeon(depth, plan, parentId) {
+  const downPlans = rollDownPlans(plan);
+
+  let state = null;
+  for (let tries = 0; tries < 20 && !state; tries++) {
+    state = createGameState(depth, null, {
+      hasUpStairs: parentId !== null,
+      downPlans,
+    });
+  }
+  if (!state) return null;
+
+  state.id = nextDungeonId++;
+  state.depth = depth;
+  state.parentId = parentId;
+  dungeons.set(state.id, state);
+  return state;
+}
+
+function calmEnemies(state) {
+  for (const e of state.enemies) {
+    e.state = "patrol";
+    e.suspicion = 0;
+    e.canSeePlayer = false;
+    e.searching = false;
+    e.steer = null;
+    e.waitTimer = 0;
+    e.attackSpot = null;
+    e.breakTimer = null;
+  }
+}
+
+function useStairs(stair) {
+  const from = gameState;
+  const player = from.player;
+
+  // hidingSpots is a shared module-level array, so save this dungeon's copy.
+  from.hidingSpots = hidingSpots.slice();
+
+  let target = null;
+  if (stair.kind === "up") {
+    target = dungeons.get(from.parentId);
+  } else if (stair.targetId !== null) {
+    target = dungeons.get(stair.targetId);
+  } else {
+    target = createDungeon(from.depth + 1, stair.plan, from.id);
+    if (target) stair.targetId = target.id;
+  }
+
+  if (!target) {
+    // Generation failed: put everything back as it was.
+    hidingSpots.length = 0;
+    hidingSpots.push(...from.hidingSpots);
+    globalPlayer = player;
+    return;
+  }
+
+  const arrival =
+    stair.kind === "down"
+      ? target.stairs.find((s) => s.kind === "up")
+      : target.stairs.find((s) => s.kind === "down" && s.targetId === from.id);
+
+  // Carry the player and inventory into the new dungeon.
+  target.player = player;
+  target.inventory = from.inventory;
+  player.x = arrival.x;
+  player.y = arrival.y;
+  player.hidden = false;
+  player.hidingSpot = null;
+
+  from.projectiles.length = 0;
+  target.projectiles.length = 0;
+  noiseRipples.length = 0;
+  calmEnemies(target);
+
+  gameState = target;
+  globalPlayer = player;
+  hidingSpots.length = 0;
+  hidingSpots.push(...target.hidingSpots);
+  stairsLocked = true; // don't bounce straight back
+
+  console.log(
+    "Entered dungeon",
+    target.id,
+    "depth",
+    target.depth,
+    "down stairs:",
+    target.stairs.filter((s) => s.kind === "down").length
+  );
+}
+
+function updateStairs() {
+  if (!gameState || !gameState.stairs || gameState.gameOver) return;
+  const p = gameState.player;
+  if (p.hidden) return;
+
+  const touching = gameState.stairs.find(
+    (s) => Math.hypot(p.x - s.x, p.y - s.y) < STAIRS_TRIGGER_RADIUS
+  );
+
+  if (!touching) {
+    stairsLocked = false;
+    return;
+  }
+  if (stairsLocked) return;
+
+  useStairs(touching);
+}
+
+// Placeholder art: little stair steps (lighter = up, darker = down).
+function drawStairs() {
+  if (!gameState || !gameState.stairs) return;
+
+  for (const s of gameState.stairs) {
+    const px = s.x * TILE_SIZE;
+    const py = s.y * TILE_SIZE;
+    const down = s.kind === "down";
+
+    context.fillStyle = "#0f172a";
+    context.fillRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+
+    context.fillStyle = down ? "#64748b" : "#cbd5e1";
+    for (let i = 0; i < 4; i++) {
+      const inset = down ? i * 2 : (3 - i) * 2;
+      context.fillRect(
+        px + 4 + inset,
+        py + 5 + i * 6,
+        TILE_SIZE - 8 - inset * 2,
+        3
+      );
+    }
+  }
+}
 
   // ---------------------------------------------------------------------------
   // TRAPS
   // ---------------------------------------------------------------------------
   const TRAP_DAMAGE = 30;
-  const TRAP_ENEMY_DAMAGE = 20;   // enemies take less than the player
+  const TRAP_ENEMY_DAMAGE = 15;   // enemies take less than the player
   const TRAP_KNOCKBACK = 0.5;     // tiles
   const TRAP_TRIGGER_RADIUS = 0.4;
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
+
+  // ---------------------------------------------------------------------------
+// STAIRS / DUNGEON GRAPH
+// ---------------------------------------------------------------------------
+const STAIRS_BRANCH_CHANCE = 0.3; // chance a normal dungeon gets 2 down stairs
+const DEAD_END_MIN_DEPTH = 1;     // dungeons in a dead-end branch (last has no stairs)
+const DEAD_END_MAX_DEPTH = 3;
+const STAIRS_TRIGGER_RADIUS = 0.5;
+
+const dungeons = new Map(); // id -> gameState of every dungeon generated so far
+let nextDungeonId = 0;
+let stairsLocked = false;   // true after arriving until the player steps off the stairs
 
   // ---------------------------------------------------------------------------
   // ENEMY VISION & DETECTION
@@ -448,12 +624,17 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // ---------------------------------------------------------------------------
   // INPUT
   // ---------------------------------------------------------------------------
+// Inventory keys
   window.addEventListener("keydown", (event) => {
-    if (event.code === "KeyE" && !event.repeat) {
-      if (!gameRunning || !gameState || inventoryOpen) return;
-      toggleHide();
-    }
-  });
+  if (event.code !== "KeyE" || event.repeat) return;
+  if (!gameRunning || !gameState) return;
+
+  if (inventoryOpen) {
+    useSelectedItem();
+  } else {
+    toggleHide();
+  }
+});
 window.addEventListener("keydown", (event) => {
   if (event.key.toLowerCase() !== "g") return;
   if (event.repeat) return;
@@ -577,7 +758,10 @@ window.addEventListener("keyup", (event) => {
     noiseRipples.length = 0;
     lastFootstepTime = -Infinity;
 
-    const newGameState = createGameState(1, null, []);
+    dungeons.clear();
+    nextDungeonId = 0;
+    stairsLocked = false;
+    const newGameState = createDungeon(1, { type: "main" }, null);
 
     if (!newGameState) {
       console.error("Game could not start because no rooms were generated.");
@@ -629,6 +813,7 @@ window.addEventListener("keyup", (event) => {
     updateEnemies(timestamp);
     updateProjectiles(timestamp);
     pickupNearbyItems();
+    updateStairs();
     drawGame(timestamp);
 
     gameLoopId = requestAnimationFrame(gameLoop);
@@ -649,7 +834,14 @@ window.addEventListener("keyup", (event) => {
     const player = gameState.player;
     player.isMoving = false;
 
-    if (gameState.gameOver || inventoryOpen || player.hidden) return;
+    if (gameState.gameOver || inventoryOpen) return;
+
+    if (player.hidden) {
+      player.gait = "walk";
+      player.wasRunning = false;
+      rechargeStamina(STAMINA_HIDING_RECHARGE_RATE);
+      return;
+    }
 
     let dx = 0;
     let dy = 0;
@@ -1035,7 +1227,8 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawMap();
     drawRipples();
     drawHidingSpots();
-    drawVisionCones();
+    drawStairs(); 
+  //  drawVisionCones();
     drawPlayer(timestamp);
     drawItems(timestamp);
     drawProjectiles();
@@ -1044,18 +1237,20 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
 
     context.restore();
     if (gameState.gameOver) drawGameOver();
+  
     context.setTransform(
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0,
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0
     );
 
-    if (DEBUG_SHEET) drawSheetDebug();
+     if (DEBUG_SHEET) drawSheetDebug();
     context.imageSmoothingEnabled = false;
     drawInventory(timestamp);
+    drawHUD();          // <-- last line in drawGame
   }
 
   function drawSheetDebug() {
@@ -2308,6 +2503,7 @@ function steerToward(
   }
 
   const PICKUP_RADIUS = 0.6;
+  const POTION_HEAL = 30; // change to taste (use Infinity for a full heal)
 
 function pickupNearbyItems() {
   if (!gameState || !globalPlayer) return;
@@ -2381,17 +2577,17 @@ function pickupNearbyItems() {
   function drawInventory(timestamp = performance.now()) {
     if (!inventoryOpen || !gameState) return;
 
-    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE; // 768
-    const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
+    const cssWidth = INV_SPACE;
+    const cssHeight = INV_SPACE;
     const panelSize = 750;
     const invX = Math.floor((cssWidth - panelSize) / 2);
     const invY = Math.floor((cssHeight - panelSize) / 2);
 
     context.setTransform(
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0,
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0
     );
@@ -2507,64 +2703,113 @@ if (slot.count > 1) {
 function dropSelectedItem() {
   if (!gameState || !globalPlayer || !inventoryOpen) return;
 
-  const selectedIndex = selectedRow * INV_COLS + selectedCol;
-
-  let currentIndex = 0;
-  let selectedType = null;
-  let selectedStackIndex = -1;
-
-  for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
-    for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
-      if (currentIndex === selectedIndex) {
-        selectedType = type;
-        selectedStackIndex = stackIndex;
-        break;
-      }
-
-      currentIndex++;
-    }
-
-    if (selectedType !== null) break;
-  }
-
-  if (selectedType === null || selectedStackIndex === -1) {
+  const selected = getSelectedStack();
+  if (!selected) {
     console.log("No item selected.");
     return;
   }
 
-const dropDistance = 0.1;
+  gameState.items.push({
+    idName: selected.type,
+    type: selected.type,
+    x: globalPlayer.x,
+    y: globalPlayer.y + 0.1,
+    mustMoveAway: true,
+  });
 
-const dropX = globalPlayer.x;
-const dropY = globalPlayer.y + dropDistance;
+  removeOneFromStack(selected.type, selected.stackIndex);
+  console.log("Dropped:", selected.type);
+}
+// Finds the inventory stack under the cursor.
+function getSelectedStack() {
+  const selectedIndex = selectedRow * INV_COLS + selectedCol;
+  let currentIndex = 0;
 
-const droppedItem = {
-  idName: selectedType,
-  type: selectedType,
-  x: dropX,
-  y: dropY,
-  mustMoveAway: true,
-};
-
-gameState.items.push(droppedItem);
-
-
-
-  // Remove exactly one item from the inventory
-  const stacks = gameState.inventory[selectedType];
-
-  stacks[selectedStackIndex]--;
-
-  if (stacks[selectedStackIndex] <= 0) {
-    stacks.splice(selectedStackIndex, 1);
+  for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
+    for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
+      if (currentIndex === selectedIndex) return { type, stackIndex };
+      currentIndex++;
+    }
   }
+  return null;
+}
+// Health and Stamina
+function drawBar(x, y, w, h, fraction, fillColor, label) {
+  const f = Math.max(0, Math.min(1, fraction));
 
-  if (stacks.length === 0) {
-    delete gameState.inventory[selectedType];
-  }
+  // Border + background
+  context.fillStyle = "#000";
+  context.fillRect(x - 1, y - 1, w + 2, h + 2);
+  context.fillStyle = "#27272a";
+  context.fillRect(x, y, w, h);
 
-  console.log("Dropped:", selectedType);
+  // Fill
+  context.fillStyle = fillColor;
+  context.fillRect(x, y, Math.round(w * f), h);
+
+  // Label
+  context.fillStyle = "#fff";
+  context.font = "6px monospace";
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillText(label, x + 2, y + h / 2 + 0.5);
 }
 
+// Placeholder HUD, drawn in screen space (not affected by camera or zoom).
+function drawHUD() {
+  if (!gameState || !gameState.player || inventoryOpen) return;
+  const p = gameState.player;
+
+  context.save();
+  // Reset to screen space (256x256 view), ignoring camera and zoom.
+  context.setTransform(
+    devicePixelRatioValue,
+    0,
+    0,
+    devicePixelRatioValue,
+    0,
+    0
+  );
+  context.imageSmoothingEnabled = false;
+
+  const x = 6;
+  const w = 80;
+  const h = 8;
+
+  drawBar(x, 6, w, h, p.hp / (p.maxHp ?? 100), "#dc2626", "HP");
+
+  const staminaColor = p.staminaExhausted ? "#a16207" : "#22c55e";
+  drawBar(x, 18, w, h, p.stamina / STAMINA_MAX, staminaColor, "STA");
+
+  context.restore();
+}
+// Removes exactly one item from a stack, cleaning up empty stacks/types.
+function removeOneFromStack(type, stackIndex) {
+  const stacks = gameState.inventory[type];
+  stacks[stackIndex]--;
+
+  if (stacks[stackIndex] <= 0) stacks.splice(stackIndex, 1);
+  if (stacks.length === 0) delete gameState.inventory[type];
+}
+
+function useSelectedItem() {
+  if (!gameState || !gameState.player || !inventoryOpen) return;
+
+  const selected = getSelectedStack();
+  if (!selected) return;
+
+  if (selected.type === "healthPotion") {
+    const p = gameState.player;
+    const maxHp = p.maxHp ?? 100;
+
+    // Don't waste a potion at full health.
+    if (p.hp >= maxHp) return;
+
+    p.hp = Math.min(maxHp, p.hp + POTION_HEAL);
+    removeOneFromStack(selected.type, selected.stackIndex);
+    console.log("Used health potion. HP:", p.hp);
+  }
+}
 
 
 
@@ -2728,7 +2973,7 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
   // ---------------------------------------------------------------------------
   // LEVEL GENERATION
   // ---------------------------------------------------------------------------
-  function createGameState(level, existingPlayer, existingScrolls) {
+ function createGameState(level, existingPlayer, options = {}) {
     const newMap = Array.from({ length: MAP_HEIGHT }, () =>
       Array(MAP_WIDTH).fill(TileType.WALL)
     );
@@ -2792,6 +3037,34 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     }
 
     const startRoom = rooms[0];
+        // --- Stairs ---------------------------------------------------------
+    const stairs = [];
+
+    // Return stairs sit on the start room's spawn tile.
+    if (options.hasUpStairs) {
+      stairs.push({
+        kind: "up",
+        x: startRoom.x + 1,
+        y: startRoom.y + 1,
+        targetId: null,
+      });
+    }
+
+    // Each down stairs goes in a different room (never the start room).
+    const downPlans = options.downPlans || [];
+    const stairRooms = rooms.slice(1).sort(() => Math.random() - 0.5);
+    if (stairRooms.length < downPlans.length) return null; // caller retries
+
+    downPlans.forEach((plan, i) => {
+      const room = stairRooms[i];
+      stairs.push({
+        kind: "down",
+        x: room.x + room.w - 2,
+        y: room.y + 1,
+        targetId: null,
+        plan,
+      });
+    });
     const player = existingPlayer
       ? {
           ...existingPlayer,
@@ -2838,7 +3111,7 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     const enemies = [];
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i];
-      const enemyHp = 30 + level * 5;
+      const enemyHp = 50 + level * 5;
       enemies.push({
         id: `e-${level}-${i}`,
         x: room.x + Math.floor(room.w / 2),
@@ -2926,8 +3199,8 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
 
         const taken =
           (trapX === roomCenterX && trapY === roomCenterY) ||
-          items.some((it) => it.x === trapX && it.y === trapY);
-        if (taken) continue;
+          items.some((it) => it.x === trapX && it.y === trapY) ||
+          stairs.some((s) => s.x === trapX && s.y === trapY);
 
         items.push({
           id: `trap-${level}-${i}-${t}`,
@@ -2948,6 +3221,8 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
       player: player,
       enemies: enemies,
       items: items,
+      stairs: stairs,
+      hidingSpots: hidingSpots.slice(),
       trapTiles: new Set(
         items.filter((it) => it.type === "trap").map((it) => it.y * MAP_WIDTH + it.x)
       ),
