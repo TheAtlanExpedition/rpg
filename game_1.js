@@ -229,24 +229,28 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
       frames: 1,
       frameWidth: 25,
       frameHeight: 11,
+      worldScale: 0.5,
     },
     scrollFreezeCloud: {
       image: ITEM_SPRITES.scrollFreezeCloud,
       frames: 1,
       frameWidth: 25,
       frameHeight: 11,
+      worldScale: 0.5,
     },
     scrollChainLightning: {
       image: ITEM_SPRITES.scrollChainLightning,
       frames: 1,
       frameWidth: 25,
       frameHeight: 11,
+      worldScale: 0.5,
     },
     healthPotion: {
       image: ITEM_SPRITES.healthPotion,
       frames: 8,
       frameWidth: 38,
       frameHeight: 38,
+      worldScale: 0.5,
     },
   };
 
@@ -256,6 +260,12 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const PLAYER_RUN_SPEED = 5.2;
   const STAMINA_MAX = 3;
   const STAMINA_START_MIN = 0.35;
+  const STAMINA_DEPLETION_RATE = 1;
+  const STAMINA_WALK_RECHARGE_RATE =
+    STAMINA_DEPLETION_RATE / 1.5; // 0.667 per second
+  const STAMINA_SNEAK_RECHARGE_RATE =
+    STAMINA_DEPLETION_RATE; // 1 per second
+  const STAMINA_RECHARGE_DELAY = 3; // seconds
   const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
   const PROJECTILE_HIT_RADIUS = 0.75; // how close to an enemy's centre counts as a hit
 
@@ -348,7 +358,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // ---------------------------------------------------------------------------
   // TRAPS
   // ---------------------------------------------------------------------------
-  const TRAP_DAMAGE = 10;
+  const TRAP_DAMAGE = 50;
   const TRAP_TRIGGER_RADIUS = 0.4;
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
@@ -556,7 +566,7 @@ window.addEventListener("keyup", (event) => {
   // ---------------------------------------------------------------------------
   // CORE GAME LOOP
   // ---------------------------------------------------------------------------
-  function startGame1() {
+  function startGame3() {
     gameStart = performance.now();
     lastFrameTime = null;
     lastEnemyTime = null;
@@ -584,7 +594,7 @@ window.addEventListener("keyup", (event) => {
     });
   }
 
-  function stopGame1() {
+  function stopGame3() {
     gameRunning = false;
     heldMoveKeys.clear();
     if (gameLoopId) {
@@ -647,23 +657,66 @@ window.addEventListener("keyup", (event) => {
     if (heldMoveKeys.has("w")) dy -= 1;
     if (heldMoveKeys.has("s")) dy += 1;
 
-    const sneak = heldGaitKeys.sneak;
-    const wantRun = heldGaitKeys.run && !sneak;
-    const canRun = player.stamina > (player.wasRunning ? 0 : STAMINA_START_MIN);
+   const sneak = heldGaitKeys.sneak;
+const wantRun = heldGaitKeys.run && !sneak;
 
-    if (sneak) {
-      player.gait = "sneak";
-      player.wasRunning = false;
-      player.stamina = Math.min(STAMINA_MAX, player.stamina + deltaTime);
-    } else if (wantRun && canRun && (dx !== 0 || dy !== 0)) {
-      player.gait = "run";
-      player.stamina = Math.max(0, player.stamina - deltaTime);
-      player.wasRunning = player.stamina > 0;
-    } else {
-      player.gait = "walk";
-      player.wasRunning = false;
-      player.stamina = Math.min(STAMINA_MAX, player.stamina + deltaTime);
-    }
+// Running is unavailable after exhaustion until stamina is completely full.
+const canRun =
+  !player.staminaExhausted &&
+  player.stamina > (player.wasRunning ? 0 : STAMINA_START_MIN);
+
+function rechargeStamina(rechargeRate) {
+  // Exhaustion delay must finish before stamina starts recharging.
+  if (player.staminaRechargeDelay > 0) {
+    player.staminaRechargeDelay = Math.max(
+      0,
+      player.staminaRechargeDelay - deltaTime
+    );
+    return;
+  }
+
+  player.stamina = Math.min(
+    STAMINA_MAX,
+    player.stamina + rechargeRate * deltaTime
+  );
+
+  // The player can run again only after reaching full stamina.
+  if (player.stamina >= STAMINA_MAX) {
+    player.stamina = STAMINA_MAX;
+    player.staminaExhausted = false;
+  }
+}
+
+if (sneak) {
+  player.gait = "sneak";
+  player.wasRunning = false;
+
+  // Sneaking recharges at the full rate.
+  rechargeStamina(STAMINA_SNEAK_RECHARGE_RATE);
+} else if (wantRun && canRun && (dx !== 0 || dy !== 0)) {
+  player.gait = "run";
+
+  // Running depletes stamina at the maximum rate.
+  player.stamina = Math.max(
+    0,
+    player.stamina - STAMINA_DEPLETION_RATE * deltaTime
+  );
+
+  if (player.stamina <= 0) {
+    player.stamina = 0;
+    player.staminaExhausted = true;
+    player.staminaRechargeDelay = STAMINA_RECHARGE_DELAY;
+    player.wasRunning = false;
+  } else {
+    player.wasRunning = true;
+  }
+} else {
+  player.gait = "walk";
+  player.wasRunning = false;
+
+  // Walking recharges 1.5 times slower than running depletes stamina.
+  rechargeStamina(STAMINA_WALK_RECHARGE_RATE);
+}
 
     if (dx === 0 && dy === 0) {
       return;
@@ -965,10 +1018,10 @@ window.addEventListener("keyup", (event) => {
     drawRipples();
     drawHidingSpots();
     drawVisionCones();
-     drawItems(timestamp);
+    drawPlayer(timestamp);
+    drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
-    drawPlayer(timestamp);
     drawHidePrompt();
 
     context.restore();
@@ -1096,61 +1149,79 @@ if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
     }
   }
 
-  function drawItems(timestamp = performance.now()) {
-    if (!gameState || !gameState.items) return;
+function drawItems(timestamp = performance.now()) {
+  if (!gameState || !gameState.items) return;
 
-    for (const item of gameState.items) {
-      if (item.type === "trap") {
-        drawTrap(item, timestamp);
-        continue;
-      }
-      const animation = ITEM_ANIMATIONS[item.idName];
-
-      if (!animation || !animation.image) continue;
-      if (!animation.image.complete || animation.image.naturalWidth === 0) {
-        continue;
-      }
-
-      const worldW = animation.frameWidth;
-      const worldH = animation.frameHeight;
-
-      const frame =
-        animation.frames > 1
-          ? Math.floor((timestamp / 1000) * ITEM_ANIMATION_FPS) %
-            animation.frames
-          : 0;
-
-      const sourceX = frame * animation.frameWidth;
-      const sourceY = 0;
-
-      const bob = Math.round(Math.sin(timestamp / 400) * 2);
-
-      const tileX = item.x * TILE_SIZE;
-      const tileY = item.y * TILE_SIZE;
-
-      const drawX = Math.floor(tileX + (TILE_SIZE - worldW) / 2);
-      const drawY = Math.floor(tileY + TILE_SIZE - worldH - 10) - bob;
-
-      context.imageSmoothingEnabled = false;
-      context.shadowColor = "transparent";
-      context.shadowBlur = 0;
-
-      context.fillStyle = "rgba(0, 0, 0, 0.35)";
-      context.fillRect(drawX + 2, tileY + TILE_SIZE - 6, worldW - 4, 2);
-
-      context.drawImage(
-        animation.image,
-        sourceX,
-        sourceY,
-        animation.frameWidth,
-        animation.frameHeight,
-        drawX,
-        drawY,
-        worldW,
-        worldH
-      );
+  for (const item of gameState.items) {
+    if (item.type === "trap") {
+      drawTrap(item, timestamp);
+      continue;
     }
+
+    // Get the animation before using it
+    const animation = ITEM_ANIMATIONS[item.idName];
+
+    if (!animation || !animation.image) continue;
+
+    if (
+      !animation.image.complete ||
+      animation.image.naturalWidth === 0
+    ) {
+      continue;
+    }
+
+    const worldScale = animation.worldScale ?? 1;
+
+    const worldW = Math.round(animation.frameWidth * worldScale);
+    const worldH = Math.round(animation.frameHeight * worldScale);
+
+    const frame =
+      animation.frames > 1
+        ? Math.floor((timestamp / 1000) * ITEM_ANIMATION_FPS) %
+          animation.frames
+        : 0;
+
+    const sourceX = frame * animation.frameWidth;
+    const sourceY = 0;
+
+    const bob = Math.round(Math.sin(timestamp / 400) * 2);
+
+    const tileX = item.x * TILE_SIZE;
+    const tileY = item.y * TILE_SIZE;
+
+    const drawX = Math.floor(
+      tileX + (TILE_SIZE - worldW) / 2
+    );
+
+    const drawY =
+      Math.floor(tileY + TILE_SIZE - worldH - 10) - bob;
+
+    context.imageSmoothingEnabled = false;
+    context.shadowColor = "transparent";
+    context.shadowBlur = 0;
+
+    context.fillStyle = "rgba(0, 0, 0, 0.35)";
+    context.fillRect(
+      drawX + 2,
+      tileY + TILE_SIZE - 6,
+      Math.max(1, worldW - 4),
+      2
+    );
+
+    context.drawImage(
+      animation.image,
+      sourceX,
+      sourceY,
+      animation.frameWidth,
+      animation.frameHeight,
+      drawX,
+      drawY,
+      worldW,
+      worldH
+    );
   }
+}
+
 
   function drawTrap(trap, now) {
     const cx = Math.round(trap.x * TILE_SIZE + TILE_SIZE / 2);
@@ -2132,7 +2203,6 @@ function drawPillar(pillar) {
 function pickupNearbyItems() {
   if (!gameState || !globalPlayer) return;
 
-  const now = performance.now();
   const remainingItems = [];
 
   for (const item of gameState.items) {
@@ -2141,15 +2211,21 @@ function pickupNearbyItems() {
       continue;
     }
 
-    if (item.canPickupAt && now < item.canPickupAt) {
-      remainingItems.push(item);
-      continue;
-    }
-
     const distance = Math.hypot(
       item.x - globalPlayer.x,
       item.y - globalPlayer.y
     );
+
+    // A dropped item stays unavailable until the player
+    // moves outside the pickup range.
+    if (item.mustMoveAway) {
+      if (distance > PICKUP_RADIUS) {
+        item.mustMoveAway = false;
+      } else {
+        remainingItems.push(item);
+        continue;
+      }
+    }
 
     if (distance < PICKUP_RADIUS) {
       addItemToInventory(item.idName);
@@ -2161,6 +2237,7 @@ function pickupNearbyItems() {
 
   gameState.items = remainingItems;
 }
+
 
 
 
@@ -2346,15 +2423,11 @@ function dropSelectedItem() {
     return;
   }
 
-  const rotation =
-    globalPlayer.rotation * (Math.PI / 180);
-
-const dropDistance = 0.8;
+const dropDistance = 0.1;
 
 const dropX = globalPlayer.x;
 const dropY = globalPlayer.y + dropDistance;
 
-// Add item to the world
 const droppedItem = {
   idName: selectedType,
   type: selectedType,
@@ -2364,6 +2437,8 @@ const droppedItem = {
 };
 
 gameState.items.push(droppedItem);
+
+
 
   // Remove exactly one item from the inventory
   const stacks = gameState.inventory[selectedType];
@@ -2623,6 +2698,9 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
           wasRunning: false,
           hidden: false,
           hidingSpot: null,
+          stamina: STAMINA_MAX,
+          staminaExhausted: false,
+          staminaRechargeDelay: 0,
         }
       : {
           id: "player",
@@ -2641,6 +2719,9 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
           wasRunning: false,
           hidden: false,
           hidingSpot: null,
+          stamina: STAMINA_MAX,
+          staminaExhausted: false,
+          staminaRechargeDelay: 0,
         };
 
     globalPlayer = player;
@@ -2768,6 +2849,6 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     };
   }
 
-  window.startGame1 = startGame1;
-  window.stopGame1 = stopGame1;
+  window.startGame3 = startGame3;
+  window.stopGame3 = stopGame3;
 }
