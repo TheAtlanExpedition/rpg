@@ -270,7 +270,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
     const STAMINA_HIDING_RECHARGE_RATE =
     STAMINA_DEPLETION_RATE; // 1 per second
   const STAMINA_RECHARGE_DELAY = 1.5; // seconds
-  const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
+  const PROJECTILE_SPEED = 7; // tiles per second (continuous, any angle)
   const PROJECTILE_HIT_RADIUS = 0.75; // how close to an enemy's centre counts as a hit
 
   let gameRunning = false;
@@ -613,9 +613,9 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   const HIDE_BREAK_NOISE_RADIUS = 5;
   const HIDE_SPOT_TYPES = ["closet", "crate"];
   const HIDE_SPOTS_PER_ROOM = 3;
-  const HIDE_SMASH_CHANCE = 0.35;            // chance a searched room loses a spot at all
+  const HIDE_SMASH_CHANCE = 0.5;            // chance a searched room loses a spot at all
   const HIDE_ROOM_ROLL_COOLDOWN_MS = 20000;  // a room only rolls once per this window
-  const HIDE_SUSPECT_LIMIT = 3;              // this many suspicious visits, then it breaks the spot
+  const HIDE_SUSPECT_LIMIT = 2;              // this many suspicious visits, then it breaks the spot
   const HIDE_SUSPECT_RADIUS = 1.5;           // an investigation this close to a spot counts as "at" it
   const HIDE_SUSPECT_COOLDOWN_MS = 6000;     // one visit only counts once per this window
 
@@ -751,6 +751,7 @@ window.addEventListener("keydown", (event) => {
 
     if (fireDirection) {
       event.preventDefault();
+      if (gameState.player.hidden) return;
       if (event.repeat) return;
 
       const now = performance.now();
@@ -775,6 +776,14 @@ window.addEventListener("keyup", (event) => {
   event.preventDefault();
   returnFromZoom();
 });
+
+window.addEventListener("keydown", function (event) {
+  if (event.code === "KeyM") {
+    minimapVisible = !minimapVisible;
+  }
+});
+
+
 
   // ---------------------------------------------------------------------------
   // CORE GAME LOOP
@@ -835,10 +844,28 @@ window.addEventListener("keyup", (event) => {
     };
   }
 
+  function revealMinimapView() {
+  if (!gameState || !gameState.player) return;
+
+  const px = Math.floor(gameState.player.x + 0.5);
+  const py = Math.floor(gameState.player.y + 0.5);
+  const x0 = px - Math.floor(VIEW_TILES_X / 2);
+  const y0 = py - Math.floor(VIEW_TILES_Y / 2);
+
+  for (let y = y0; y < y0 + VIEW_TILES_Y; y++) {
+    for (let x = x0; x < x0 + VIEW_TILES_X; x++) {
+      if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) continue;
+            if (!gameState.explored) gameState.explored = new Set();
+      gameState.explored.add(y * MAP_WIDTH + x);
+    }
+  }
+}
+
   function gameLoop(timestamp) {
     if (!gameRunning) return;
 
     updateFreePlayerMovement(timestamp);
+    revealMinimapView();
     updateTraps(timestamp);
     updateEnemies(timestamp);
     updateProjectiles(timestamp);
@@ -1267,6 +1294,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawProjectiles();
     drawEnemies();
     drawHidePrompt();
+    
 
     context.restore();
     if (gameState.gameOver) drawGameOver();
@@ -1283,7 +1311,8 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
      if (DEBUG_SHEET) drawSheetDebug();
     context.imageSmoothingEnabled = false;
     drawInventory(timestamp);
-    drawHUD();          // <-- last line in drawGame
+    drawHUD();  
+    drawMiniMap();        // <-- last line in drawGame
   }
 
   function drawSheetDebug() {
@@ -1382,6 +1411,68 @@ if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
     }
   }
 
+/* window.addEventListener("keydown", function (event) {
+  console.log("Key detected:", event.key, event.code); */
+
+
+let minimapVisible = true;
+function drawMiniMap() {
+  if (!minimapVisible) return;
+  if (!gameState || !gameState.player) return;
+
+  
+  const map = gameState.map;
+  if (!map || !map.length || !map[0].length) return;
+
+  const mapWidth = map[0].length;
+  const mapHeight = map.length;
+
+  const minimapSize = 160;
+  const padding = 12;
+  const cellSize = Math.min(
+    minimapSize / mapWidth,
+    minimapSize / mapHeight
+  );
+
+  const width = mapWidth * cellSize;
+  const height = mapHeight * cellSize;
+  const offsetX = canvas.width + width + padding + 150;
+  const offsetY = padding;
+
+  context.save();
+
+
+  // Only draw walkable tiles; walls stay transparent
+  for (let y = 0; y < mapHeight; y++) {
+    for (let x = 0; x < mapWidth; x++) {
+      const tile = map[y][x];
+                  if (tile !== 1) continue;
+      if (!gameState.explored.has(y * MAP_WIDTH + x)) continue;
+
+      const x0 = offsetX + x * cellSize;
+      const y0 = offsetY + y * cellSize;
+
+      context.fillStyle = "#bebebe"; // background under the floor
+      context.fillRect(x0, y0, cellSize + 1, cellSize + 1);
+    }
+  }
+
+  const player = gameState.player;
+
+  context.fillStyle = "#00ff66";
+  context.beginPath();
+  context.arc(
+    offsetX + player.x * cellSize,
+    offsetY + player.y * cellSize,
+    Math.max(2, cellSize * 0.35),
+    0,
+    Math.PI * 2
+  );
+  context.fill();
+
+  context.restore();
+}
+
   function drawProjectiles() {
     if (!gameState || !gameState.projectiles) return;
 
@@ -1390,7 +1481,7 @@ if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
       const centerY = projectile.y * TILE_SIZE + TILE_SIZE / 2;
       context.fillStyle = projectile.color;
       context.beginPath();
-      context.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      context.arc(centerX, centerY, 3, 0, Math.PI * 2);
       context.fill();
     }
   }
@@ -2091,41 +2182,13 @@ function updateSmashSpot(e, dt) {
   if (e.breakTimer <= 0) {
     e.breakTimer = null;
     e.smashSpot = null;
-    e.smashForced = false;
     breakHidingSpot(spot);
     return false;
   }
   return true;
 }
-  // Already destroyed by something else, or the player just hid in it.
-  if (!hidingSpots.includes(spot) || spot.occupied) {
-    e.smashSpot = null;
-    e.breakTimer = null;
-    return false;
-  }
 
-  const arrived = steerToward(
-    e,
-    spot.x,
-    spot.y,
-    ENEMY_SPEED.curious,
-    dt,
-    HIDE_ATTACK_REACH
-  );
-  if (!arrived) return true;
 
-  e.breakTimer ??= HIDE_BREAK_DELAY_MS;
-  e.breakTimer -= dt * 1000;
-  turnToward(e, Math.atan2(spot.y - e.y, spot.x - e.x), dt);
-
-  if (e.breakTimer <= 0) {
-    e.breakTimer = null;
-    e.smashSpot = null;
-    breakHidingSpot(spot);
-    return false;
-  }
-  return true;
-}
   
   function beginSearch(e) {
     const room = e.searchRoom || roomAtPoint(e.lastSeen.x, e.lastSeen.y);
@@ -2348,56 +2411,63 @@ function updateSmashSpot(e, dt) {
         startInvestigating(e, e.lastSeen.x, e.lastSeen.y);
         e.suspicion = 0.6;
       }
-   } else if (e.state === "curious") {
-  if (e.smashSpot) {
-    if (updateSmashSpot(e, dt)) return;   // still walking to it / smashing it
-    e.state = "patrol";                   // done, or the spot is gone
-    e.suspicion = Math.min(e.suspicion, 0.2);
-    e.waitTimer = 0;
-    e.steer = null;
-    return;
-  }
+    } else if (e.state === "curious") {
+    if (e.smashSpot) {
+      if (updateSmashSpot(e, dt)) return;
 
+      e.state = "patrol";
+      e.suspicion = Math.min(e.suspicion, 0.2);
+      e.waitTimer = 0;
+      e.steer = null;
+      return;
+    }
 
-        if (
-          steerToward(
-            e,
-            e.investigate.x,
-            e.investigate.y,
-            ENEMY_SPEED.curious,
-            dt,
-            0.3
-          )
-        ) {
-          e.arrived = true;
-          e.waitTimer = CURIOUS_WAIT_MS;
-          e.baseFacing = e.facing;
-        }
-      } else {
-        e.waitTimer -= dt * 1000;
-        lookAround(e, now);
-        if (e.waitTimer <= 0) {
-          e.state = "patrol";
-          e.suspicion = Math.min(e.suspicion, 0.2);
-          e.waitTimer = 0;
-          e.steer = null;
-        }
+    if (e.investigate) {
+      if (
+        steerToward(
+          e,
+          e.investigate.x,
+          e.investigate.y,
+          ENEMY_SPEED.curious,
+          dt,
+          0.3
+        )
+      ) {
+        e.arrived = true;
+        e.waitTimer = CURIOUS_WAIT_MS;
+        e.baseFacing = e.facing;
+        e.investigate = null;
       }
     } else {
-      // patrol
-      if (e.waitTimer > 0) {
-        e.waitTimer -= dt * 1000;
-        lookAround(e, now);
-      } else {
-        const wp = e.patrol[e.patrolIndex];
-        if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
-          e.patrolIndex = (e.patrolIndex + 1) % e.patrol.length;
-          e.waitTimer = wp.wait ?? PATROL_WAIT_MS;
-          e.baseFacing = e.holdFacing ?? e.facing;
-        }
+      e.waitTimer -= dt * 1000;
+      lookAround(e, now);
+
+      if (e.waitTimer <= 0) {
+        e.state = "patrol";
+        e.suspicion = Math.min(e.suspicion, 0.2);
+        e.waitTimer = 0;
+        e.steer = null;
+      }
+    }
+
+  } else {
+    // patrol
+    if (e.waitTimer > 0) {
+      e.waitTimer -= dt * 1000;
+      lookAround(e, now);
+    } else {
+      const wp = e.patrol[e.patrolIndex];
+
+      if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
+        e.patrolIndex =
+          (e.patrolIndex + 1) % e.patrol.length;
+
+        e.waitTimer = wp.wait ?? PATROL_WAIT_MS;
+        e.baseFacing = e.holdFacing ?? e.facing;
       }
     }
   }
+};
 
   function drawVisionCone(e, range, halfAngle, fill) {
     const c = enemyCenter(e);
@@ -3353,10 +3423,10 @@ function useSelectedItem() {
       dx: dx / len,
       dy: dy / len,
       damage: 50,
-      color: "#facc15",
+      color: "#15c4fa",
     });
 
-    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#facc15", player);
+    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#15c4fa", player);
   }
 
   function updateProjectiles(timestamp) {
@@ -3771,6 +3841,7 @@ function spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stair
         a.x + a.w + padding > b.x &&
         a.y - padding < b.y + b.h &&
         a.y + a.h + padding > b.y
+        
       );
     }
 
@@ -4055,6 +4126,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
       items: items,
       stairs: stairs,
       hidingSpots: hidingSpots.slice(),
+      explored: new Set(),
       trapTiles: new Set(
         items.filter((it) => it.type === "trap").map((it) => it.y * MAP_WIDTH + it.x)
       ),
