@@ -2635,7 +2635,7 @@ function toggleNearbyDoor() {
   }
 
   // Can't close a door on top of someone.
-  const DOOR_THRESHOLD = 0.4;
+  const DOOR_THRESHOLD = 0.7;
 
 // 1. Block door action if enemies are inside
 const enemyInDoorway = gameState.enemies.some(
