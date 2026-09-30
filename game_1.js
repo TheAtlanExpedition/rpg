@@ -566,7 +566,7 @@ window.addEventListener("keyup", (event) => {
   // ---------------------------------------------------------------------------
   // CORE GAME LOOP
   // ---------------------------------------------------------------------------
-  function startGame3() {
+  function startGame1() {
     gameStart = performance.now();
     lastFrameTime = null;
     lastEnemyTime = null;
@@ -594,7 +594,7 @@ window.addEventListener("keyup", (event) => {
     });
   }
 
-  function stopGame3() {
+  function stopGame1() {
     gameRunning = false;
     heldMoveKeys.clear();
     if (gameLoopId) {
@@ -2849,6 +2849,6 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     };
   }
 
-  window.startGame3 = startGame3;
-  window.stopGame3 = stopGame3;
+  window.startGame1 = startGame1;
+  window.stopGame1 = stopGame1;
 }
