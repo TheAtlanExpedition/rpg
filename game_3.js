@@ -615,6 +615,9 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   const HIDE_SPOTS_PER_ROOM = 3;
   const HIDE_SMASH_CHANCE = 0.35;            // chance a searched room loses a spot at all
   const HIDE_ROOM_ROLL_COOLDOWN_MS = 20000;  // a room only rolls once per this window
+  const HIDE_SUSPECT_LIMIT = 3;              // this many suspicious visits, then it breaks the spot
+  const HIDE_SUSPECT_RADIUS = 1.5;           // an investigation this close to a spot counts as "at" it
+  const HIDE_SUSPECT_COOLDOWN_MS = 6000;     // one visit only counts once per this window
 
   const hidingSpots = [];
   // ---------------------------------------------------------------------------
@@ -1948,14 +1951,46 @@ function steerToward(
   }
 
   function startInvestigating(e, x, y) {
-    e.state = "curious";
-    e.investigate = { x, y };
-    e.arrived = false;
-    e.waitTimer = 0;
-    e.hideSearchTimer = 0;
-    e.steer = null;
-    e.investigateTime = 0;
+  e.state = "curious";
+  e.investigate = { x, y };
+  e.arrived = false;
+  e.waitTimer = 0;
+  e.hideSearchTimer = 0;
+  e.steer = null;
+  e.investigateTime = 0;
+  noteSuspicionAtSpot(e, x, y);   // <-- new
+}
+
+  // Counts how often this enemy has been drawn to the same hiding spot.
+function noteSuspicionAtSpot(e, x, y) {
+  let spot = null;
+  let best = HIDE_SUSPECT_RADIUS;
+  for (const s of hidingSpots) {
+    const d = Math.hypot(s.x - x, s.y - y);
+    if (d <= best) {
+      best = d;
+      spot = s;
+    }
   }
+  if (!spot) return;
+
+  const now = performance.now();
+  spot.suspects ??= new Map();
+  const rec = spot.suspects.get(e.id) ?? { count: 0, last: -Infinity };
+
+  if (now - rec.last < HIDE_SUSPECT_COOLDOWN_MS) return;
+  rec.count++;
+  rec.last = now;
+  spot.suspects.set(e.id, rec);
+
+  if (rec.count >= HIDE_SUSPECT_LIMIT) {
+    rec.count = 0;
+    e.smashSpot = spot;
+    e.smashForced = true;               // smash it even if the player is inside
+    e.breakTimer = null;
+    e.investigate = { x: spot.x, y: spot.y };
+  }
+}
 
     function pickSearchPoints(cx, cy, room = null) {
     const tx = Math.floor(cx + 0.5);
@@ -2007,7 +2042,7 @@ function roomAtPoint(x, y) {
 // Called once when an enemy starts searching. Only the first enemy to search
 // a room within the cooldown gets to roll, so a room loses at most one spot.
 function rollHidingSpotSmash(e, room) {
-  e.smashSpot = null;
+  if (e.smashSpot) return; // already has a plan (e.g. from repeated suspicion)
   if (!room) return;
 
   const now = performance.now();
@@ -2019,6 +2054,7 @@ function rollHidingSpotSmash(e, room) {
   const spots = hidingSpots.filter((s) => s.room === room && !s.occupied);
   if (spots.length === 0) return;
   e.smashSpot = spots[Math.floor(Math.random() * spots.length)];
+  e.smashForced = false;
 }
 
 // Walk to the chosen spot and smash it. Returns true while still busy.
@@ -2026,6 +2062,37 @@ function updateSmashSpot(e, dt) {
   const spot = e.smashSpot;
   if (!spot) return false;
 
+  // Already destroyed, or the player is inside and this wasn't a forced smash.
+  if (!hidingSpots.includes(spot) || (spot.occupied && !e.smashForced)) {
+    e.smashSpot = null;
+    e.smashForced = false;
+    e.breakTimer = null;
+    return false;
+  }
+
+  const arrived = steerToward(
+    e,
+    spot.x,
+    spot.y,
+    ENEMY_SPEED.curious,
+    dt,
+    HIDE_ATTACK_REACH
+  );
+  if (!arrived) return true;
+
+  e.breakTimer ??= HIDE_BREAK_DELAY_MS;
+  e.breakTimer -= dt * 1000;
+  turnToward(e, Math.atan2(spot.y - e.y, spot.x - e.x), dt);
+
+  if (e.breakTimer <= 0) {
+    e.breakTimer = null;
+    e.smashSpot = null;
+    e.smashForced = false;
+    breakHidingSpot(spot);
+    return false;
+  }
+  return true;
+}
   // Already destroyed by something else, or the player just hid in it.
   if (!hidingSpots.includes(spot) || spot.occupied) {
     e.smashSpot = null;
@@ -2277,15 +2344,16 @@ function updateSmashSpot(e, dt) {
         startInvestigating(e, e.lastSeen.x, e.lastSeen.y);
         e.suspicion = 0.6;
       }
-    } else if (e.state === "curious") {
-            if (!e.arrived) {
-        e.investigateTime = (e.investigateTime || 0) + dt * 1000;
-        if (e.investigateTime > CURIOUS_GIVE_UP_MS) {
-          e.state = "patrol";
-          e.suspicion = Math.min(e.suspicion, 0.2);
-          e.steer = null;
-          return;
-        }
+   } else if (e.state === "curious") {
+  if (e.smashSpot) {
+    if (updateSmashSpot(e, dt)) return;   // still walking to it / smashing it
+    e.state = "patrol";                   // done, or the spot is gone
+    e.suspicion = Math.min(e.suspicion, 0.2);
+    e.waitTimer = 0;
+    e.steer = null;
+    return;
+  }
+
 
         if (
           steerToward(
