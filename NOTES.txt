@@ -1,6 +1,8 @@
 # rpg
 JavaScript RPG, first attempt
 
+Let there be multiple hiding spots in a room so when an enemy searches it in alert it destroys one at random.
+
 STEALTH:
 
 To create a compelling stealth mechanic where combat is rare, high-risk, and entirely dependent on RNG item spawns, you must design your game around tension, evasion, and environmental mastery rather than direct confrontation. Since players cannot rely on fighting back, the stealth loop must feel active and rewarding rather than passive.Here is a comprehensive breakdown of how to build this mechanic for a 2D top-down pixel dungeon crawler:
