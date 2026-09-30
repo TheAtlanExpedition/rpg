@@ -611,7 +611,9 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   const HIDE_BREAK_NOISE_RADIUS = 5;
   const HIDE_SPOTS_PER_ROOM = 1;
   const HIDE_SPOT_TYPES = ["closet", "crate"];
-  
+  const HIDE_SPOTS_PER_ROOM = 3;
+  const HIDE_SMASH_CHANCE = 0.35;            // chance a searched room loses a spot at all
+  const HIDE_ROOM_ROLL_COOLDOWN_MS = 20000;  // a room only rolls once per this window
 
   const hidingSpots = [];
   // ---------------------------------------------------------------------------
@@ -1989,8 +1991,71 @@ function steerToward(
     }
     return points;
   }
+function roomAtPoint(x, y) {
+  const tx = Math.floor(x + 0.5);
+  const ty = Math.floor(y + 0.5);
+  return (
+    gameState.rooms.find(
+      (r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h
+    ) || null
+  );
+}
 
+// Called once when an enemy starts searching. Only the first enemy to search
+// a room within the cooldown gets to roll, so a room loses at most one spot.
+function rollHidingSpotSmash(e, room) {
+  e.smashSpot = null;
+  if (!room) return;
+
+  const now = performance.now();
+  if (now < (room.hideRollUntil ?? 0)) return;
+  room.hideRollUntil = now + HIDE_ROOM_ROLL_COOLDOWN_MS;
+
+  if (Math.random() >= HIDE_SMASH_CHANCE) return;
+
+  const spots = hidingSpots.filter((s) => s.room === room && !s.occupied);
+  if (spots.length === 0) return;
+  e.smashSpot = spots[Math.floor(Math.random() * spots.length)];
+}
+
+// Walk to the chosen spot and smash it. Returns true while still busy.
+function updateSmashSpot(e, dt) {
+  const spot = e.smashSpot;
+  if (!spot) return false;
+
+  // Already destroyed by something else, or the player just hid in it.
+  if (!hidingSpots.includes(spot) || spot.occupied) {
+    e.smashSpot = null;
+    e.breakTimer = null;
+    return false;
+  }
+
+  const arrived = steerToward(
+    e,
+    spot.x,
+    spot.y,
+    ENEMY_SPEED.curious,
+    dt,
+    HIDE_ATTACK_REACH
+  );
+  if (!arrived) return true;
+
+  e.breakTimer ??= HIDE_BREAK_DELAY_MS;
+  e.breakTimer -= dt * 1000;
+  turnToward(e, Math.atan2(spot.y - e.y, spot.x - e.x), dt);
+
+  if (e.breakTimer <= 0) {
+    e.breakTimer = null;
+    e.smashSpot = null;
+    breakHidingSpot(spot);
+    return false;
+  }
+  return true;
+}
+  
   function beginSearch(e) {
+    const room = e.searchRoom || roomAtPoint(e.lastSeen.x, e.lastSeen.y);
+    rollHidingSpotSmash(e, room);
     e.searching = true;
     e.baseFacing = e.facing;
     e.searchWait = SEARCH_WAIT_MS;
@@ -2009,6 +2074,8 @@ function steerToward(
     const target = e.searchPoints[e.searchIndex];
 
     if (!target) {
+        if (updateSmashSpot(e, dt)) return; // still walking to / smashing the spot
+
       e.searching = false;
       e.state = "patrol";
       e.suspicion = Math.min(e.suspicion, 0.3);
@@ -2437,16 +2504,24 @@ function steerToward(
         [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
       }
 
-      for (const c of candidates.slice(0, HIDE_SPOTS_PER_ROOM)) {
-        hidingSpots.push({
-          x: c.x,
-          y: c.y,
-          type: HIDE_SPOT_TYPES[
-            Math.floor(Math.random() * HIDE_SPOT_TYPES.length)
-          ],
-          occupied: false,
-        });
-      }
+      const chosen = [];
+for (const c of candidates) {
+  if (chosen.length >= HIDE_SPOTS_PER_ROOM) break;
+  if (chosen.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
+  chosen.push(c);
+}
+
+for (const c of chosen) {
+  hidingSpots.push({
+    x: c.x,
+    y: c.y,
+    room,
+    type: HIDE_SPOT_TYPES[
+      Math.floor(Math.random() * HIDE_SPOT_TYPES.length)
+    ],
+    occupied: false,
+  });
+}
     }
   }
 
