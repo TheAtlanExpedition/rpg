@@ -1846,9 +1846,13 @@ function nearestSafeGoal(gx, gy) {
   }
   return best || { x: gx, y: gy };
 }
-
+// Enemies only ignore traps while alert AND actually looking at the player.
+// An alert enemy that lost sight (searching, or player hiding) still avoids them.
+function enemyAvoidsTraps(e) {
+  return !(e.state === "alert" && e.canSeePlayer);
+}
 function planSteer(e, gx, gy) {
-  const avoid = e.state !== "alert";
+  const avoid = enemyAvoidsTraps(e);
 
   if (isSegmentClear(e.x, e.y, gx, gy, ENEMY_HITBOX, avoid)) {
     return { x: gx, y: gy, isGoal: true };
@@ -1888,7 +1892,7 @@ function steerToward(
   arriveDist = ENEMY_ARRIVE_DIST,
   faceMovement = true
 ) {
-  const avoid = e.state !== "alert";
+  const avoid = enemyAvoidsTraps(e);
   if (avoid) {
     const safe = nearestSafeGoal(gx, gy);
     gx = safe.x;
