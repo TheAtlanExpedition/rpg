@@ -13,7 +13,6 @@
   const DISPLAY_WIDTH = VIEW_TILES_X * TILE_SIZE;
   const DISPLAY_HEIGHT = VIEW_TILES_Y * TILE_SIZE;
 
-  // Integer DPR only: fractional values (125%, 150%) cause uneven sprite pixels.
   const devicePixelRatioValue = Math.max(
     1,
     Math.floor(window.devicePixelRatio || 1)
@@ -54,7 +53,11 @@
     DOOR: 2,
     TRAP: 3,
     SWITCH: 4,
+    PILLAR: 5,
   };
+  function isSolidTile(t) {
+  return t === TileType.WALL || t === TileType.PILLAR;
+}
 
   let gameLoopId = null;
 
@@ -89,7 +92,8 @@
   const itemSpritesheet = new Image();
   itemSpritesheet.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/sprites/ui/inventory-large-0.1.png";
-
+const PILLAR_SPRITE = new Image();
+PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/tiles/piller-0.1.png";
   const TILESET = new Image();
   TILESET.src =
     "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/refs/heads/main/assets/tiles/tileset-damp-dark-dungeon-floor-cobblestone-0.1.png";
@@ -155,17 +159,22 @@
     );
   }
 
-  function drawCorner(art, type, direction, tx, ty) {
+
+   function drawCorner(art, type, direction, tx, ty) {
+    if (!PILLAR_SPRITE.complete || PILLAR_SPRITE.naturalWidth === 0) return;
+
     const T = TILE_SIZE;
-    const L = LEDGE_W;
+    const S = PILLAR_SRC_SIZE; // 16, drawn at native size, no scaling
     const positions = {
       NW: [tx, ty],
-      NE: [tx + T - L, ty],
-      SW: [tx, ty + T - L],
-      SE: [tx + T - L, ty + T - L],
+      NE: [tx + T - S, ty],
+      SW: [tx, ty + T - S],
+      SE: [tx + T - S, ty + T - S],
     };
     const [drawX, drawY] = positions[direction];
-    context.drawImage(art[`${type}${direction}`], drawX, drawY);
+
+    context.imageSmoothingEnabled = false;
+    context.drawImage(PILLAR_SPRITE, 0, 0, S, S, drawX, drawY, S, S);
   }
 
   function drawWallEdges(art, x, y, tx, ty) {
@@ -263,7 +272,8 @@
   let inventoryOpen = false;
   let selectedCol = 0;
   let selectedRow = 0;
-
+  const PILLAR_SRC_SIZE = 16;   // size of the png
+  const PILLAR_DRAW_SCALE = 2;  // 2 = 32x32, exactly one tile
   const INV_COLS = 4;
   const INV_ROWS = 3;
 
@@ -433,6 +443,14 @@
       toggleHide();
     }
   });
+window.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() !== "g") return;
+  if (event.repeat) return;
+  if (!inventoryOpen) return;
+
+  dropSelectedItem();
+});
+
 
   window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
@@ -546,6 +564,8 @@
     lastEnemyTime = null;
     lastProjectileTime = null;
     heldMoveKeys.clear();
+    noiseRipples.length = 0;
+    lastFootstepTime = -Infinity;
 
     const newGameState = createGameState(1, null, []);
 
@@ -690,7 +710,7 @@
       const stepInterval = FOOTSTEP_INTERVAL_MS[player.gait] ?? Infinity;
       if (stepRadius > 0 && timestamp - lastFootstepTime >= stepInterval) {
         lastFootstepTime = timestamp;
-        makeNoise(player.x, player.y, stepRadius, "#e2e8f0");
+        makeNoise(player.x, player.y, stepRadius, "#e2e8f0", player);
       }
     }
     globalPlayer = player;
@@ -705,7 +725,6 @@
     }
     return gameState.map[tileY][tileX] !== TileType.WALL;
   }
-
   function isBoxClear(x, y, hb) {
     if (!gameState || !gameState.map) return false;
     return (
@@ -741,30 +760,49 @@
   // ---------------------------------------------------------------------------
   // NOISE / RIPPLES
   // ---------------------------------------------------------------------------
+  // x / y / radius come in as TILES; ripples are stored in PIXELS so that
+  // drawRipples can use them directly.
+  // Where an entity's feet sit inside its tile. Tweak if the ring looks
+  // slightly high or low against your sprite.
+  const RIPPLE_FEET_Y = 0.9;
+
+  function rippleCenter(x, y) {
+    return {
+      x: Math.round((x + 0.5) * TILE_SIZE),
+      y: Math.round((y + RIPPLE_FEET_Y) * TILE_SIZE),
+    };
+  }
+
+  // x / y / radius come in as TILES. `follow` (optional) is an entity whose
+  // feet the ripple stays stuck to while it plays.
   function spawnRipple(
     x,
     y,
     radius,
     color,
     duration = 500 + radius * 60,
-    reach = null
+    reach = null,
+    follow = null
   ) {
     noiseRipples.push({
-      x: x + 0.5,
-      y: y + 0.75,
-      radius,
+      x,
+      y,
+      radius, // tiles
       color,
       start: performance.now(),
       duration,
       reach,
+      follow,
+      reachTile: -1,
     });
   }
 
-  function makeNoise(x, y, radius, color = "#facc15") {
+  // `follow`: pass the entity making the noise so the ripple sticks to it.
+  function makeNoise(x, y, radius, color = "#facc15", follow = null) {
     if (!gameState || !gameState.enemies) return;
 
     const reach = soundReach(x, y, radius);
-    spawnRipple(x, y, radius, color, undefined, reach);
+    spawnRipple(x, y, radius, color, undefined, reach, follow);
 
     for (const e of gameState.enemies) {
       if (e.state === "alert") continue;
@@ -775,7 +813,7 @@
 
       startInvestigating(e, x, y);
       e.suspicion = Math.max(e.suspicion, CURIOUS_THRESHOLD);
-      spawnRipple(e.x, e.y, 0.7, "#f59e0b", 450);
+      spawnRipple(e.x, e.y, 0.7, "#f59e0b", 450, null, e); // stuck to the enemy
     }
   }
 
@@ -840,6 +878,21 @@
         continue;
       }
 
+      // Centre: locked to the entity's feet if it has one, else the spawn point.
+      const src = r.follow || r;
+      const c = rippleCenter(src.x, src.y);
+
+      // A following ripple that is wall-clipped re-flood-fills when the
+      // entity steps onto a new tile, so the clip area moves with it.
+      if (r.follow && r.reach) {
+        const tk =
+          Math.floor(src.y + 0.5) * MAP_WIDTH + Math.floor(src.x + 0.5);
+        if (tk !== r.reachTile) {
+          r.reachTile = tk;
+          r.reach = soundReach(src.x, src.y, r.radius);
+        }
+      }
+
       context.save();
 
       if (r.reach && r.reach.size > 0) {
@@ -868,13 +921,7 @@
         const eased = 1 - (1 - tt) * (1 - tt);
         context.globalAlpha = (1 - t) * (lag === 0 ? 0.7 : 0.4);
         context.beginPath();
-        context.arc(
-          (r.x + 0.5) * TILE_SIZE,
-          (r.y + 0.5) * TILE_SIZE,
-          r.radius * TILE_SIZE * eased,
-          0,
-          Math.PI * 2
-        );
+        context.arc(c.x, c.y, r.radius * TILE_SIZE * eased, 0, Math.PI * 2);
         context.stroke();
       }
 
@@ -920,7 +967,7 @@
     drawRipples();
     drawHidingSpots();
     drawVisionCones();
-    drawItems(timestamp);
+     drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
     drawPlayer(timestamp);
@@ -1019,7 +1066,15 @@
           }
           continue;
         }
-
+if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
+  if (art) {
+    context.drawImage(art.floor, tx, ty);
+  } else {
+    context.fillStyle = "#9ca3af";
+    context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+  }
+  continue;
+}
         if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
         else if (tile === TileType.DOOR) context.fillStyle = "#92400e";
         else if (tile === TileType.SWITCH) context.fillStyle = "#eab308";
@@ -1115,7 +1170,36 @@
       context.fillRect(cx + ox, cy - h + 2, 3, h);
     }
   }
+    function drawPillars(front) {
+    if (!gameState || !gameState.pillars) return;
+    const feet = playerFeet();
+    for (const pillar of gameState.pillars) {
+      const pillarIsInFront = pillar.y + 0.9 > feet.y;
+      if (pillarIsInFront === front) drawPillar(pillar);
+    }
+  }
+function drawPillar(pillar) {
+  if (!PILLAR_SPRITE.complete || PILLAR_SPRITE.naturalWidth === 0) return;
 
+  const size = PILLAR_SRC_SIZE * PILLAR_DRAW_SCALE;
+
+  // Centered horizontally on the tile, bottom edge on the tile's bottom edge.
+  const dx = Math.round(pillar.x * TILE_SIZE + (TILE_SIZE - size) / 2);
+  const dy = Math.round(pillar.y * TILE_SIZE + TILE_SIZE - size);
+
+  context.imageSmoothingEnabled = false;
+  context.drawImage(
+    PILLAR_SPRITE,
+    0,
+    0,
+    PILLAR_SRC_SIZE,
+    PILLAR_SRC_SIZE,
+    dx,
+    dy,
+    size,
+    size
+  );
+}
   function drawGameOver() {
     context.fillStyle = "rgba(0, 0, 0, 0.6)";
     context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
@@ -1125,7 +1209,12 @@
     context.textBaseline = "middle";
     context.fillText("YOU DIED", DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2);
   }
+  const PLAYER_FEET = { x: 0.5, y: 0.9 };
 
+  function playerFeet() {
+    const p = gameState.player;
+    return { x: p.x + PLAYER_FEET.x, y: p.y + PLAYER_FEET.y };
+  }
   function drawPlayer(timestamp) {
     if (!globalPlayer) return;
     const p = gameState.player;
@@ -2042,30 +2131,42 @@
 
   const PICKUP_RADIUS = 0.6;
 
-  function pickupNearbyItems() {
-    if (!gameState || !globalPlayer) return;
+function pickupNearbyItems() {
+  if (!gameState || !globalPlayer) return;
 
-    const remainingItems = [];
-    for (const item of gameState.items) {
-      if (item.type === "trap") {
-        remainingItems.push(item);
-        continue;
-      }
+  const now = performance.now();
+  const remainingItems = [];
 
-      const distance = Math.hypot(
-        item.x - globalPlayer.x,
-        item.y - globalPlayer.y
-      );
-
-      if (distance < PICKUP_RADIUS) {
-        addItemToInventory(item.idName);
-        console.log("Picked up:", item.idName);
-      } else {
-        remainingItems.push(item);
-      }
+  for (const item of gameState.items) {
+    if (item.type === "trap") {
+      remainingItems.push(item);
+      continue;
     }
-    gameState.items = remainingItems;
+
+    if (item.canPickupAt && now < item.canPickupAt) {
+      remainingItems.push(item);
+      continue;
+    }
+
+    const distance = Math.hypot(
+      item.x - globalPlayer.x,
+      item.y - globalPlayer.y
+    );
+
+    if (distance < PICKUP_RADIUS) {
+      addItemToInventory(item.idName);
+      console.log("Picked up:", item.idName);
+    } else {
+      remainingItems.push(item);
+    }
   }
+
+  gameState.items = remainingItems;
+}
+
+
+
+
 
   function getInventorySlots() {
     const slots = [];
@@ -2096,11 +2197,43 @@
   function drawInventory(timestamp = performance.now()) {
     if (!inventoryOpen || !gameState) return;
 
-    // TODO: add your inventory panel layout here (invX, invY, SLOT_*, panelSize, etc.)
-    // The original code referenced undefined variables for the panel geometry.
-    // Example skeleton once you have those constants:
+    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE; // 768
+    const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
+    const panelSize = 750;
+    const invX = Math.floor((cssWidth - panelSize) / 2);
+    const invY = Math.floor((cssHeight - panelSize) / 2);
 
-    /*
+    context.setTransform(
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0,
+      devicePixelRatioValue / CANVAS_SCALE,
+      0,
+      0
+    );
+    context.imageSmoothingEnabled = false;
+
+    if (itemSpritesheet.complete && itemSpritesheet.naturalWidth > 0) {
+      context.drawImage(
+        itemSpritesheet,
+        0,
+        0,
+        itemSpritesheet.naturalWidth,
+        itemSpritesheet.naturalHeight,
+        invX,
+        invY,
+        panelSize,
+        panelSize
+      );
+    }
+
+    const SLOT_X = 164;
+    const SLOT_Y = 214;
+    const SLOT_WIDTH = 106;
+    const SLOT_HEIGHT = 108;
+    const SLOT_STEP_X = 106;
+    const SLOT_STEP_Y = 114;
+
     const slots = getInventorySlots();
     const selected = slots[selectedRow * INV_COLS + selectedCol];
 
@@ -2120,6 +2253,7 @@
 
         const anim = ITEM_ANIMATIONS[slot.type];
         if (!anim || !anim.image || !anim.image.complete) continue;
+        if (anim.image.naturalWidth === 0) continue;
 
         const frame = getItemAnimationFrame(anim, timestamp);
         const sourceX = frame * anim.frameWidth;
@@ -2133,20 +2267,43 @@
         const itemY = slotY + Math.floor((SLOT_HEIGHT - itemHeight) / 2);
 
         context.drawImage(
-          anim.image,
-          sourceX,
-          0,
-          anim.frameWidth,
-          anim.frameHeight,
-          itemX,
-          itemY,
-          itemWidth,
-          itemHeight
-        );
+  anim.image,
+  sourceX,
+  0,
+  anim.frameWidth,
+  anim.frameHeight,
+  itemX,
+  itemY,
+  itemWidth,
+  itemHeight
+);
+
+// Stack count badge
+if (slot.count > 1) {
+  const badgeSize = 28;
+  const badgeX = slotX + SLOT_WIDTH - badgeSize - 6;
+  const badgeY = slotY + SLOT_HEIGHT - badgeSize - 6;
+
+  // Badge background
+  context.fillStyle = "rgba(0, 0, 0, 0.8)";
+  context.fillRect(badgeX, badgeY, badgeSize, badgeSize);
+
+  // Count text
+  context.fillStyle = "#ffffff";
+  context.font = "bold 20px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(
+    slot.count,
+    badgeX + badgeSize / 2,
+    badgeY + badgeSize / 2
+  );
+}
+
       }
     }
 
-    // name box
+    // Name box
     const inventoryScale = panelSize / 512;
     const nameBoxX = invX + Math.round(116 * inventoryScale);
     const nameBoxY = invY + Math.round(384 * inventoryScale);
@@ -2162,8 +2319,73 @@
       nameBoxX + nameBoxWidth / 2,
       nameBoxY + nameBoxHeight / 2 + 3
     );
-    */
   }
+function dropSelectedItem() {
+  if (!gameState || !globalPlayer || !inventoryOpen) return;
+
+  const selectedIndex = selectedRow * INV_COLS + selectedCol;
+
+  let currentIndex = 0;
+  let selectedType = null;
+  let selectedStackIndex = -1;
+
+  for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
+    for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
+      if (currentIndex === selectedIndex) {
+        selectedType = type;
+        selectedStackIndex = stackIndex;
+        break;
+      }
+
+      currentIndex++;
+    }
+
+    if (selectedType !== null) break;
+  }
+
+  if (selectedType === null || selectedStackIndex === -1) {
+    console.log("No item selected.");
+    return;
+  }
+
+  const rotation =
+    globalPlayer.rotation * (Math.PI / 180);
+
+const dropDistance = 0.8;
+
+const dropX = globalPlayer.x;
+const dropY = globalPlayer.y + dropDistance;
+
+// Add item to the world
+const droppedItem = {
+  idName: selectedType,
+  type: selectedType,
+  x: dropX,
+  y: dropY,
+  mustMoveAway: true,
+};
+
+gameState.items.push(droppedItem);
+
+  // Remove exactly one item from the inventory
+  const stacks = gameState.inventory[selectedType];
+
+  stacks[selectedStackIndex]--;
+
+  if (stacks[selectedStackIndex] <= 0) {
+    stacks.splice(selectedStackIndex, 1);
+  }
+
+  if (stacks.length === 0) {
+    delete gameState.inventory[selectedType];
+  }
+
+  console.log("Dropped:", selectedType);
+}
+
+
+
+
 
   // ---------------------------------------------------------------------------
   // PROJECTILES / SPELLS
@@ -2185,7 +2407,7 @@
       color: "#facc15",
     });
 
-    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL);
+    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#facc15", player);
   }
 
   function updateProjectiles(timestamp) {
@@ -2459,7 +2681,7 @@
 
     for (let i = 0; i < possibleScrolls.length; i++) {
       const scrollBlueprint = possibleScrolls[i];
-      if (Math.random() > 0.5) {
+      if (Math.random() > 0) { // Change 0 to 0.5 !!!!!!!!
         const scrollRoom =
           itemRooms[Math.floor(Math.random() * itemRooms.length)];
         items.push({
