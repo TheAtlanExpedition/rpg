@@ -2149,7 +2149,7 @@ function drawPillar(pillar) {
     stacks.push(1);
   }
 
-  const PICKUP_RADIUS = 0.3;
+  const PICKUP_RADIUS = 0.6;
 
 function pickupNearbyItems() {
   if (!gameState || !globalPlayer) return;
