@@ -531,7 +531,7 @@ function drawStairs() {
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
   const TRAPS_PER_ROOM_MIN = 0;
-  const TRAPS_PER_ROOM_MAX = 3;
+  const TRAPS_PER_ROOM_MAX = 2;
 
 
   // ---------------------------------------------------------------------------
