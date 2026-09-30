@@ -10,7 +10,7 @@ const game2Container = document.getElementById("game2Container");
 const game3Container = document.getElementById("game3Container");
 
 let selectedGame = null;
-let gamePoweredOn = false;
+let gamePoweredOn = true;
 
 function updateGameWindow() {
   gameWindow.classList.toggle("powered-on", gamePoweredOn);
