@@ -1,8 +1,14 @@
 # rpg
 JavaScript RPG, first attempt
 
+When killed soul teleports to nearest soul stone and player must find and kill own body to take it back from evil spirit. (Before the body dies?)
+
+
 Let there be multiple hiding spots in a room so when an enemy searches it in alert it destroys one at random.
 Add fall-over/trip animation if door closed to close to player + (existing) knockback.
+
+
+
 
 STEALTH:
 
