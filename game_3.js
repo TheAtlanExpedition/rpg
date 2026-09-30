@@ -358,7 +358,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // ---------------------------------------------------------------------------
   // TRAPS
   // ---------------------------------------------------------------------------
-  const TRAP_DAMAGE = 50;
+  const TRAP_DAMAGE = 30;
   const TRAP_TRIGGER_RADIUS = 0.4;
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
