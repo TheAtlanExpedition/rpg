@@ -22,7 +22,6 @@
   canvas.style.width = `${DISPLAY_WIDTH * CANVAS_SCALE}px`;
   canvas.style.height = `${DISPLAY_HEIGHT * CANVAS_SCALE}px`;
   canvas.style.imageRendering = "pixelated";
-  // Stop page CSS / flex parents from squashing the canvas on one axis.
   canvas.style.maxWidth = "none";
   canvas.style.maxHeight = "none";
   canvas.style.flex = "none";
@@ -43,7 +42,6 @@
 
   const PLAYER_WIDTH = 32;
   const PLAYER_HEIGHT = 32;
-  const ITEM_SIZE = 32;
 
   let zoom = 1;
 
@@ -417,14 +415,15 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // ---------------------------------------------------------------------------
   // ZOOM
   // ---------------------------------------------------------------------------
-  const ZOOM_KEY = "f";
+  const ZOOM_KEY = "q";
   const NORMAL_ZOOM = 1;
-  const ZOOM_OUT_MIN = 1;
+  const ZOOM_OUT_MIN = 0.5;
   const ZOOM_OUT_TIME = 2000;
   const ZOOM_IN_TIME = 20;
   const MIN_HOLD_TIME = 1000;
   const MAX_HOLD_TIME = 3000;
   const COOLDOWN_TIME = 5000;
+
 
   let zoomKeyHeld = false;
   let zoomAbilityActive = false;
@@ -547,13 +546,12 @@ window.addEventListener("keydown", (event) => {
     activateZoomAbility();
   });
 
-  window.addEventListener("keyup", (event) => {
-    if (event.key.toLowerCase() !== ZOOM_KEY) return;
-    event.preventDefault();
-    if (!zoomAbilityActive) return;
-    zoomKeyHeld = false;
-    returnFromZoom();
-  });
+window.addEventListener("keyup", (event) => {
+  if (event.key.toLowerCase() !== ZOOM_KEY) return;
+
+  event.preventDefault();
+  returnFromZoom();
+});
 
   // ---------------------------------------------------------------------------
   // CORE GAME LOOP
@@ -2134,7 +2132,6 @@ function drawPillar(pillar) {
 function pickupNearbyItems() {
   if (!gameState || !globalPlayer) return;
 
-  const now = performance.now();
   const remainingItems = [];
 
   for (const item of gameState.items) {
@@ -2143,15 +2140,21 @@ function pickupNearbyItems() {
       continue;
     }
 
-    if (item.canPickupAt && now < item.canPickupAt) {
-      remainingItems.push(item);
-      continue;
-    }
-
     const distance = Math.hypot(
       item.x - globalPlayer.x,
       item.y - globalPlayer.y
     );
+
+    // A dropped item stays unavailable until the player
+    // moves outside the pickup range.
+    if (item.mustMoveAway) {
+      if (distance > PICKUP_RADIUS) {
+        item.mustMoveAway = false;
+      } else {
+        remainingItems.push(item);
+        continue;
+      }
+    }
 
     if (distance < PICKUP_RADIUS) {
       addItemToInventory(item.idName);
@@ -2163,6 +2166,7 @@ function pickupNearbyItems() {
 
   gameState.items = remainingItems;
 }
+
 
 
 
@@ -2348,15 +2352,11 @@ function dropSelectedItem() {
     return;
   }
 
-  const rotation =
-    globalPlayer.rotation * (Math.PI / 180);
-
 const dropDistance = 0.8;
 
 const dropX = globalPlayer.x;
 const dropY = globalPlayer.y + dropDistance;
 
-// Add item to the world
 const droppedItem = {
   idName: selectedType,
   type: selectedType,
@@ -2366,6 +2366,8 @@ const droppedItem = {
 };
 
 gameState.items.push(droppedItem);
+
+
 
   // Remove exactly one item from the inventory
   const stacks = gameState.inventory[selectedType];
@@ -2459,28 +2461,45 @@ gameState.items.push(droppedItem);
   // ---------------------------------------------------------------------------
   // ZOOM
   // ---------------------------------------------------------------------------
-  function animateZoom(startZoom, targetZoom, duration, onComplete) {
-    if (zoomAnimationId !== null) {
-      cancelAnimationFrame(zoomAnimationId);
-    }
+  function applyZoom() {
+  canvas.style.transform = `scale(${zoom})`;
+}
 
-    const startTime = performance.now();
 
-    function updateZoom(currentTime) {
-      const progress = Math.min((currentTime - startTime) / duration, 1);
-      zoom = startZoom + (targetZoom - startZoom) * progress;
+function animateZoom(startZoom, targetZoom, duration, onComplete) {
+  if (zoomAnimationId !== null) {
+    cancelAnimationFrame(zoomAnimationId);
+  }
 
-      if (progress < 1) {
-        zoomAnimationId = requestAnimationFrame(updateZoom);
-      } else {
-        zoom = targetZoom;
-        zoomAnimationId = null;
-        if (onComplete) onComplete();
+  const startTime = performance.now();
+
+  function updateZoom(currentTime) {
+    const progress = Math.min(
+      (currentTime - startTime) / duration,
+      1
+    );
+
+    zoom = startZoom + (targetZoom - startZoom) * progress;
+    applyZoom();
+
+    if (progress < 1) {
+      zoomAnimationId = requestAnimationFrame(updateZoom);
+    } else {
+      zoom = targetZoom;
+      applyZoom();
+
+      zoomAnimationId = null;
+
+      if (onComplete) {
+        onComplete();
       }
     }
-
-    zoomAnimationId = requestAnimationFrame(updateZoom);
   }
+
+  // This line starts the animation
+  zoomAnimationId = requestAnimationFrame(updateZoom);
+}
+
 
   function activateZoomAbility() {
     if (zoomAbilityActive || zoomAbilityOnCooldown) return;
@@ -2491,35 +2510,40 @@ gameState.items.push(droppedItem);
     animateZoom(zoom, ZOOM_OUT_MIN, ZOOM_OUT_TIME);
 
     maxHoldTimer = setTimeout(() => {
-      if (zoomKeyHeld) {
-        zoomKeyHeld = false;
-        returnFromZoom();
-      }
-    }, MAX_HOLD_TIME);
+  returnFromZoom();
+}, MAX_HOLD_TIME);
   }
 
-  function returnFromZoom() {
-    if (!zoomAbilityActive) return;
+ function returnFromZoom() {
+  if (!zoomAbilityActive) return;
 
-    if (maxHoldTimer !== null) {
-      clearTimeout(maxHoldTimer);
-      maxHoldTimer = null;
-    }
+  zoomAbilityActive = false;
+  zoomKeyHeld = false;
 
-    const heldDuration = performance.now() - zoomActivationTime;
-
-    animateZoom(zoom, NORMAL_ZOOM, ZOOM_IN_TIME, () => {
-      zoomAbilityActive = false;
-    });
-
-    if (heldDuration >= MIN_HOLD_TIME) {
-      zoomAbilityOnCooldown = true;
-      cooldownTimer = setTimeout(() => {
-        zoomAbilityOnCooldown = false;
-        cooldownTimer = null;
-      }, COOLDOWN_TIME);
-    }
+  if (maxHoldTimer !== null) {
+    clearTimeout(maxHoldTimer);
+    maxHoldTimer = null;
   }
+
+  const heldDuration = performance.now() - zoomActivationTime;
+
+  animateZoom(zoom, NORMAL_ZOOM, ZOOM_IN_TIME);
+
+  if (heldDuration >= MIN_HOLD_TIME) {
+    zoomAbilityOnCooldown = true;
+
+    if (cooldownTimer !== null) {
+      clearTimeout(cooldownTimer);
+    }
+
+    cooldownTimer = setTimeout(() => {
+      zoomAbilityOnCooldown = false;
+      cooldownTimer = null;
+    }, COOLDOWN_TIME);
+  }
+}
+
+
 
   // ---------------------------------------------------------------------------
   // LEVEL GENERATION
