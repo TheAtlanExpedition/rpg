@@ -2635,10 +2635,10 @@ function toggleNearbyDoor() {
   }
 
   // Can't close a door on top of someone.
-  const somebodyInDoorway = [gameState.player, ...gameState.enemies].some(
+  const enemyInDoorway = [gameState.enemies].some(
     (en) => Math.abs(en.x - door.x) < 0.1 && Math.abs(en.y - door.y) < 0.1
   );
-  if (somebodyInDoorway) return; 
+  if (enemyInDoorway) return; 
 
   const p = gameState.player;
   const pc = playerCenter();
