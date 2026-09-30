@@ -229,24 +229,28 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
       frames: 1,
       frameWidth: 25,
       frameHeight: 11,
+      worldScale: 0.5,
     },
     scrollFreezeCloud: {
       image: ITEM_SPRITES.scrollFreezeCloud,
       frames: 1,
       frameWidth: 25,
       frameHeight: 11,
+      worldScale: 0.5,
     },
     scrollChainLightning: {
       image: ITEM_SPRITES.scrollChainLightning,
       frames: 1,
       frameWidth: 25,
       frameHeight: 11,
+      worldScale: 0.5,
     },
     healthPotion: {
       image: ITEM_SPRITES.healthPotion,
       frames: 8,
       frameWidth: 38,
       frameHeight: 38,
+      worldScale: 0.5,
     },
   };
 
@@ -1096,61 +1100,79 @@ if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
     }
   }
 
-  function drawItems(timestamp = performance.now()) {
-    if (!gameState || !gameState.items) return;
+function drawItems(timestamp = performance.now()) {
+  if (!gameState || !gameState.items) return;
 
-    for (const item of gameState.items) {
-      if (item.type === "trap") {
-        drawTrap(item, timestamp);
-        continue;
-      }
-      const animation = ITEM_ANIMATIONS[item.idName];
-
-      if (!animation || !animation.image) continue;
-      if (!animation.image.complete || animation.image.naturalWidth === 0) {
-        continue;
-      }
-
-      const worldW = animation.frameWidth;
-      const worldH = animation.frameHeight;
-
-      const frame =
-        animation.frames > 1
-          ? Math.floor((timestamp / 1000) * ITEM_ANIMATION_FPS) %
-            animation.frames
-          : 0;
-
-      const sourceX = frame * animation.frameWidth;
-      const sourceY = 0;
-
-      const bob = Math.round(Math.sin(timestamp / 400) * 2);
-
-      const tileX = item.x * TILE_SIZE;
-      const tileY = item.y * TILE_SIZE;
-
-      const drawX = Math.floor(tileX + (TILE_SIZE - worldW) / 2);
-      const drawY = Math.floor(tileY + TILE_SIZE - worldH - 10) - bob;
-
-      context.imageSmoothingEnabled = false;
-      context.shadowColor = "transparent";
-      context.shadowBlur = 0;
-
-      context.fillStyle = "rgba(0, 0, 0, 0.35)";
-      context.fillRect(drawX + 2, tileY + TILE_SIZE - 6, worldW - 4, 2);
-
-      context.drawImage(
-        animation.image,
-        sourceX,
-        sourceY,
-        animation.frameWidth,
-        animation.frameHeight,
-        drawX,
-        drawY,
-        worldW,
-        worldH
-      );
+  for (const item of gameState.items) {
+    if (item.type === "trap") {
+      drawTrap(item, timestamp);
+      continue;
     }
+
+    // Get the animation before using it
+    const animation = ITEM_ANIMATIONS[item.idName];
+
+    if (!animation || !animation.image) continue;
+
+    if (
+      !animation.image.complete ||
+      animation.image.naturalWidth === 0
+    ) {
+      continue;
+    }
+
+    const worldScale = animation.worldScale ?? 1;
+
+    const worldW = Math.round(animation.frameWidth * worldScale);
+    const worldH = Math.round(animation.frameHeight * worldScale);
+
+    const frame =
+      animation.frames > 1
+        ? Math.floor((timestamp / 1000) * ITEM_ANIMATION_FPS) %
+          animation.frames
+        : 0;
+
+    const sourceX = frame * animation.frameWidth;
+    const sourceY = 0;
+
+    const bob = Math.round(Math.sin(timestamp / 400) * 2);
+
+    const tileX = item.x * TILE_SIZE;
+    const tileY = item.y * TILE_SIZE;
+
+    const drawX = Math.floor(
+      tileX + (TILE_SIZE - worldW) / 2
+    );
+
+    const drawY =
+      Math.floor(tileY + TILE_SIZE - worldH - 10) - bob;
+
+    context.imageSmoothingEnabled = false;
+    context.shadowColor = "transparent";
+    context.shadowBlur = 0;
+
+    context.fillStyle = "rgba(0, 0, 0, 0.35)";
+    context.fillRect(
+      drawX + 2,
+      tileY + TILE_SIZE - 6,
+      Math.max(1, worldW - 4),
+      2
+    );
+
+    context.drawImage(
+      animation.image,
+      sourceX,
+      sourceY,
+      animation.frameWidth,
+      animation.frameHeight,
+      drawX,
+      drawY,
+      worldW,
+      worldH
+    );
   }
+}
+
 
   function drawTrap(trap, now) {
     const cx = Math.round(trap.x * TILE_SIZE + TILE_SIZE / 2);
@@ -2127,7 +2149,7 @@ function drawPillar(pillar) {
     stacks.push(1);
   }
 
-  const PICKUP_RADIUS = 0.8;
+  const PICKUP_RADIUS = 0.2;
 
 function pickupNearbyItems() {
   if (!gameState || !globalPlayer) return;
