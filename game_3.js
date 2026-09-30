@@ -541,9 +541,9 @@ const CONNECTOR_LENGTH = 2;
 const WIDE_CONNECTOR_CHANCE = 0.2;   // 3-wide open connectors (no door)
 
 const DOOR_HP = 100;
-const ENEMY_DOOR_DAMAGE = 25;        // 4 hits to break
+const ENEMY_DOOR_DAMAGE = 50;        // 4 hits to break
 const ENEMY_DOOR_HIT_INTERVAL_MS = 700;
-const DOOR_INTERACT_DIST = 1.2;
+const DOOR_INTERACT_DIST = 1.5;
 const DOOR_BREAK_NOISE_RADIUS = 5;
 const CURIOUS_GIVE_UP_MS = 8000;     // curious enemies stuck behind a door give up
 const DOOR_ATTACK_REACH = 1.1; // how close an enemy must be to hit a door
@@ -2635,10 +2635,10 @@ function toggleNearbyDoor() {
   }
 
   // Can't close a door on top of someone.
- /* const somebodyInDoorway = [gameState.player, ...gameState.enemies].some(
-    (en) => Math.abs(en.x - door.x) < 0.9 && Math.abs(en.y - door.y) < 0.9
+  const somebodyInDoorway = [gameState.player, ...gameState.enemies].some(
+    (en) => Math.abs(en.x - door.x) < 0.3 && Math.abs(en.y - door.y) < 0.3
   );
-  if (somebodyInDoorway) return; */
+  if (somebodyInDoorway) return; 
 
   const p = gameState.player;
   const pc = playerCenter();
