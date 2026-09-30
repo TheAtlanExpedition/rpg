@@ -2352,7 +2352,7 @@ function dropSelectedItem() {
     return;
   }
 
-const dropDistance = 0.8;
+const dropDistance = 0.6;
 
 const dropX = globalPlayer.x;
 const dropY = globalPlayer.y + dropDistance;
