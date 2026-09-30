@@ -965,10 +965,10 @@ window.addEventListener("keyup", (event) => {
     drawRipples();
     drawHidingSpots();
     drawVisionCones();
-     drawItems(timestamp);
+    drawPlayer(timestamp);
+    drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
-    drawPlayer(timestamp);
     drawHidePrompt();
 
     context.restore();
@@ -2352,7 +2352,7 @@ function dropSelectedItem() {
     return;
   }
 
-const dropDistance = 0.6;
+const dropDistance = 0.2;
 
 const dropX = globalPlayer.x;
 const dropY = globalPlayer.y + dropDistance;
