@@ -609,7 +609,6 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   const HIDE_SPOT_COLOR = "#334155";
   const HIDE_ATTACK_REACH = 0.9;
   const HIDE_BREAK_NOISE_RADIUS = 5;
-  const HIDE_SPOTS_PER_ROOM = 1;
   const HIDE_SPOT_TYPES = ["closet", "crate"];
   const HIDE_SPOTS_PER_ROOM = 3;
   const HIDE_SMASH_CHANCE = 0.35;            // chance a searched room loses a spot at all
