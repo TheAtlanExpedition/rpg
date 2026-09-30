@@ -2636,7 +2636,7 @@ function toggleNearbyDoor() {
 
   // Can't close a door on top of someone.
  // Keep the detection box accurate to the door asset size
-const DOOR_THRESHOLD = 0.2; 
+const DOOR_THRESHOLD = 0.05; 
 // Force the player completely outside the 1.0 tile bounds
 const ESCAPE_DISTANCE = 0.65; 
 
