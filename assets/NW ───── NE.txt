@@ -1,0 +1,32 @@
+NW ───── NE
+│         │
+│         │
+SW ───── SE
+
+outerNW: top-left corner
+outerNE: top-right corner
+outerSW: bottom-left corner
+outerSE: bottom-right corner
+
+
+(0, 0) ───────────────► x
+  │
+  │
+  ▼
+  y
+
+
+left   = 0
+top    = 0
+right  = 14
+bottom = 14
+
+  outerNW: sliceTileset(33, 130, 14, 14),
+  outerNE: sliceTileset(96, 67, 14, 14),
+  outerSW: sliceTileset(62, 1, 14, 14),
+  outerSE: sliceTileset(33, 64, 14, 14),
+
+ outerNW: sliceTileset(33, 64, 14, 14),
+      outerNE: sliceTileset(96, 67, 14, 14),
+      outerSW: sliceTileset(62, 1, 14, 14), // was 32×32
+      outerSE: sliceTileset(33, 130, 14, 14),
