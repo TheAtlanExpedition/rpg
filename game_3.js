@@ -2638,7 +2638,7 @@ function toggleNearbyDoor() {
  // Keep the detection box accurate to the door asset size
 const DOOR_THRESHOLD = 0.05; 
 // Force the player completely outside the 1.0 tile bounds
-const ESCAPE_DISTANCE = 0.65; 
+const ESCAPE_DISTANCE = 0.75; 
 
 const enemyInDoorway = gameState.enemies.some(
   (en) => Math.abs(en.x - door.x) < DOOR_THRESHOLD && Math.abs(en.y - door.y) < DOOR_THRESHOLD
@@ -2647,8 +2647,8 @@ if (enemyInDoorway) return;
 
 const p = gameState.player;
 const pc = playerCenter();
-const sideX = door.dir === "h" ? (pc.x > door.x + 0.5 ? 1 : -1) : 0;
-const sideY = door.dir === "v" ? (pc.y > door.y + 0.5 ? 1 : -1) : 0;
+const sideX = door.dir === "v" ? (pc.x > door.x + 0.5 ? 1 : -1) : 0;
+const sideY = door.dir === "h" ? (pc.y > door.y + 0.5 ? 1 : -1) : 0;
 
 const playerInDoorway = Math.abs(p.x - door.x) < DOOR_THRESHOLD && 
                         Math.abs(p.y - door.y) < DOOR_THRESHOLD;
