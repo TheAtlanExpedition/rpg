@@ -3945,7 +3945,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i];
 
-      for (let t = 0; t < 4; t++) {
+      for (let t = 0; t < 1; t++) {
         const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
         const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
 
