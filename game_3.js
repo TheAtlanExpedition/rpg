@@ -260,6 +260,12 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const PLAYER_RUN_SPEED = 5.2;
   const STAMINA_MAX = 3;
   const STAMINA_START_MIN = 0.35;
+  const STAMINA_DEPLETION_RATE = 1;
+  const STAMINA_WALK_RECHARGE_RATE =
+    STAMINA_DEPLETION_RATE / 1.5; // 0.667 per second
+  const STAMINA_SNEAK_RECHARGE_RATE =
+    STAMINA_DEPLETION_RATE; // 1 per second
+  const STAMINA_RECHARGE_DELAY = 1.5; // seconds
   const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
   const PROJECTILE_HIT_RADIUS = 0.75; // how close to an enemy's centre counts as a hit
 
@@ -352,7 +358,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // ---------------------------------------------------------------------------
   // TRAPS
   // ---------------------------------------------------------------------------
-  const TRAP_DAMAGE = 10;
+  const TRAP_DAMAGE = 50;
   const TRAP_TRIGGER_RADIUS = 0.4;
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
@@ -651,23 +657,66 @@ window.addEventListener("keyup", (event) => {
     if (heldMoveKeys.has("w")) dy -= 1;
     if (heldMoveKeys.has("s")) dy += 1;
 
-    const sneak = heldGaitKeys.sneak;
-    const wantRun = heldGaitKeys.run && !sneak;
-    const canRun = player.stamina > (player.wasRunning ? 0 : STAMINA_START_MIN);
+   const sneak = heldGaitKeys.sneak;
+const wantRun = heldGaitKeys.run && !sneak;
 
-    if (sneak) {
-      player.gait = "sneak";
-      player.wasRunning = false;
-      player.stamina = Math.min(STAMINA_MAX, player.stamina + deltaTime);
-    } else if (wantRun && canRun && (dx !== 0 || dy !== 0)) {
-      player.gait = "run";
-      player.stamina = Math.max(0, player.stamina - deltaTime);
-      player.wasRunning = player.stamina > 0;
-    } else {
-      player.gait = "walk";
-      player.wasRunning = false;
-      player.stamina = Math.min(STAMINA_MAX, player.stamina + deltaTime);
-    }
+// Running is unavailable after exhaustion until stamina is completely full.
+const canRun =
+  !player.staminaExhausted &&
+  player.stamina > (player.wasRunning ? 0 : STAMINA_START_MIN);
+
+function rechargeStamina(rechargeRate) {
+  // Exhaustion delay must finish before stamina starts recharging.
+  if (player.staminaRechargeDelay > 0) {
+    player.staminaRechargeDelay = Math.max(
+      0,
+      player.staminaRechargeDelay - deltaTime
+    );
+    return;
+  }
+
+  player.stamina = Math.min(
+    STAMINA_MAX,
+    player.stamina + rechargeRate * deltaTime
+  );
+
+  // The player can run again only after reaching full stamina.
+  if (player.stamina >= STAMINA_MAX) {
+    player.stamina = STAMINA_MAX;
+    player.staminaExhausted = false;
+  }
+}
+
+if (sneak) {
+  player.gait = "sneak";
+  player.wasRunning = false;
+
+  // Sneaking recharges at the full rate.
+  rechargeStamina(STAMINA_SNEAK_RECHARGE_RATE);
+} else if (wantRun && canRun && (dx !== 0 || dy !== 0)) {
+  player.gait = "run";
+
+  // Running depletes stamina at the maximum rate.
+  player.stamina = Math.max(
+    0,
+    player.stamina - STAMINA_DEPLETION_RATE * deltaTime
+  );
+
+  if (player.stamina <= 0) {
+    player.stamina = 0;
+    player.staminaExhausted = true;
+    player.staminaRechargeDelay = STAMINA_RECHARGE_DELAY;
+    player.wasRunning = false;
+  } else {
+    player.wasRunning = true;
+  }
+} else {
+  player.gait = "walk";
+  player.wasRunning = false;
+
+  // Walking recharges 1.5 times slower than running depletes stamina.
+  rechargeStamina(STAMINA_WALK_RECHARGE_RATE);
+}
 
     if (dx === 0 && dy === 0) {
       return;
@@ -2427,7 +2476,7 @@ gameState.items.push(droppedItem);
       y: player.y + 0.2,
       dx: dx / len,
       dy: dy / len,
-      damage: 10,
+      damage: 50,
       color: "#facc15",
     });
 
@@ -2649,6 +2698,9 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
           wasRunning: false,
           hidden: false,
           hidingSpot: null,
+          stamina: STAMINA_MAX,
+          staminaExhausted: false,
+          staminaRechargeDelay: 0,
         }
       : {
           id: "player",
@@ -2667,6 +2719,9 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
           wasRunning: false,
           hidden: false,
           hidingSpot: null,
+          stamina: STAMINA_MAX,
+          staminaExhausted: false,
+          staminaRechargeDelay: 0,
         };
 
     globalPlayer = player;
