@@ -359,6 +359,8 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // TRAPS
   // ---------------------------------------------------------------------------
   const TRAP_DAMAGE = 30;
+  const TRAP_ENEMY_DAMAGE = 15;   // enemies take less than the player
+  const TRAP_KNOCKBACK = 0.5;     // tiles
   const TRAP_TRIGGER_RADIUS = 0.4;
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
@@ -446,12 +448,17 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   // ---------------------------------------------------------------------------
   // INPUT
   // ---------------------------------------------------------------------------
+// Inventory keys
   window.addEventListener("keydown", (event) => {
-    if (event.code === "KeyE" && !event.repeat) {
-      if (!gameRunning || !gameState || inventoryOpen) return;
-      toggleHide();
-    }
-  });
+  if (event.code !== "KeyE" || event.repeat) return;
+  if (!gameRunning || !gameState) return;
+
+  if (inventoryOpen) {
+    useSelectedItem();
+  } else {
+    toggleHide();
+  }
+});
 window.addEventListener("keydown", (event) => {
   if (event.key.toLowerCase() !== "g") return;
   if (event.repeat) return;
@@ -776,33 +783,49 @@ if (sneak) {
     }
     return gameState.map[tileY][tileX] !== TileType.WALL;
   }
-  function isBoxClear(x, y, hb) {
-    if (!gameState || !gameState.map) return false;
-    return (
-      isWalkableTile(Math.floor(x + hb.left), Math.floor(y + hb.top)) &&
-      isWalkableTile(Math.floor(x + hb.right), Math.floor(y + hb.top)) &&
-      isWalkableTile(Math.floor(x + hb.left), Math.floor(y + hb.bottom)) &&
-      isWalkableTile(Math.floor(x + hb.right), Math.floor(y + hb.bottom))
-    );
-  }
 
-  function isSegmentClear(ax, ay, bx, by, hb) {
-    const dist = Math.hypot(bx - ax, by - ay);
-    const steps = Math.max(1, Math.ceil(dist / 0.15));
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      if (!isBoxClear(ax + (bx - ax) * t, ay + (by - ay) * t, hb)) return false;
+  // Walkable, and (optionally) not a trap tile.
+function isNavTile(tileX, tileY, avoidTraps = false) {
+  if (!isWalkableTile(tileX, tileY)) return false;
+  return !(avoidTraps && gameState.trapTiles.has(tileY * MAP_WIDTH + tileX));
+}
+
+
+ function isBoxClear(x, y, hb, avoidTraps = false) {
+  if (!gameState || !gameState.map) return false;
+  return (
+    isNavTile(Math.floor(x + hb.left), Math.floor(y + hb.top), avoidTraps) &&
+    isNavTile(Math.floor(x + hb.right), Math.floor(y + hb.top), avoidTraps) &&
+    isNavTile(Math.floor(x + hb.left), Math.floor(y + hb.bottom), avoidTraps) &&
+    isNavTile(Math.floor(x + hb.right), Math.floor(y + hb.bottom), avoidTraps)
+  );
+}
+
+function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
+  const dist = Math.hypot(bx - ax, by - ay);
+  const steps = Math.max(1, Math.ceil(dist / 0.15));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (!isBoxClear(ax + (bx - ax) * t, ay + (by - ay) * t, hb, avoidTraps)) {
+      return false;
     }
-    return true;
+  }
+  return true;
+}
+
+ function tryMove(entity, dx, dy, hb, avoidTraps = false) {
+  const ox = entity.x;
+  const oy = entity.y;
+
+  // If the entity is already standing on a trap tile, let it walk off.
+  if (avoidTraps && !isBoxClear(entity.x, entity.y, hb, true)) {
+    avoidTraps = false;
   }
 
-  function tryMove(entity, dx, dy, hb) {
-    const ox = entity.x;
-    const oy = entity.y;
-    if (isBoxClear(entity.x + dx, entity.y, hb)) entity.x += dx;
-    if (isBoxClear(entity.x, entity.y + dy, hb)) entity.y += dy;
-    return Math.hypot(entity.x - ox, entity.y - oy);
-  }
+  if (isBoxClear(entity.x + dx, entity.y, hb, avoidTraps)) entity.x += dx;
+  if (isBoxClear(entity.x, entity.y + dy, hb, avoidTraps)) entity.y += dy;
+  return Math.hypot(entity.x - ox, entity.y - oy);
+}
 
   function canMoveTo(x, y) {
     return isBoxClear(x, y, HITBOX);
@@ -1400,22 +1423,82 @@ function drawPillar(pillar) {
     if (p.hp <= 0) gameState.gameOver = true;
   }
 
-  function updateTraps(timestamp) {
-    if (!gameState || !gameState.items || !gameState.player) return;
-    if (gameState.gameOver) return;
-
-    const p = gameState.player;
-    for (const item of gameState.items) {
-      if (item.type !== "trap") continue;
-      if (timestamp < item.sprungUntil) continue;
-
-      if (Math.hypot(p.x - item.x, p.y - item.y) < TRAP_TRIGGER_RADIUS) {
-        item.sprungUntil = timestamp + TRAP_REARM_MS;
-        damagePlayer(TRAP_DAMAGE);
-        makeNoise(item.x, item.y, TRAP_NOISE_RADIUS, "#ef4444");
-      }
-    }
+// Unit vector the entity is facing (enemies use `facing`, the player uses `direction`).
+function facingVector(entity) {
+  if (typeof entity.facing === "number") {
+    return { x: Math.cos(entity.facing), y: Math.sin(entity.facing) };
   }
+  const key = Object.keys(DIR_FROM_VECTOR).find(
+    (k) => DIR_FROM_VECTOR[k] === entity.direction
+  );
+  if (!key) return { x: 0, y: 1 };
+  const [vx, vy] = key.split(",").map(Number);
+  const len = Math.hypot(vx, vy) || 1;
+  return { x: vx / len, y: vy / len };
+}
+
+// Push an entity away from (fromX, fromY), stopping at walls.
+function knockback(entity, fromX, fromY, hb, distance = TRAP_KNOCKBACK) {
+  let ux = entity.x - fromX;
+  let uy = entity.y - fromY;
+  let len = Math.hypot(ux, uy);
+
+  if (len < 0.01) {
+    // Dead centre on the trap: push backwards from where they were facing.
+    const f = facingVector(entity);
+    ux = -f.x;
+    uy = -f.y;
+    len = Math.hypot(ux, uy) || 1;
+  }
+  ux /= len;
+  uy /= len;
+
+  const steps = 5;
+  const step = distance / steps;
+  for (let i = 0; i < steps; i++) {
+    tryMove(entity, ux * step, uy * step, hb);
+  }
+}
+
+function updateTraps(timestamp) {
+  if (!gameState || !gameState.items || !gameState.player) return;
+  if (gameState.gameOver) return;
+
+  const p = gameState.player;
+  const enemies = gameState.enemies || [];
+
+  for (const item of gameState.items) {
+    if (item.type !== "trap") continue;
+    if (timestamp < item.sprungUntil) continue;
+
+    const playerHit =
+      Math.hypot(p.x - item.x, p.y - item.y) < TRAP_TRIGGER_RADIUS;
+    const enemiesHit = enemies.filter(
+      (e) => Math.hypot(e.x - item.x, e.y - item.y) < TRAP_TRIGGER_RADIUS
+    );
+    if (!playerHit && enemiesHit.length === 0) continue;
+
+    item.sprungUntil = timestamp + TRAP_REARM_MS;
+
+    if (playerHit) {
+      damagePlayer(TRAP_DAMAGE);
+      knockback(p, item.x, item.y, HITBOX);
+    }
+
+    for (const e of enemiesHit) {
+      e.hp -= TRAP_ENEMY_DAMAGE;
+      if (e.hp <= 0) {
+        enemies.splice(enemies.indexOf(e), 1);
+        continue;
+      }
+      knockback(e, item.x, item.y, ENEMY_HITBOX);
+      e.steer = null;
+      e.navTimer = 0;
+    }
+
+    makeNoise(item.x, item.y, TRAP_NOISE_RADIUS, "#ef4444");
+  }
+}
 
   // ---------------------------------------------------------------------------
   // ENEMY AI
@@ -1475,126 +1558,157 @@ function drawPillar(pillar) {
     e.facing = e.baseFacing + Math.sin(now / 450) * 0.9;
   }
 
-  function findPath(sx, sy, gx, gy) {
-    if (!isWalkableTile(gx, gy) || !isWalkableTile(sx, sy)) return null;
-    if (sx === gx && sy === gy) return [];
+function findPath(sx, sy, gx, gy, avoidTraps = false) {
+  if (!isNavTile(gx, gy, avoidTraps) || !isWalkableTile(sx, sy)) return null;
+  if (sx === gx && sy === gy) return [];
 
-    const key = (x, y) => y * MAP_WIDTH + x;
-    const startKey = key(sx, sy);
-    const prev = new Map([[startKey, -1]]);
-    const queue = [[sx, sy]];
-    const dirs = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ];
+  const key = (x, y) => y * MAP_WIDTH + x;
+  const startKey = key(sx, sy);
+  const prev = new Map([[startKey, -1]]);
+  const queue = [[sx, sy]];
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
 
-    for (let head = 0; head < queue.length; head++) {
-      const [x, y] = queue[head];
-      for (const [dx, dy] of dirs) {
-        const nx = x + dx;
-        const ny = y + dy;
-        const k = key(nx, ny);
-        if (!isWalkableTile(nx, ny) || prev.has(k)) continue;
-        prev.set(k, key(x, y));
+  for (let head = 0; head < queue.length; head++) {
+    const [x, y] = queue[head];
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      const k = key(nx, ny);
+      if (!isNavTile(nx, ny, avoidTraps) || prev.has(k)) continue;
+      prev.set(k, key(x, y));
 
-        if (nx === gx && ny === gy) {
-          const path = [];
-          let cur = k;
-          while (cur !== startKey) {
-            path.push({
-              x: cur % MAP_WIDTH,
-              y: Math.floor(cur / MAP_WIDTH),
-            });
-            cur = prev.get(cur);
-          }
-          return path.reverse();
+      if (nx === gx && ny === gy) {
+        const path = [];
+        let cur = k;
+        while (cur !== startKey) {
+          path.push({ x: cur % MAP_WIDTH, y: Math.floor(cur / MAP_WIDTH) });
+          cur = prev.get(cur);
         }
-        queue.push([nx, ny]);
+        return path.reverse();
+      }
+      queue.push([nx, ny]);
+    }
+  }
+  return null;
+}
+
+// If the goal sits on a trap, pick the closest non-trap tile nearby.
+function nearestSafeGoal(gx, gy) {
+  const tx = Math.floor(gx + 0.5);
+  const ty = Math.floor(gy + 0.5);
+  if (!gameState.trapTiles.has(ty * MAP_WIDTH + tx)) return { x: gx, y: gy };
+
+  let best = null;
+  let bestDist = Infinity;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!isNavTile(nx, ny, true)) continue;
+      const d = Math.hypot(nx - gx, ny - gy);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { x: nx, y: ny };
       }
     }
-    return null;
+  }
+  return best || { x: gx, y: gy };
+}
+
+function planSteer(e, gx, gy) {
+  const avoid = e.state !== "alert";
+
+  if (isSegmentClear(e.x, e.y, gx, gy, ENEMY_HITBOX, avoid)) {
+    return { x: gx, y: gy, isGoal: true };
   }
 
-  function planSteer(e, gx, gy) {
-    if (isSegmentClear(e.x, e.y, gx, gy, ENEMY_HITBOX)) {
-      return { x: gx, y: gy, isGoal: true };
-    }
-
-    const path = findPath(
-      Math.floor(e.x + 0.5),
-      Math.floor(e.y + 0.5),
-      Math.floor(gx + 0.5),
-      Math.floor(gy + 0.5)
-    );
-    if (!path || path.length === 0) {
-      return { x: gx, y: gy, isGoal: true };
-    }
-
-    let best = path[0];
-    let foundClear = false;
-    const limit = Math.min(path.length, 16);
-    for (let i = 0; i < limit; i++) {
-      if (isSegmentClear(e.x, e.y, path[i].x, path[i].y, ENEMY_HITBOX)) {
-        best = path[i];
-        foundClear = true;
-      } else if (foundClear) {
-        break;
-      }
-    }
-    return { x: best.x, y: best.y, isGoal: false };
+  const path = findPath(
+    Math.floor(e.x + 0.5),
+    Math.floor(e.y + 0.5),
+    Math.floor(gx + 0.5),
+    Math.floor(gy + 0.5),
+    avoid
+  );
+  if (!path || path.length === 0) {
+    return { x: gx, y: gy, isGoal: true };
   }
 
-  function steerToward(
-    e,
-    gx,
-    gy,
-    speed,
-    dt,
-    arriveDist = ENEMY_ARRIVE_DIST,
-    faceMovement = true
-  ) {
-    if (Math.hypot(gx - e.x, gy - e.y) <= arriveDist) {
-      e.steer = null;
-      return true;
+  let best = path[0];
+  let foundClear = false;
+  const limit = Math.min(path.length, 16);
+  for (let i = 0; i < limit; i++) {
+    if (isSegmentClear(e.x, e.y, path[i].x, path[i].y, ENEMY_HITBOX, avoid)) {
+      best = path[i];
+      foundClear = true;
+    } else if (foundClear) {
+      break;
     }
+  }
+  return { x: best.x, y: best.y, isGoal: false };
+}
 
-    e.navTimer -= dt * 1000;
-    const goalMoved =
-      !e.navGoal || Math.hypot(e.navGoal.x - gx, e.navGoal.y - gy) > 1;
+function steerToward(
+  e,
+  gx,
+  gy,
+  speed,
+  dt,
+  arriveDist = ENEMY_ARRIVE_DIST,
+  faceMovement = true
+) {
+  const avoid = e.state !== "alert";
+  if (avoid) {
+    const safe = nearestSafeGoal(gx, gy);
+    gx = safe.x;
+    gy = safe.y;
+  }
 
-    if (!e.steer || e.navTimer <= 0 || goalMoved) {
-      e.steer = planSteer(e, gx, gy);
-      e.navGoal = { x: gx, y: gy };
-      e.navTimer = NAV_REPLAN_MS;
-    } else if (e.steer.isGoal) {
-      e.steer.x = gx;
-      e.steer.y = gy;
-    }
+  if (Math.hypot(gx - e.x, gy - e.y) <= arriveDist) {
+    e.steer = null;
+    return true;
+  }
 
-    const dx = e.steer.x - e.x;
-    const dy = e.steer.y - e.y;
-    const d = Math.hypot(dx, dy);
-    if (d < 0.05) {
-      e.navTimer = 0;
-      return false;
-    }
+  e.navTimer -= dt * 1000;
+  const goalMoved =
+    !e.navGoal || Math.hypot(e.navGoal.x - gx, e.navGoal.y - gy) > 1;
 
-    if (faceMovement) turnToward(e, Math.atan2(dy, dx), dt);
+  if (!e.steer || e.navTimer <= 0 || goalMoved) {
+    e.steer = planSteer(e, gx, gy);
+    e.navGoal = { x: gx, y: gy };
+    e.navTimer = NAV_REPLAN_MS;
+  } else if (e.steer.isGoal) {
+    e.steer.x = gx;
+    e.steer.y = gy;
+  }
 
-    const step = Math.min(speed * dt, d);
-    if (step > 0) {
-      const moved = tryMove(
-        e,
-        (dx / d) * step,
-        (dy / d) * step,
-        ENEMY_HITBOX
-      );
-      if (moved < step * 0.25) e.navTimer = 0;
-    }
+  const dx = e.steer.x - e.x;
+  const dy = e.steer.y - e.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.05) {
+    e.navTimer = 0;
     return false;
   }
+
+  if (faceMovement) turnToward(e, Math.atan2(dy, dx), dt);
+
+  const step = Math.min(speed * dt, d);
+  if (step > 0) {
+    const moved = tryMove(
+      e,
+      (dx / d) * step,
+      (dy / d) * step,
+      ENEMY_HITBOX,
+      avoid
+    );
+    if (moved < step * 0.25) e.navTimer = 0;
+  }
+  return false;
+}
 
   function alertEnemy(e, now) {
     const p = gameState.player;
@@ -2199,6 +2313,7 @@ function drawPillar(pillar) {
   }
 
   const PICKUP_RADIUS = 0.6;
+  const POTION_HEAL = 30; // change to taste (use Infinity for a full heal)
 
 function pickupNearbyItems() {
   if (!gameState || !globalPlayer) return;
@@ -2398,64 +2513,64 @@ if (slot.count > 1) {
 function dropSelectedItem() {
   if (!gameState || !globalPlayer || !inventoryOpen) return;
 
-  const selectedIndex = selectedRow * INV_COLS + selectedCol;
-
-  let currentIndex = 0;
-  let selectedType = null;
-  let selectedStackIndex = -1;
-
-  for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
-    for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
-      if (currentIndex === selectedIndex) {
-        selectedType = type;
-        selectedStackIndex = stackIndex;
-        break;
-      }
-
-      currentIndex++;
-    }
-
-    if (selectedType !== null) break;
-  }
-
-  if (selectedType === null || selectedStackIndex === -1) {
+  const selected = getSelectedStack();
+  if (!selected) {
     console.log("No item selected.");
     return;
   }
 
-const dropDistance = 0.1;
+  gameState.items.push({
+    idName: selected.type,
+    type: selected.type,
+    x: globalPlayer.x,
+    y: globalPlayer.y + 0.1,
+    mustMoveAway: true,
+  });
 
-const dropX = globalPlayer.x;
-const dropY = globalPlayer.y + dropDistance;
+  removeOneFromStack(selected.type, selected.stackIndex);
+  console.log("Dropped:", selected.type);
+}
+// Finds the inventory stack under the cursor.
+function getSelectedStack() {
+  const selectedIndex = selectedRow * INV_COLS + selectedCol;
+  let currentIndex = 0;
 
-const droppedItem = {
-  idName: selectedType,
-  type: selectedType,
-  x: dropX,
-  y: dropY,
-  mustMoveAway: true,
-};
-
-gameState.items.push(droppedItem);
-
-
-
-  // Remove exactly one item from the inventory
-  const stacks = gameState.inventory[selectedType];
-
-  stacks[selectedStackIndex]--;
-
-  if (stacks[selectedStackIndex] <= 0) {
-    stacks.splice(selectedStackIndex, 1);
+  for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
+    for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
+      if (currentIndex === selectedIndex) return { type, stackIndex };
+      currentIndex++;
+    }
   }
-
-  if (stacks.length === 0) {
-    delete gameState.inventory[selectedType];
-  }
-
-  console.log("Dropped:", selectedType);
+  return null;
 }
 
+// Removes exactly one item from a stack, cleaning up empty stacks/types.
+function removeOneFromStack(type, stackIndex) {
+  const stacks = gameState.inventory[type];
+  stacks[stackIndex]--;
+
+  if (stacks[stackIndex] <= 0) stacks.splice(stackIndex, 1);
+  if (stacks.length === 0) delete gameState.inventory[type];
+}
+
+function useSelectedItem() {
+  if (!gameState || !gameState.player || !inventoryOpen) return;
+
+  const selected = getSelectedStack();
+  if (!selected) return;
+
+  if (selected.type === "healthPotion") {
+    const p = gameState.player;
+    const maxHp = p.maxHp ?? 100;
+
+    // Don't waste a potion at full health.
+    if (p.hp >= maxHp) return;
+
+    p.hp = Math.min(maxHp, p.hp + POTION_HEAL);
+    removeOneFromStack(selected.type, selected.stackIndex);
+    console.log("Used health potion. HP:", p.hp);
+  }
+}
 
 
 
@@ -2729,7 +2844,7 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     const enemies = [];
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i];
-      const enemyHp = 30 + level * 5;
+      const enemyHp = 50 + level * 5;
       enemies.push({
         id: `e-${level}-${i}`,
         x: room.x + Math.floor(room.w / 2),
@@ -2839,6 +2954,9 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
       player: player,
       enemies: enemies,
       items: items,
+      trapTiles: new Set(
+        items.filter((it) => it.type === "trap").map((it) => it.y * MAP_WIDTH + it.x)
+      ),
       inventory: {
         scrollFireBall: [],
         scrollFreezeCloud: [],
