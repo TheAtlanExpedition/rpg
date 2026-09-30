@@ -2635,15 +2635,38 @@ function toggleNearbyDoor() {
   }
 
   // Can't close a door on top of someone.
-  const enemyInDoorway = [gameState.enemies].some(
-    (en) => Math.abs(en.x - door.x) < 0.1 && Math.abs(en.y - door.y) < 0.1
-  );
-  if (enemyInDoorway) return; 
+  const DOOR_THRESHOLD = 0.4;
 
-  const p = gameState.player;
-  const pc = playerCenter();
-  const sideX = door.dir === "h" ? (pc.x > door.x + 0.5 ? 1 : -1) : 0;
-  const sideY = door.dir === "v" ? (pc.y > door.y + 0.5 ? 1 : -1) : 0;
+// 1. Block door action if enemies are inside
+const enemyInDoorway = gameState.enemies.some(
+  (en) => Math.abs(en.x - door.x) < DOOR_THRESHOLD && Math.abs(en.y - door.y) < DOOR_THRESHOLD
+);
+if (enemyInDoorway) return;
+
+// 2. Grab player references and calculate relative sides
+const p = gameState.player;
+const pc = playerCenter();
+const sideX = door.dir === "h" ? (pc.x > door.x + 0.5 ? 1 : -1) : 0;
+const sideY = door.dir === "v" ? (pc.y > door.y + 0.5 ? 1 : -1) : 0;
+
+// 3. If player is inside the door threshold, nudge them out using sideX / sideY
+const playerInDoorway = Math.abs(p.x - door.x) < DOOR_THRESHOLD && 
+                        Math.abs(p.y - door.y) < DOOR_THRESHOLD;
+
+if (playerInDoorway) {
+  if (door.dir === "h") {
+    // If sideX is 0 (centered exactly), default to pushing right (1)
+    const direction = sideX !== 0 ? sideX : 1;
+    p.x = door.x + 0.5 + (direction * DOOR_THRESHOLD);
+  } else {
+    // If sideY is 0 (centered exactly), default to pushing down (1)
+    const direction = sideY !== 0 ? sideY : 1;
+    p.y = door.y + 0.5 + (direction * DOOR_THRESHOLD);
+  }
+}
+
+door.open = false;
+
 
   // Alert enemies that can see the player right now are witnesses.
   const witnesses = gameState.enemies.filter(
