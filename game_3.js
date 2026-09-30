@@ -2854,18 +2854,7 @@ function doorApproachPoint(door, e) {
   return { x: door.x, y: door.y + side * off };
 }
 
-  // Do not close the door if an enemy is standing in its collision area.
-  if (isEnemyBlockingDoor(door)) {
-    return;
-  }
 
-  // Move the player out before closing the door.
-  if (isPlayerInsideDoorTile(door)) {
-    movePlayerOutsideDoor(door);
-  }
-
-  door.open = false;
-}
 
   // ---------------------------------------------------------------------------
   // INVENTORY / ITEMS
