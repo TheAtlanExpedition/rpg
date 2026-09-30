@@ -17,7 +17,9 @@
     1,
     Math.floor(window.devicePixelRatio || 1)
   );
-  const CANVAS_SCALE = 3;
+  const CANVAS_SCALE = 1;
+  const INV_SPACE = 768;                        // the inventory is designed on a 768x768 grid
+  const INV_SCALE = DISPLAY_WIDTH / INV_SPACE;  // maps that grid onto the canvas
 
   canvas.style.width = `${DISPLAY_WIDTH * CANVAS_SCALE}px`;
   canvas.style.height = `${DISPLAY_HEIGHT * CANVAS_SCALE}px`;
@@ -1049,18 +1051,20 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
 
     context.restore();
     if (gameState.gameOver) drawGameOver();
+  
     context.setTransform(
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0,
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0
     );
 
-    if (DEBUG_SHEET) drawSheetDebug();
+     if (DEBUG_SHEET) drawSheetDebug();
     context.imageSmoothingEnabled = false;
     drawInventory(timestamp);
+    drawHUD();          // <-- last line in drawGame
   }
 
   function drawSheetDebug() {
@@ -2387,17 +2391,17 @@ function pickupNearbyItems() {
   function drawInventory(timestamp = performance.now()) {
     if (!inventoryOpen || !gameState) return;
 
-    const cssWidth = DISPLAY_WIDTH * CANVAS_SCALE; // 768
-    const cssHeight = DISPLAY_HEIGHT * CANVAS_SCALE; // 768
+    const cssWidth = INV_SPACE;
+    const cssHeight = INV_SPACE;
     const panelSize = 750;
     const invX = Math.floor((cssWidth - panelSize) / 2);
     const invY = Math.floor((cssHeight - panelSize) / 2);
 
     context.setTransform(
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0,
-      devicePixelRatioValue / CANVAS_SCALE,
+      devicePixelRatioValue * INV_SCALE,
       0,
       0
     );
@@ -2543,7 +2547,56 @@ function getSelectedStack() {
   }
   return null;
 }
+// Health and Stamina
+function drawBar(x, y, w, h, fraction, fillColor, label) {
+  const f = Math.max(0, Math.min(1, fraction));
 
+  // Border + background
+  context.fillStyle = "#000";
+  context.fillRect(x - 1, y - 1, w + 2, h + 2);
+  context.fillStyle = "#27272a";
+  context.fillRect(x, y, w, h);
+
+  // Fill
+  context.fillStyle = fillColor;
+  context.fillRect(x, y, Math.round(w * f), h);
+
+  // Label
+  context.fillStyle = "#fff";
+  context.font = "6px monospace";
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillText(label, x + 2, y + h / 2 + 0.5);
+}
+
+// Placeholder HUD, drawn in screen space (not affected by camera or zoom).
+function drawHUD() {
+  if (!gameState || !gameState.player || inventoryOpen) return;
+  const p = gameState.player;
+
+  context.save();
+  // Reset to screen space (256x256 view), ignoring camera and zoom.
+  context.setTransform(
+    devicePixelRatioValue,
+    0,
+    0,
+    devicePixelRatioValue,
+    0,
+    0
+  );
+  context.imageSmoothingEnabled = false;
+
+  const x = 6;
+  const w = 80;
+  const h = 8;
+
+  drawBar(x, 6, w, h, p.hp / (p.maxHp ?? 100), "#dc2626", "HP");
+
+  const staminaColor = p.staminaExhausted ? "#a16207" : "#22c55e";
+  drawBar(x, 18, w, h, p.stamina / STAMINA_MAX, staminaColor, "STA");
+
+  context.restore();
+}
 // Removes exactly one item from a stack, cleaning up empty stacks/types.
 function removeOneFromStack(type, stackIndex) {
   const stacks = gameState.inventory[type];
