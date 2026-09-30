@@ -1774,8 +1774,10 @@ function updateTraps(timestamp) {
   }
 
   function lookAround(e, now) {
-    e.facing = e.baseFacing + Math.sin(now / 450) * 0.9;
-  }
+  e.facing =
+    e.baseFacing +
+    Math.sin(now / 450 + (e.lookPhase ?? 0)) * (e.lookSweep ?? 0.9);
+}
 
 function findPath(sx, sy, gx, gy, avoidTraps = false, passDoors = false) {
   if (!isNavTile(gx, gy, avoidTraps) || !isWalkableTile(sx, sy)) return null;
@@ -2316,8 +2318,8 @@ function updateSmashSpot(e, dt) {
         const wp = e.patrol[e.patrolIndex];
         if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
           e.patrolIndex = (e.patrolIndex + 1) % e.patrol.length;
-          e.waitTimer = PATROL_WAIT_MS;
-          e.baseFacing = e.facing;
+          e.waitTimer = wp.wait ?? PATROL_WAIT_MS;
+          e.baseFacing = e.holdFacing ?? e.facing;
         }
       }
     }
@@ -3416,9 +3418,270 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
 
 
 
+
+// ---------------------------------------------------------------------------
+// ENEMY SPAWNING
+// ---------------------------------------------------------------------------
+const ENEMY_ROOM_CHANCE_BASE = 0.3;       // chance a room has anyone, on depth 1
+const ENEMY_ROOM_CHANCE_PER_DEPTH = 0.08;
+const ENEMY_ROOM_CHANCE_MAX = 0.85;
+const ENEMY_SECOND_CHANCE_BASE = 0.25;    // chance a big room holds two
+const ENEMY_SECOND_CHANCE_PER_DEPTH = 0.06;
+const ENEMY_SECOND_CHANCE_MAX = 0.7;
+const ENEMY_BIG_ROOM_AREA = 30;
+const ENEMY_CLOSET_AREA = 16;             // rooms this small stay empty
+const ENEMY_ROLE_WEIGHTS = { guard: 0.4, wanderer: 0.35, idler: 0.25 };
+const ENEMY_MIN_SPACING = 2.5;            // tiles between spawn points
+
+const spawnRand = (lo, hi) => lo + Math.random() * (hi - lo);
+const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Ordered ring of the room's outermost tiles (the ones touching walls).
+function roomPerimeter(room) {
+  const { x, y, w, h } = room;
+  const pts = [];
+  for (let i = 0; i < w; i++) pts.push({ x: x + i, y });
+  for (let j = 1; j < h; j++) pts.push({ x: x + w - 1, y: y + j });
+  for (let i = w - 2; i >= 0; i--) pts.push({ x: x + i, y: y + h - 1 });
+  for (let j = h - 2; j >= 1; j--) pts.push({ x, y: y + j });
+  return pts;
+}
+
+// Every place a connector enters this room.
+//  tile   = the room tile just inside the entrance
+//  target = what a guard should watch (the door if there is one, else the gap)
+//  dx,dy  = direction of travel into the room
+function roomEntrances(room, connectors, allDoors) {
+  const inRoom = (x, y) =>
+    x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h;
+  const out = [];
+
+  for (const c of connectors) {
+    const r = c.rect;
+    const door = allDoors.find(
+      (d) => d.x >= r.x && d.x < r.x + r.w && d.y >= r.y && d.y < r.y + r.h
+    );
+    for (let cy = r.y; cy < r.y + r.h; cy++) {
+      for (let cx = r.x; cx < r.x + r.w; cx++) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (!inRoom(cx + dx, cy + dy)) continue;
+          out.push({
+            tile: { x: cx + dx, y: cy + dy },
+            target: door ? { x: door.x, y: door.y } : { x: cx, y: cy },
+            dx,
+            dy,
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stairs) {
+  const enemies = [];
+  const allDoors = [...doors, ...brokenDoors];
+
+  // Furniture: nobody spawns on, or parks on, any of these.
+  const furniture = new Set();
+  const mark = (x, y) => furniture.add(`${x},${y}`);
+  for (const it of items) mark(it.x, it.y);
+  for (const s of stairs) mark(s.x, s.y);
+  for (const h of hidingSpots) mark(h.x, h.y);
+
+  const roomChance = Math.min(
+    ENEMY_ROOM_CHANCE_MAX,
+    ENEMY_ROOM_CHANCE_BASE + ENEMY_ROOM_CHANCE_PER_DEPTH * (level - 1)
+  );
+  const secondChance = Math.min(
+    ENEMY_SECOND_CHANCE_MAX,
+    ENEMY_SECOND_CHANCE_BASE + ENEMY_SECOND_CHANCE_PER_DEPTH * (level - 1)
+  );
+
+  const eligible = rooms
+    .slice(1) // never the start room
+    .filter((r) => r.w * r.h > ENEMY_CLOSET_AREA);
+
+  function planRole(role, room, ctx) {
+    const { perimeter, entrances, free } = ctx;
+
+    if (role === "guard") {
+      const spots = [];
+      for (const en of entrances) {
+        for (const t of perimeter) {
+          const d = Math.hypot(t.x - en.tile.x, t.y - en.tile.y);
+          if (d < 1 || d > 3) continue;
+          // Stand beside the doorway, not in the line of traffic.
+          if (en.dx !== 0 ? t.y === en.tile.y : t.x === en.tile.x) continue;
+          if (!free(t.x, t.y)) continue;
+          spots.push({ t, en });
+        }
+      }
+      if (spots.length === 0) return null;
+      const { t, en } = pickOne(spots);
+      const face = Math.atan2(en.target.y - t.y, en.target.x - t.x);
+      return {
+        role,
+        x: t.x,
+        y: t.y,
+        patrol: [{ x: t.x, y: t.y, wait: spawnRand(1500, 3500) }],
+        facing: face,
+        holdFacing: face,
+        lookSweep: 0.6,
+      };
+    }
+
+    if (role === "idler") {
+      const corners = [
+        { x: room.x, y: room.y },
+        { x: room.x + room.w - 1, y: room.y },
+        { x: room.x, y: room.y + room.h - 1 },
+        { x: room.x + room.w - 1, y: room.y + room.h - 1 },
+      ].filter((c) => free(c.x, c.y));
+      const pool = corners.length ? corners : perimeter.filter((t) => free(t.x, t.y));
+      if (pool.length === 0) return null;
+      const t = pickOne(pool);
+      const face = Math.atan2(
+        room.y + (room.h - 1) / 2 - t.y,
+        room.x + (room.w - 1) / 2 - t.x
+      );
+      return {
+        role,
+        x: t.x,
+        y: t.y,
+        patrol: [{ x: t.x, y: t.y, wait: spawnRand(2000, 4500) }],
+        facing: face,
+        holdFacing: face,
+        lookSweep: 0.4,
+      };
+    }
+
+    // wanderer: walks the ring, mostly without stopping, pausing at a few spots
+    const step = 3;
+    const offset = Math.floor(Math.random() * step);
+    let route = perimeter.filter((t, i) => i % step === offset && free(t.x, t.y));
+    if (route.length < 3) return null;
+    if (Math.random() < 0.5) route.reverse();
+
+    route = route.map((t) => ({
+      x: t.x,
+      y: t.y,
+      wait: Math.random() < 0.3 ? spawnRand(1500, 3500) : 0,
+    }));
+
+    const k = Math.floor(Math.random() * route.length); // start mid-route
+    const next = route[(k + 1) % route.length];
+    return {
+      role,
+      x: route[k].x,
+      y: route[k].y,
+      patrol: route,
+      patrolIndex: (k + 1) % route.length,
+      facing: Math.atan2(next.y - route[k].y, next.x - route[k].x),
+      holdFacing: null,
+      lookSweep: 0.9,
+    };
+  }
+
+  function buildEnemy(id, plan) {
+    const hp = 50 + level * 5;
+    return {
+      id,
+      x: plan.x,
+      y: plan.y,
+      hp,
+      maxHp: hp,
+      type: "enemy",
+      color: "#f57676",
+      role: plan.role,
+
+      state: "patrol",
+      suspicion: 0,
+      facing: plan.facing,
+      baseFacing: plan.facing,
+      holdFacing: plan.holdFacing,           // guards/idlers keep looking here
+      lookSweep: plan.lookSweep,
+      lookPhase: Math.random() * Math.PI * 2, // so nobody scans in sync
+      canSeePlayer: false,
+      steer: null,
+      navGoal: null,
+      navTimer: 0,
+      searching: false,
+      searchPoints: [],
+      searchIndex: 0,
+      searchWait: 0,
+      attackSpot: null,
+      breakTimer: null,
+      hideSearchTimer: 0,
+      patrol: plan.patrol,
+      patrolIndex: plan.patrolIndex ?? 0,
+      waitTimer: spawnRand(0, 2500),          // staggered starts
+      investigate: null,
+      arrived: false,
+      lastSeen: null,
+      lastSeenTime: 0,
+    };
+  }
+
+  function populateRoom(room, count) {
+    const roomIndex = rooms.indexOf(room);
+    const perimeter = roomPerimeter(room);
+    const entrances = roomEntrances(room, connectors, allDoors);
+    const doorways = new Set(entrances.map((e) => `${e.tile.x},${e.tile.y}`));
+
+    const free = (x, y) =>
+      !furniture.has(`${x},${y}`) &&
+      !doorways.has(`${x},${y}`) &&
+      enemies.every((e) => Math.hypot(e.x - x, e.y - y) >= ENEMY_MIN_SPACING);
+
+    let lastRole = null;
+    let placed = 0;
+
+    for (let n = 0; n < count; n++) {
+      // Weighted pick, avoiding a repeat of the role just used in this room.
+      const roles = Object.keys(ENEMY_ROLE_WEIGHTS).filter((r) => r !== lastRole);
+      const total = roles.reduce((s, r) => s + ENEMY_ROLE_WEIGHTS[r], 0);
+      let roll = Math.random() * total;
+      let first = roles[roles.length - 1];
+      for (const r of roles) {
+        roll -= ENEMY_ROLE_WEIGHTS[r];
+        if (roll <= 0) {
+          first = r;
+          break;
+        }
+      }
+
+      const order = [first, ...Object.keys(ENEMY_ROLE_WEIGHTS).filter((r) => r !== first)];
+      for (const role of order) {
+        const plan = planRole(role, room, { perimeter, entrances, free });
+        if (!plan) continue;
+        enemies.push(buildEnemy(`e-${level}-${roomIndex}-${n}`, plan));
+        lastRole = role;
+        placed++;
+        break;
+      }
+    }
+    return placed;
+  }
+
+  for (const room of eligible) {
+    if (Math.random() >= roomChance) continue; // a quiet room
+    const big = room.w * room.h >= ENEMY_BIG_ROOM_AREA;
+    populateRoom(room, big && Math.random() < secondChance ? 2 : 1);
+  }
+
+  // A floor with nobody on it is a bug, not atmosphere.
+  if (enemies.length === 0 && eligible.length > 0) {
+    const biggest = eligible.reduce((a, b) => (a.w * a.h >= b.w * b.h ? a : b));
+    populateRoom(biggest, 1);
+  }
+
+  return enemies;
+}
   // ---------------------------------------------------------------------------
   // LEVEL GENERATION
   // ---------------------------------------------------------------------------
+  
  function createGameState(level, existingPlayer, options = {}) {
     const newMap = Array.from({ length: MAP_HEIGHT }, () =>
       Array(MAP_WIDTH).fill(TileType.WALL)
@@ -3631,46 +3894,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
 
     globalPlayer = player;
 
-    const enemies = [];
-    for (let i = 1; i < rooms.length; i++) {
-      const room = rooms[i];
-      const enemyHp = 50 + level * 5;
-      enemies.push({
-        id: `e-${level}-${i}`,
-        x: room.x + Math.floor(room.w / 2),
-        y: room.y + Math.floor(room.h / 2),
-        hp: enemyHp,
-        maxHp: enemyHp,
-        type: "enemy",
-        color: "#f57676",
-
-        state: "patrol",
-        suspicion: 0,
-        facing: Math.floor(Math.random() * 4) * (Math.PI / 2),
-        baseFacing: 0,
-        canSeePlayer: false,
-        steer: null,
-        navGoal: null,
-        navTimer: 0,
-        searching: false,
-        searchPoints: [],
-        searchIndex: 0,
-        searchWait: 0,
-        attackSpot: null,
-        breakTimer: null,
-        hideSearchTimer: 0,
-        patrol: [
-          { x: room.x + 1, y: room.y + 1 },
-          { x: room.x + room.w - 2, y: room.y + room.h - 2 },
-        ],
-        patrolIndex: 0,
-        waitTimer: 0,
-        investigate: null,
-        arrived: false,
-        lastSeen: null,
-        lastSeenTime: 0,
-      });
-    }
+  
 
     const items = [];
     const itemRooms = rooms.slice(1);
@@ -3717,10 +3941,6 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
 
     for (const it of items) blockTile(it.x, it.y);
     for (const s of stairs) blockTile(s.x, s.y);
-    for (const e of enemies) {
-      blockTile(e.x, e.y);
-      for (const wp of e.patrol) blockTile(wp.x, wp.y);
-    }
 
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i];
@@ -3744,6 +3964,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
     }
 
     placeHidingSpots(rooms, newMap);
+    const enemies = spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stairs);
 
     return {
       map: newMap,
