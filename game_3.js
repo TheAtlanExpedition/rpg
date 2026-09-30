@@ -266,6 +266,8 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const STAMINA_WALK_RECHARGE_RATE =
     STAMINA_DEPLETION_RATE / 1.5; // 0.667 per second
   const STAMINA_SNEAK_RECHARGE_RATE =
+    STAMINA_DEPLETION_RATE;
+    const STAMINA_HIDING_RECHARGE_RATE =
     STAMINA_DEPLETION_RATE; // 1 per second
   const STAMINA_RECHARGE_DELAY = 1.5; // seconds
   const PROJECTILE_SPEED = 5; // tiles per second (continuous, any angle)
@@ -656,7 +658,14 @@ window.addEventListener("keyup", (event) => {
     const player = gameState.player;
     player.isMoving = false;
 
-    if (gameState.gameOver || inventoryOpen || player.hidden) return;
+    if (gameState.gameOver || inventoryOpen) return;
+
+    if (player.hidden) {
+      player.gait = "walk";
+      player.wasRunning = false;
+      rechargeStamina(STAMINA_HIDING_RECHARGE_RATE);
+      return;
+    }
 
     let dx = 0;
     let dy = 0;
