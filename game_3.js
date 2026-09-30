@@ -358,6 +358,168 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const DEBUG_SHEET = false;
   let lastFireTime = -Infinity;
   const FIRE_COOLDOWN = 2000;
+// ---------------------------------------------------------------------------
+// STAIRS
+// ---------------------------------------------------------------------------
+
+// Decides what the down stairs of a new dungeon lead to.
+function rollDownPlans(plan) {
+  if (plan.type === "deadEnd") {
+    // chainLeft counts this dungeon, so the last one gets no down stairs.
+    return plan.chainLeft > 1
+      ? [{ type: "deadEnd", chainLeft: plan.chainLeft - 1 }]
+      : [];
+  }
+
+  if (Math.random() < STAIRS_BRANCH_CHANCE) {
+    const depth =
+      DEAD_END_MIN_DEPTH +
+      Math.floor(
+        Math.random() * (DEAD_END_MAX_DEPTH - DEAD_END_MIN_DEPTH + 1)
+      );
+    const plans = [{ type: "deadEnd", chainLeft: depth }, { type: "main" }];
+    if (Math.random() < 0.5) plans.reverse(); // don't always put the dead end first
+    return plans;
+  }
+
+  return [{ type: "main" }];
+}
+
+function createDungeon(depth, plan, parentId) {
+  const downPlans = rollDownPlans(plan);
+
+  let state = null;
+  for (let tries = 0; tries < 20 && !state; tries++) {
+    state = createGameState(depth, null, {
+      hasUpStairs: parentId !== null,
+      downPlans,
+    });
+  }
+  if (!state) return null;
+
+  state.id = nextDungeonId++;
+  state.depth = depth;
+  state.parentId = parentId;
+  dungeons.set(state.id, state);
+  return state;
+}
+
+function calmEnemies(state) {
+  for (const e of state.enemies) {
+    e.state = "patrol";
+    e.suspicion = 0;
+    e.canSeePlayer = false;
+    e.searching = false;
+    e.steer = null;
+    e.waitTimer = 0;
+    e.attackSpot = null;
+    e.breakTimer = null;
+    e.doorTarget = null;
+    e.searchRoom = null;
+  }
+}
+
+function useStairs(stair) {
+  const from = gameState;
+  const player = from.player;
+
+  // hidingSpots is a shared module-level array, so save this dungeon's copy.
+  from.hidingSpots = hidingSpots.slice();
+
+  let target = null;
+  if (stair.kind === "up") {
+    target = dungeons.get(from.parentId);
+  } else if (stair.targetId !== null) {
+    target = dungeons.get(stair.targetId);
+  } else {
+    target = createDungeon(from.depth + 1, stair.plan, from.id);
+    if (target) stair.targetId = target.id;
+  }
+
+  if (!target) {
+    // Generation failed: put everything back as it was.
+    hidingSpots.length = 0;
+    hidingSpots.push(...from.hidingSpots);
+    globalPlayer = player;
+    return;
+  }
+
+  const arrival =
+    stair.kind === "down"
+      ? target.stairs.find((s) => s.kind === "up")
+      : target.stairs.find((s) => s.kind === "down" && s.targetId === from.id);
+
+  // Carry the player and inventory into the new dungeon.
+  target.player = player;
+  target.inventory = from.inventory;
+  player.x = arrival.x;
+  player.y = arrival.y;
+  player.hidden = false;
+  player.hidingSpot = null;
+
+  from.projectiles.length = 0;
+  target.projectiles.length = 0;
+  noiseRipples.length = 0;
+  calmEnemies(target);
+
+  gameState = target;
+  globalPlayer = player;
+  hidingSpots.length = 0;
+  hidingSpots.push(...target.hidingSpots);
+  stairsLocked = true; // don't bounce straight back
+
+  console.log(
+    "Entered dungeon",
+    target.id,
+    "depth",
+    target.depth,
+    "down stairs:",
+    target.stairs.filter((s) => s.kind === "down").length
+  );
+}
+
+function updateStairs() {
+  if (!gameState || !gameState.stairs || gameState.gameOver) return;
+  const p = gameState.player;
+  if (p.hidden) return;
+
+  const touching = gameState.stairs.find(
+    (s) => Math.hypot(p.x - s.x, p.y - s.y) < STAIRS_TRIGGER_RADIUS
+  );
+
+  if (!touching) {
+    stairsLocked = false;
+    return;
+  }
+  if (stairsLocked) return;
+
+  useStairs(touching);
+}
+
+// Placeholder art: little stair steps (lighter = up, darker = down).
+function drawStairs() {
+  if (!gameState || !gameState.stairs) return;
+
+  for (const s of gameState.stairs) {
+    const px = s.x * TILE_SIZE;
+    const py = s.y * TILE_SIZE;
+    const down = s.kind === "down";
+
+    context.fillStyle = "#0f172a";
+    context.fillRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+
+    context.fillStyle = down ? "#64748b" : "#cbd5e1";
+    for (let i = 0; i < 4; i++) {
+      const inset = down ? i * 2 : (3 - i) * 2;
+      context.fillRect(
+        px + 4 + inset,
+        py + 5 + i * 6,
+        TILE_SIZE - 8 - inset * 2,
+        3
+      );
+    }
+  }
+}
 
   // ---------------------------------------------------------------------------
   // TRAPS
@@ -368,6 +530,36 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const TRAP_TRIGGER_RADIUS = 0.4;
   const TRAP_REARM_MS = 2500;
   const TRAP_NOISE_RADIUS = 6;
+
+
+  // ---------------------------------------------------------------------------
+// LAYOUT / DOORS
+// ---------------------------------------------------------------------------
+const ROOM_COUNT = 12;
+const MAX_ROOM_ATTEMPTS = 500;
+const CONNECTOR_LENGTH = 2;
+const WIDE_CONNECTOR_CHANCE = 0.2;   // 3-wide open connectors (no door)
+
+const DOOR_HP = 100;
+const ENEMY_DOOR_DAMAGE = 25;        // 4 hits to break
+const ENEMY_DOOR_HIT_INTERVAL_MS = 700;
+const DOOR_INTERACT_DIST = 1.2;
+const DOOR_BREAK_NOISE_RADIUS = 5;
+const CURIOUS_GIVE_UP_MS = 8000;     // curious enemies stuck behind a door give up
+const DOOR_ATTACK_REACH = 1.1; // how close an enemy must be to hit a door
+
+
+  // ---------------------------------------------------------------------------
+// STAIRS / DUNGEON GRAPH
+// ---------------------------------------------------------------------------
+const STAIRS_BRANCH_CHANCE = 0.3; // chance a normal dungeon gets 2 down stairs
+const DEAD_END_MIN_DEPTH = 1;     // dungeons in a dead-end branch (last has no stairs)
+const DEAD_END_MAX_DEPTH = 3;
+const STAIRS_TRIGGER_RADIUS = 0.5;
+
+const dungeons = new Map(); // id -> gameState of every dungeon generated so far
+let nextDungeonId = 0;
+let stairsLocked = false;   // true after arriving until the player steps off the stairs
 
   // ---------------------------------------------------------------------------
   // ENEMY VISION & DETECTION
@@ -419,9 +611,9 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const HIDE_BREAK_NOISE_RADIUS = 5;
   const HIDE_SPOTS_PER_ROOM = 1;
   const HIDE_SPOT_TYPES = ["closet", "crate"];
+  
 
   const hidingSpots = [];
-
   // ---------------------------------------------------------------------------
   // PLAYER DRAW
   // ---------------------------------------------------------------------------
@@ -459,9 +651,13 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
 
   if (inventoryOpen) {
     useSelectedItem();
-  } else {
-    toggleHide();
+    return;
   }
+  if (gameState.player.hidden || getNearbyHidingSpot()) {
+    toggleHide();
+    return;
+  }
+  toggleNearbyDoor();
 });
 window.addEventListener("keydown", (event) => {
   if (event.key.toLowerCase() !== "g") return;
@@ -586,7 +782,10 @@ window.addEventListener("keyup", (event) => {
     noiseRipples.length = 0;
     lastFootstepTime = -Infinity;
 
-    const newGameState = createGameState(1, null, []);
+    dungeons.clear();
+    nextDungeonId = 0;
+    stairsLocked = false;
+    const newGameState = createDungeon(1, { type: "main" }, null);
 
     if (!newGameState) {
       console.error("Game could not start because no rooms were generated.");
@@ -638,6 +837,7 @@ window.addEventListener("keyup", (event) => {
     updateEnemies(timestamp);
     updateProjectiles(timestamp);
     pickupNearbyItems();
+    updateStairs();
     drawGame(timestamp);
 
     gameLoopId = requestAnimationFrame(gameLoop);
@@ -803,15 +1003,16 @@ function isNavTile(tileX, tileY, avoidTraps = false) {
 
 
  function isBoxClear(x, y, hb, avoidTraps = false) {
-  if (!gameState || !gameState.map) return false;
-  return (
-    isNavTile(Math.floor(x + hb.left), Math.floor(y + hb.top), avoidTraps) &&
-    isNavTile(Math.floor(x + hb.right), Math.floor(y + hb.top), avoidTraps) &&
-    isNavTile(Math.floor(x + hb.left), Math.floor(y + hb.bottom), avoidTraps) &&
-    isNavTile(Math.floor(x + hb.right), Math.floor(y + hb.bottom), avoidTraps)
-  );
-}
-
+    if (!gameState || !gameState.map) return false;
+    const ok = (tx, ty) =>
+      isNavTile(tx, ty, avoidTraps) && !isDoorClosedAt(tx, ty);
+    return (
+      ok(Math.floor(x + hb.left), Math.floor(y + hb.top)) &&
+      ok(Math.floor(x + hb.right), Math.floor(y + hb.top)) &&
+      ok(Math.floor(x + hb.left), Math.floor(y + hb.bottom)) &&
+      ok(Math.floor(x + hb.right), Math.floor(y + hb.bottom))
+    );
+  }
 function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
   const dist = Math.hypot(bx - ax, by - ay);
   const steps = Math.max(1, Math.ceil(dist / 0.15));
@@ -929,7 +1130,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
       for (const [dx, dy, cost] of dirs) {
         const nx = cx + dx;
         const ny = cy + dy;
-        if (!isWalkableTile(nx, ny)) continue;
+        if (!isWalkableTile(nx, ny) || isDoorClosedAt(nx, ny)) continue;
 
         if (
           dx !== 0 &&
@@ -1051,7 +1252,9 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawMap();
     drawRipples();
     drawHidingSpots();
-    drawVisionCones();
+    drawStairs(); 
+    drawDoors(timestamp);
+  drawVisionCones(); // hide this in final version
     drawPlayer(timestamp);
     drawItems(timestamp);
     drawProjectiles();
@@ -1529,29 +1732,30 @@ function updateTraps(timestamp) {
     return { x: p.x + 0.5, y: p.y + 0.7 };
   }
 
-  function isWallAt(x, y) {
+    function isWallAt(x, y, ignoreDoors = false) {
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return true;
-    return gameState.map[ty][tx] === TileType.WALL;
+    if (gameState.map[ty][tx] === TileType.WALL) return true;
+    return !ignoreDoors && isDoorClosedAt(tx, ty);
   }
 
-  function castRay(x, y, angle, maxDist) {
+  function castRay(x, y, angle, maxDist, ignoreDoors = false) {
     const step = 0.1;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     for (let d = step; d <= maxDist; d += step) {
-      if (isWallAt(x + cos * d, y + sin * d)) return d - step;
+      if (isWallAt(x + cos * d, y + sin * d, ignoreDoors)) return d - step;
     }
     return maxDist;
   }
 
-  function hasLineOfSight(ax, ay, bx, by) {
+  function hasLineOfSight(ax, ay, bx, by, ignoreDoors = false) {
     const dx = bx - ax;
     const dy = by - ay;
     const dist = Math.hypot(dx, dy);
     if (dist === 0) return true;
-    return castRay(ax, ay, Math.atan2(dy, dx), dist) >= dist - 0.001;
+    return castRay(ax, ay, Math.atan2(dy, dx), dist, ignoreDoors) >= dist - 0.001;
   }
 
   function angleDiff(a, b) {
@@ -1571,7 +1775,7 @@ function updateTraps(timestamp) {
     e.facing = e.baseFacing + Math.sin(now / 450) * 0.9;
   }
 
-function findPath(sx, sy, gx, gy, avoidTraps = false) {
+function findPath(sx, sy, gx, gy, avoidTraps = false, passDoors = false) {
   if (!isNavTile(gx, gy, avoidTraps) || !isWalkableTile(sx, sy)) return null;
   if (sx === gx && sy === gy) return [];
 
@@ -1593,6 +1797,7 @@ function findPath(sx, sy, gx, gy, avoidTraps = false) {
       const ny = y + dy;
       const k = key(nx, ny);
       if (!isNavTile(nx, ny, avoidTraps) || prev.has(k)) continue;
+      if (!passDoors && isDoorClosedAt(nx, ny)) continue;
       prev.set(k, key(x, y));
 
       if (nx === gx && ny === gy) {
@@ -1743,19 +1948,30 @@ function steerToward(
     e.waitTimer = 0;
     e.hideSearchTimer = 0;
     e.steer = null;
+    e.investigateTime = 0;
   }
 
-  function pickSearchPoints(cx, cy) {
+    function pickSearchPoints(cx, cy, room = null) {
     const tx = Math.floor(cx + 0.5);
     const ty = Math.floor(cy + 0.5);
     const candidates = [];
 
-    for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
-      for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
-        const d = Math.hypot(dx, dy);
-        if (d < 1.5 || d > SEARCH_RADIUS) continue;
-        if (!isWalkableTile(tx + dx, ty + dy)) continue;
-        candidates.push({ x: tx + dx, y: ty + dy });
+    if (room) {
+      // Door search: sweep the room the player ducked into.
+      for (let y = room.y; y < room.y + room.h; y++) {
+        for (let x = room.x; x < room.x + room.w; x++) {
+          if (Math.hypot(x - tx, y - ty) < 1.5) continue;
+          candidates.push({ x, y });
+        }
+      }
+    } else {
+      for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
+        for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d < 1.5 || d > SEARCH_RADIUS) continue;
+          if (!isWalkableTile(tx + dx, ty + dy)) continue;
+          candidates.push({ x: tx + dx, y: ty + dy });
+        }
       }
     }
 
@@ -1764,9 +1980,10 @@ function steerToward(
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
 
+    const count = room ? 4 : SEARCH_POINT_COUNT;
     const points = [];
     for (const c of candidates) {
-      if (points.length >= SEARCH_POINT_COUNT) break;
+      if (points.length >= count) break;
       if (findPath(tx, ty, c.x, c.y)) points.push(c);
     }
     return points;
@@ -1777,7 +1994,8 @@ function steerToward(
     e.baseFacing = e.facing;
     e.searchWait = SEARCH_WAIT_MS;
     e.searchIndex = 0;
-    e.searchPoints = pickSearchPoints(e.lastSeen.x, e.lastSeen.y);
+    e.searchPoints = pickSearchPoints(e.lastSeen.x, e.lastSeen.y, e.searchRoom);
+    e.searchRoom = null;
   }
 
   function updateSearch(e, dt, now) {
@@ -1895,6 +2113,7 @@ function steerToward(
 
     if (e.state === "alert") {
       if (e.canSeePlayer) {
+        e.searchRoom = null;
         e.lastSeen = { x: p.x, y: p.y };
         e.lastSeenTime = now;
         turnToward(e, angleToPlayer, dt);
@@ -1924,7 +2143,40 @@ function steerToward(
         }
         return;
       }
+      // Bash down a door the player closed in front of us.
+      if (e.doorTarget) {
+        const door = e.doorTarget;
+        const stillThere =
+          gameState.doorMap.get(door.y * MAP_WIDTH + door.x) === door;
 
+        if (!stillThere) {
+          // Broken: go in and search the room the player ducked into.
+          e.doorTarget = null;
+          e.searchRoom = e.doorRoom;
+          e.doorRoom = null;
+          e.lastSeenTime = now;
+          e.steer = null;
+        } else if (door.open || e.canSeePlayer) {
+          e.doorTarget = null; // player reopened it, or we can see them again
+        } else {
+          e.lastSeenTime = now; // don't lose interest while bashing
+
+          const dcx = door.x + 0.5;
+          const dcy = door.y + 0.5;
+          if (Math.hypot(dcx - ec.x, dcy - ec.y) <= DOOR_ATTACK_REACH) {
+            turnToward(e, Math.atan2(dcy - ec.y, dcx - ec.x), dt);
+            e.doorHitTimer ??= ENEMY_DOOR_HIT_INTERVAL_MS;
+            e.doorHitTimer -= dt * 1000;
+            if (e.doorHitTimer <= 0) {
+              e.doorHitTimer = ENEMY_DOOR_HIT_INTERVAL_MS;
+              hitDoor(door, ENEMY_DOOR_DAMAGE);
+            }
+          } else {
+            steerToward(e, door.x, door.y, ENEMY_SPEED.alert, dt, 0.3);
+          }
+          return;
+        }
+      }
       if (e.canSeePlayer && dist < 0.8) {
         onEnemyReachedPlayer(e);
       } else if (e.searching && !e.canSeePlayer) {
@@ -1954,7 +2206,15 @@ function steerToward(
         e.suspicion = 0.6;
       }
     } else if (e.state === "curious") {
-      if (!e.arrived) {
+            if (!e.arrived) {
+        e.investigateTime = (e.investigateTime || 0) + dt * 1000;
+        if (e.investigateTime > CURIOUS_GIVE_UP_MS) {
+          e.state = "patrol";
+          e.suspicion = Math.min(e.suspicion, 0.2);
+          e.steer = null;
+          return;
+        }
+
         if (
           steerToward(
             e,
@@ -2286,26 +2546,160 @@ function steerToward(
     }
   }
 
-  function drawHidePrompt() {
+   function drawHidePrompt() {
     if (!gameState || !gameState.player || inventoryOpen) return;
     const p = gameState.player;
 
     context.font = "12px monospace";
     context.textAlign = "left";
     context.textBaseline = "alphabetic";
+    context.fillStyle = "#e2e8f0";
 
     if (p.hidden) {
-      context.fillStyle = "#e2e8f0";
       context.fillText("E: Exit", p.x * TILE_SIZE, p.y * TILE_SIZE - 8);
       return;
     }
 
     const spot = getNearbyHidingSpot();
-    if (!spot) return;
+    if (spot) {
+      context.fillText("E: Hide", spot.x * TILE_SIZE, spot.y * TILE_SIZE - 8);
+      return;
+    }
 
-    context.fillStyle = "#e2e8f0";
-    context.fillText("E: Hide", spot.x * TILE_SIZE, spot.y * TILE_SIZE - 8);
+    const door = getNearbyDoor();
+    if (door) {
+      context.fillText(
+        door.open ? "E: Close" : "E: Open",
+        door.x * TILE_SIZE,
+        door.y * TILE_SIZE - 8
+      );
+    }
   }
+
+// ---------------------------------------------------------------------------
+// DOORS
+// ---------------------------------------------------------------------------
+function isDoorClosedAt(tx, ty) {
+  if (!gameState || !gameState.doorMap) return false;
+  const d = gameState.doorMap.get(ty * MAP_WIDTH + tx);
+  return !!d && !d.open;
+}
+
+function getNearbyDoor() {
+  if (!gameState || !gameState.doors) return null;
+  const pc = playerCenter();
+  let best = null;
+  let bestDist = DOOR_INTERACT_DIST;
+  for (const d of gameState.doors) {
+    const dist = Math.hypot(d.x + 0.5 - pc.x, d.y + 0.5 - pc.y);
+    if (dist <= bestDist) {
+      best = d;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+function breakDoor(door) {
+  gameState.doors.splice(gameState.doors.indexOf(door), 1);
+  gameState.doorMap.delete(door.y * MAP_WIDTH + door.x);
+  makeNoise(door.x, door.y, DOOR_BREAK_NOISE_RADIUS, "#ef4444");
+}
+
+function hitDoor(door, damage) {
+  door.hp -= damage;
+  door.flashUntil = performance.now() + 120;
+  if (door.hp <= 0) breakDoor(door);
+}
+
+// The room on the far side of a door, looking outward from the player's side.
+function roomBeyondDoor(door, sideX, sideY) {
+  for (let step = 1; step <= 3; step++) {
+    const tx = door.x + sideX * step;
+    const ty = door.y + sideY * step;
+    const room = gameState.rooms.find(
+      (r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h
+    );
+    if (room) return room;
+  }
+  return null;
+}
+
+function toggleNearbyDoor() {
+  const door = getNearbyDoor();
+  if (!door) return;
+
+  if (!door.open) {
+    door.open = true;
+    return;
+  }
+
+  // Can't close a door on top of someone.
+  const somebodyInDoorway = [gameState.player, ...gameState.enemies].some(
+    (en) => Math.abs(en.x - door.x) < 0.9 && Math.abs(en.y - door.y) < 0.9
+  );
+  if (somebodyInDoorway) return;
+
+  const p = gameState.player;
+  const pc = playerCenter();
+  const sideX = door.dir === "h" ? (pc.x > door.x + 0.5 ? 1 : -1) : 0;
+  const sideY = door.dir === "v" ? (pc.y > door.y + 0.5 ? 1 : -1) : 0;
+
+  // Alert enemies that can see the player right now are witnesses.
+  const witnesses = gameState.enemies.filter(
+    (e) => e.state === "alert" && e.canSeePlayer
+  );
+
+  door.open = false;
+
+  for (const e of witnesses) {
+    const ec = enemyCenter(e);
+    // If they can still see the player, the door isn't in the way.
+    if (hasLineOfSight(ec.x, ec.y, pc.x, pc.y)) continue;
+
+    e.doorTarget = door;
+    e.doorRoom = roomBeyondDoor(door, sideX, sideY);
+    e.doorHitTimer = null;
+    e.lastSeen = { x: p.x, y: p.y };
+    e.lastSeenTime = performance.now();
+  }
+}
+
+function drawDoors(timestamp = performance.now()) {
+  if (!gameState || !gameState.doors) return;
+
+  for (const d of gameState.doors) {
+    const px = d.x * TILE_SIZE;
+    const py = d.y * TILE_SIZE;
+    const horizontal = d.dir === "h";
+    const hurt = 1 - d.hp / d.maxHp;
+    const flash = timestamp < d.flashUntil;
+
+    let x, y, w, h;
+    if (d.open) {
+      // Swung back against the wall.
+      [x, y, w, h] = horizontal ? [px + 12, py, 8, 6] : [px, py + 12, 6, 8];
+    } else {
+      [x, y, w, h] = horizontal
+        ? [px + 12, py + 1, 8, TILE_SIZE - 2]
+        : [px + 1, py + 12, TILE_SIZE - 2, 8];
+    }
+
+    context.fillStyle = "#451a03";
+    context.fillRect(x - 1, y - 1, w + 2, h + 2);
+    context.fillStyle = flash ? "#fde68a" : hurt > 0.5 ? "#9a3412" : "#b45309";
+    context.fillRect(x, y, w, h);
+
+    if (!d.open && hurt > 0) {
+      context.fillStyle = "#1c0a00";
+      const cracks = Math.ceil(hurt * 3);
+      for (let i = 0; i < cracks; i++) {
+        if (horizontal) context.fillRect(x + 2, y + 5 + i * 9, w - 4, 1);
+        else context.fillRect(x + 5 + i * 9, y + 2, 1, h - 4);
+      }
+    }
+  }
+}
 
   // ---------------------------------------------------------------------------
   // INVENTORY / ITEMS
@@ -2796,70 +3190,168 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
   // ---------------------------------------------------------------------------
   // LEVEL GENERATION
   // ---------------------------------------------------------------------------
-  function createGameState(level, existingPlayer, existingScrolls) {
+ function createGameState(level, existingPlayer, options = {}) {
     const newMap = Array.from({ length: MAP_HEIGHT }, () =>
       Array(MAP_WIDTH).fill(TileType.WALL)
     );
 
-    const rooms = [];
-    const ROOM_COUNT = 6;
-    const MAX_ROOM_ATTEMPTS = 100;
+        const rooms = [];
+    const connectors = [];
+    const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
-    function roomsOverlap(roomA, roomB, padding = 1) {
+    function rectsOverlap(a, b, padding = 1) {
       return (
-        roomA.x - padding < roomB.x + roomB.w &&
-        roomA.x + roomA.w + padding > roomB.x &&
-        roomA.y - padding < roomB.y + roomB.h &&
-        roomA.y + roomA.h + padding > roomB.y
+        a.x - padding < b.x + b.w &&
+        a.x + a.w + padding > b.x &&
+        a.y - padding < b.y + b.h &&
+        a.y + a.h + padding > b.y
       );
     }
+
+    // Builds a new room across a short connector from `parent`.
+    function attachRoom(parent, side, wide) {
+      const w = randInt(4, 7);
+      const h = randInt(4, 7);
+      const G = CONNECTOR_LENGTH;
+      const horizontal = side === "E" || side === "W";
+      let room, rect;
+
+      if (horizontal) {
+        const lane = wide
+          ? randInt(parent.y + 1, parent.y + parent.h - 2)
+          : randInt(parent.y, parent.y + parent.h - 1);
+        const y = wide ? lane - 1 - randInt(0, h - 3) : lane - randInt(0, h - 1);
+        const x = side === "E" ? parent.x + parent.w + G : parent.x - G - w;
+        room = { x, y, w, h };
+        rect = {
+          x: side === "E" ? parent.x + parent.w : parent.x - G,
+          y: wide ? lane - 1 : lane,
+          w: G,
+          h: wide ? 3 : 1,
+        };
+      } else {
+        const lane = wide
+          ? randInt(parent.x + 1, parent.x + parent.w - 2)
+          : randInt(parent.x, parent.x + parent.w - 1);
+        const x = wide ? lane - 1 - randInt(0, w - 3) : lane - randInt(0, w - 1);
+        const y = side === "S" ? parent.y + parent.h + G : parent.y - G - h;
+        room = { x, y, w, h };
+        rect = {
+          x: wide ? lane - 1 : lane,
+          y: side === "S" ? parent.y + parent.h : parent.y - G,
+          w: wide ? 3 : 1,
+          h: G,
+        };
+      }
+      return { room, rect, wide, horizontal };
+    }
+
+    // First room in the middle of the map, everything else grows from it.
+    const firstW = randInt(4, 7);
+    const firstH = randInt(4, 7);
+    rooms.push({
+      x: Math.floor((MAP_WIDTH - firstW) / 2),
+      y: Math.floor((MAP_HEIGHT - firstH) / 2),
+      w: firstW,
+      h: firstH,
+    });
 
     let attempts = 0;
     while (rooms.length < ROOM_COUNT && attempts < MAX_ROOM_ATTEMPTS) {
       attempts++;
-      const w = Math.floor(Math.random() * 4) + 4;
-      const h = Math.floor(Math.random() * 4) + 4;
-      const x = Math.floor(Math.random() * (MAP_WIDTH - w - 2)) + 1;
-      const y = Math.floor(Math.random() * (MAP_HEIGHT - h - 2)) + 1;
-      const newRoom = { x, y, w, h };
 
-      if (rooms.some((existingRoom) => roomsOverlap(newRoom, existingRoom, 1))) {
+      const parent = rooms[randInt(0, rooms.length - 1)];
+      const side = ["N", "E", "S", "W"][randInt(0, 3)];
+      const wide = Math.random() < WIDE_CONNECTOR_CHANCE;
+      const attached = attachRoom(parent, side, wide);
+      const { room, rect } = attached;
+
+      if (
+        room.x < 1 ||
+        room.y < 1 ||
+        room.x + room.w > MAP_WIDTH - 1 ||
+        room.y + room.h > MAP_HEIGHT - 1
+      ) {
         continue;
       }
+      if (rooms.some((r) => rectsOverlap(room, r, 1))) continue;
+      if (rooms.some((r) => r !== parent && rectsOverlap(rect, r, 1))) continue;
+      if (connectors.some((c) => rectsOverlap(room, c.rect, 1))) continue;
+      if (connectors.some((c) => rectsOverlap(rect, c.rect, 1))) continue;
 
-      for (let ry = y; ry < y + h; ry++) {
-        for (let rx = x; rx < x + w; rx++) {
-          newMap[ry][rx] = TileType.FLOOR;
+      rooms.push(room);
+      connectors.push(attached);
+    }
+
+    // Carve rooms and connectors.
+    for (const r of rooms) {
+      for (let ry = r.y; ry < r.y + r.h; ry++) {
+        for (let rx = r.x; rx < r.x + r.w; rx++) newMap[ry][rx] = TileType.FLOOR;
+      }
+    }
+    for (const c of connectors) {
+      for (let cy = c.rect.y; cy < c.rect.y + c.rect.h; cy++) {
+        for (let cx = c.rect.x; cx < c.rect.x + c.rect.w; cx++) {
+          newMap[cy][cx] = TileType.FLOOR;
         }
       }
-      rooms.push(newRoom);
     }
 
-    for (let i = 0; i < rooms.length - 1; i++) {
-      const cur = rooms[i];
-      const next = rooms[i + 1];
-      const curX = Math.floor(cur.x + cur.w / 2);
-      const curY = Math.floor(cur.y + cur.h / 2);
-      const nextX = Math.floor(next.x + next.w / 2);
-      const nextY = Math.floor(next.y + next.h / 2);
-
-      for (let x = Math.min(curX, nextX); x <= Math.max(curX, nextX); x++) {
-        newMap[curY][x] = TileType.FLOOR;
-        if (curY + 1 < newMap.length) newMap[curY + 1][x] = TileType.FLOOR;
+    // One door on the 1-wide connectors (wide ones stay open).
+    const doors = [];
+    for (const c of connectors) {
+      if (c.wide) continue;
+      const cells = [];
+      for (let cy = c.rect.y; cy < c.rect.y + c.rect.h; cy++) {
+        for (let cx = c.rect.x; cx < c.rect.x + c.rect.w; cx++) {
+          cells.push({ x: cx, y: cy });
+        }
       }
-      for (let y = Math.min(curY, nextY); y <= Math.max(curY, nextY); y++) {
-        newMap[y][nextX] = TileType.FLOOR;
-        if (nextX + 1 < newMap[0].length)
-          newMap[y][nextX + 1] = TileType.FLOOR;
-      }
+      const cell = cells[randInt(0, cells.length - 1)];
+      doors.push({
+        x: cell.x,
+        y: cell.y,
+        dir: c.horizontal ? "h" : "v", // h = passage runs east-west
+        open: false,
+        hp: DOOR_HP,
+        maxHp: DOOR_HP,
+        flashUntil: 0,
+      });
     }
-
     if (rooms.length === 0) {
       console.error("No rooms were generated.");
       return null;
     }
 
     const startRoom = rooms[0];
+        // --- Stairs ---------------------------------------------------------
+    const stairs = [];
+
+    // Return stairs sit on the start room's spawn tile.
+    if (options.hasUpStairs) {
+      stairs.push({
+        kind: "up",
+        x: startRoom.x + 1,
+        y: startRoom.y + 1,
+        targetId: null,
+      });
+    }
+
+    // Each down stairs goes in a different room (never the start room).
+    const downPlans = options.downPlans || [];
+    const stairRooms = rooms.slice(1).sort(() => Math.random() - 0.5);
+    if (stairRooms.length < downPlans.length) return null; // caller retries
+
+    downPlans.forEach((plan, i) => {
+      const room = stairRooms[i];
+      stairs.push({
+        kind: "down",
+        x: room.x + room.w - 2,
+        y: room.y + 1,
+        targetId: null,
+        plan,
+      });
+    });
     const player = existingPlayer
       ? {
           ...existingPlayer,
@@ -2983,19 +3475,26 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
       color: "#980002",
     });
 
+        // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
+    const blocked = new Set();
+    const blockTile = (x, y) => blocked.add(`${x},${y}`);
+
+    for (const it of items) blockTile(it.x, it.y);
+    for (const s of stairs) blockTile(s.x, s.y);
+    for (const e of enemies) {
+      blockTile(e.x, e.y);
+      for (const wp of e.patrol) blockTile(wp.x, wp.y);
+    }
+
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i];
-      const roomCenterX = Math.floor(room.x + room.w / 2);
-      const roomCenterY = Math.floor(room.y + room.h / 2);
 
       for (let t = 0; t < 4; t++) {
         const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
         const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
 
-        const taken =
-          (trapX === roomCenterX && trapY === roomCenterY) ||
-          items.some((it) => it.x === trapX && it.y === trapY);
-        if (taken) continue;
+        if (blocked.has(`${trapX},${trapY}`)) continue;
+        blockTile(trapX, trapY); // also stops two traps sharing a tile
 
         items.push({
           id: `trap-${level}-${i}-${t}`,
@@ -3013,9 +3512,13 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     return {
       map: newMap,
       rooms: rooms,
+      doors: doors,
+      doorMap: new Map(doors.map((d) => [d.y * MAP_WIDTH + d.x, d])),
       player: player,
       enemies: enemies,
       items: items,
+      stairs: stairs,
+      hidingSpots: hidingSpots.slice(),
       trapTiles: new Set(
         items.filter((it) => it.type === "trap").map((it) => it.y * MAP_WIDTH + it.x)
       ),
