@@ -2,6 +2,7 @@
 JavaScript RPG, first attempt
 
 Let there be multiple hiding spots in a room so when an enemy searches it in alert it destroys one at random.
+Add fall-over/trip animation if door closed to close to player + (existing) knockback.
 
 STEALTH:
 
