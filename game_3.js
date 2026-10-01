@@ -847,9 +847,12 @@ function directionFromVector(dx, dy) {
   const octant = (Math.round(angle / (Math.PI / 4)) + 8) % 8;
   return DIRS_BY_OCTANT[octant];
 }
-
+canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("mousedown", (event) => {
-  if (event.button !== 0) return;
+  if (event.button !== 2) {
+    chargeStart = null;
+    return;
+  }
   if (!gameRunning || !gameState) return;
 
 if (inventoryOpen) {
