@@ -1770,7 +1770,7 @@ function drawItems(timestamp = performance.now()) {
       worldH
     );
   }
-
+}
 
   function drawContainers() {
     if (!gameState || !gameState.containers) return;
@@ -1780,7 +1780,7 @@ function drawItems(timestamp = performance.now()) {
       context.globalAlpha = c.searched ? 0.55 : 1;
       context.fillStyle = "#000";
       context.reillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
-      context.fillStyle = CONTAINER_TYPES[c.type}.color;
+      context.fillStyle = CONTAINER_TYPES[c.type].color;
       context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
       context.fillStyle = "rgba(0, 0, 0, 0.35)";
       context.fillRect(px + 5, py + 13, TILE_SIZE - 10, 2);
@@ -1793,7 +1793,7 @@ function drawContainerText(text, cx ,y) {
   context.textAlign = "center";
   context.textBadeline = "alphabetic";
   context.lineWidth = 3;
-  context.strokeStyle = "#00";
+  context.strokeStyle = "#000";
   context.strokeText(text, cx, y);
   context.fillStyle = "#e2e8f0";
   context.fillText(text, cx, y);
@@ -3396,7 +3396,7 @@ const CONTAINER_TYPES = {
       {weight: 25, items: [] },
       {weight: 35, itms: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
       {weight: 25, items: [{ id: "healthPotion", min: 1, max: 1 }] },
-      {weight: 15, items: [{ id: ALL_SCROLLS, min: 1, max: 1}, {id: "healthPotion", 
+      {weight: 15, items: [{ id: ALL_SCROLLS, min: 1, max: 1}, {id: "healthPotion",}]},
       ],
       emptyMessages: ["The chest is empty.", "Nothing but dust inside."], 
       },
@@ -3437,7 +3437,7 @@ const CONTAINER_TYPES = {
   const rollInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
   function pickWeighted(list) {
-    const total = list.reduce((s, 0) => s + o.weight, 0);
+    const total = list.reduce((s, o) => s + o.weight, 0);
     let roll = Math.random() * total;
     for (const o of list) {
       roll -= o.weight;
@@ -3487,18 +3487,18 @@ const CONTAINER_TYPES = {
 
       for (let i = candidates.length - 1; i > 0; i --) {
         const j = Math.floor(Math.random() * (i + 1));
-        [candidates[i], candidates[j]] = [candidates[j], candidates[i]]:
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
       }
       const count = rollInt(CONTAINERS_PER_ROOM_MIN, CONTAINERS_PER_ROOM_MAX);
       const chosen = [];
       for (const c of candidates) {
         if (shocen.length >= count) break;
-        if (chosen.some((0) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
+        if (chosen.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
         chosen.push(c);
       }
       for (const c of chosen) containers.push(makeContainer(c.x, c.y, room));
     }
-    return containers
+    return containers;
   }
 
         // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
@@ -3564,7 +3564,7 @@ let searchState = null; // { container, start } while holding E on a container
   
   function finishContainerSearch(c, now) {
     if (c.contents.length === 0) {
-      c.message = pickOne(CONTAINER_TYPES[c.type[.emptyMessages);
+      c.message = pickOne(CONTAINER_TYPES[c.type].emptyMessages);
     } else {
       for (const item of c.contents) {
         for (let i = 0; i < item.count; i++) addItemToInventory(item.idName);
@@ -4907,7 +4907,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
       player: player,
       enemies: enemies,
       items: items,
-      containers: containers.
+      containers: containers,
       stairs: stairs,
       hidingSpots: hidingSpots.slice(),
       explored: new Set(),
