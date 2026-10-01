@@ -3464,7 +3464,7 @@ const CONTAINER_TYPES = {
   function placeContainers(rooms, map) {
     const contrainers = [];
     const isFloor = (x, y) =>
-      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map [y][x] === TILETYPE.FLOOR;
+      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map [y][x] === TileType.FLOOR;
     for (const room of rooms.slice(1)) { // never start room
       const candidates = [];
       for (let y = room.y; y < room.x + room.h; y++) {
