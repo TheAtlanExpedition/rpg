@@ -666,7 +666,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
     toggleHide();
     return;
   }
-  if (startearch()) return;
+  if (startsearch()) return;
   toggleNearbyDoor();
 });
 window.addEventListener("keydown", (event) => {
