@@ -358,7 +358,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
 
   const DEBUG_SHEET = false;
   let lastFireTime = -Infinity;
-  const FIRE_COOLDOWN = 2000;
+  const FIRE_COOLDOWN = 1000;
 // ---------------------------------------------------------------------------
 // STAIRS
 // ---------------------------------------------------------------------------
@@ -3711,7 +3711,7 @@ const FIREBALL_RADIUS = 2;
 const FIREBALL_DAMAGE = 45;          // at the centre, falls to 50% at the edge
 const FIRE_ZONE_RADIUS = 1.75;
 const FIRE_ZONE_MS = 5000;
-const FIRE_TICK_MS = 500;
+const FIRE_TICK_MS = 1000;
 const FIRE_TICK_DAMAGE = 5;
 const FIRE_HURTS_PLAYER = false;
 
@@ -3961,7 +3961,7 @@ function castSpell(dx, dy, useScroll = true) {
     y: player.y + 0.2,
     dx: dx / len,
     dy: dy / len,
-    damage: scroll ? 0 : 50,
+    damage: scroll ? 0 : 10,
     color: SCROLL_COLORS[scroll] || "#15c4fa",
     scroll,
   });
