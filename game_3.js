@@ -666,7 +666,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
     toggleHide();
     return;
   }
-  if (startContainerSearch()) return;
+  if (startearch()) return;
   toggleNearbyDoor();
 });
 window.addEventListener("keydown", (event) => {
@@ -3462,7 +3462,7 @@ const CONTAINER_TYPES = {
 
   
   function placeContainers(rooms, map) {
-    const contrainers = [];
+    const containers = [];
     const isFloor = (x, y) =>
       x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map [y][x] === TileType.FLOOR;
     for (const room of rooms.slice(1)) { // never start room
