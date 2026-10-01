@@ -3440,7 +3440,7 @@ const CONTAINER_TYPES = {
     let roll = Math.random() * total;
     for (const o of list) {
       roll -= o.weight;
-      if (roll <= 0) return 0;
+      if (roll <= 0) return o;
     }
     return list[list.length - 1];
   }
