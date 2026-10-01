@@ -3388,6 +3388,7 @@ const ALL_SCROLLS = ["scrollFireBall", "scrollFreezeCloud", "scrollChainLightnin
 const CONTAINER_TYPES = {
   chest: {
     label: "Chest",
+    placement: "wall",
     color: "#a16207",
     searchMs: 2500,
     spawnWeight: 2,
@@ -3401,6 +3402,7 @@ const CONTAINER_TYPES = {
       },
   barrel: {
     label: "Barrel",
+    placement: "center",
     color: "#78350f",
     searchMs: 1500,
     spawnWeight: 3,
@@ -3412,6 +3414,7 @@ const CONTAINER_TYPES = {
       },
   bookshelf: {
     label: "Bookshelf",
+    placement: "wall",
     color: "#451a03",
     searchMs: 2000,
     spawnWeight: 2,
@@ -3423,6 +3426,7 @@ const CONTAINER_TYPES = {
       },
   crate: {
     label: "crate",
+    placement: "center",
     color: "#854d0e",
     searchMs: 1200,
     spawnWeight: 3,
@@ -3445,7 +3449,7 @@ const CONTAINER_TYPES = {
     return list[list.length - 1];
   }
 
-  function makeContainer(x, y, room) {
+  function makeContainer(x, y, room, typeName) {
     const typeName = pickWeighted(
       Object.entries(CONTAINER_TYPES).map(([name, def]) => ({ name, weight: def.spawnWeight }))
     ).name;
@@ -3461,41 +3465,69 @@ const CONTAINER_TYPES = {
 
 
   
-  function placeContainers(rooms, map) {
+  function placeContainers(rooms, map, doorList = [], blockedList = []) {
     const containers = [];
     const isFloor = (x, y) =>
-      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map [y][x] === TileType.FLOOR;
-    for (const room of rooms.slice(1)) { // never start room
-      const candidates = [];
-      for (let y = room.y; y < room.x + room.h; y++) {
+      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map[y][x] === TileType.FLOOR;
+    const blocked = new Set(blockedList.map((b) => `${b.x},${b.y}`));
+    const typeEntries = Object.entries(CONTAINER_TYPES).map(([name, def]) => ({
+      name,
+      weight: def.spawnWeight,
+    }));
+  
+    for (const room of rooms.slice(1)) { // never the start room
+      const pools = { wall: [], center: [] };
+  
+      for (let y = room.y; y < room.y + room.h; y++) {
         for (let x = room.x; x < room.x + room.w; x++) {
+          if (blocked.has(`${x},${y}`)) continue;
+          if (hidingSpots.some((h) => Math.hypot(h.x - x, h.y - y) < 2)) continue;
+          if (doorList.some((d) => Math.hypot(d.x - x, d.y - y) < 2.5)) continue;
+  
           const onLeft = x === room.x;
           const onRight = x === room.x + room.w - 1;
           const onTop = y === room.y;
           const onBottom = y === room.y + room.h - 1;
-          if (onLeft + onRight + onTop + onBottom !== 1) continue;
-
+          const edgeCount = onLeft + onRight + onTop + onBottom;
+  
+          if (edgeCount === 0) {
+            pools.center.push({ x, y });
+            continue;
+          }
+          if (edgeCount !== 1) continue; // corners
+  
           const ox = x + (onLeft ? -1 : onRight ? 1 : 0);
-          const oy = y+ (onTop ? -1 : onBottom ? 1 : 0);
-          if (isFloor(ox, oy)) continue; //doorway
-
-          if (hidingSpots.some((h) => Math.hypot(h.x - x, h.y - y) < 2)) continue;
-          candidates.push({ x, y });
+          const oy = y + (onTop ? -1 : onBottom ? 1 : 0);
+          if (isFloor(ox, oy)) continue; // doorway
+  
+          // Skip tiles beside a doorway: the wall behind the neighbours must be solid too.
+          const lx = onTop || onBottom ? 1 : 0;
+          const ly = onLeft || onRight ? 1 : 0;
+          if (isFloor(ox + lx, oy + ly) || isFloor(ox - lx, oy - ly)) continue;
+  
+          pools.wall.push({ x, y });
         }
       }
-
-      for (let i = candidates.length - 1; i > 0; i --) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  
+      for (const pool of [pools.wall, pools.center]) {
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
       }
+  
       const count = rollInt(CONTAINERS_PER_ROOM_MIN, CONTAINERS_PER_ROOM_MAX);
-      const chosen = [];
-      for (const c of candidates) {
-        if (chosen.length >= count) break;
-        if (chosen.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
-        chosen.push(c);
+      const placed = [];
+      for (let n = 0; n < count; n++) {
+        const typeName = pickWeighted(typeEntries).name;
+        const pool = pools[CONTAINER_TYPES[typeName].placement === "center" ? "center" : "wall"];
+        const spot = pool.find((c) =>
+          placed.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2)
+        );
+        if (!spot) continue; // no room for this type here
+        placed.push(spot);
+        containers.push(makeContainer(spot.x, spot.y, room, typeName));
       }
-      for (const c of chosen) containers.push(makeContainer(c.x, c.y, room));
     }
     return containers;
   }
@@ -4897,7 +4929,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
     }
 
     placeHidingSpots(rooms, newMap);
-    const containers = placeContainers(rooms, newMap);
+    const containers = placeContainers(rooms, newMap, [...doors, ...brokenDoors], [...items, ...stairs]);
     const enemies = spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, containers, stairs);
 
     return {
