@@ -666,6 +666,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
     toggleHide();
     return;
   }
+  if (startContainerSearch()) return;
   toggleNearbyDoor();
 });
 window.addEventListener("keydown", (event) => {
@@ -675,7 +676,13 @@ window.addEventListener("keydown", (event) => {
 
   dropSelectedItem();
 });
+window.addEventListener("keyup", (event) => {
+  if (event.code === "KeyE") searchState = null;
+});
 
+window.addEventListener("blur", () => {
+  searchState = null;
+});
 
   window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
@@ -979,6 +986,7 @@ window.addEventListener("blur", () => {
     updateProjectiles(timestamp);
     updateEffects(timestamp);
     pickupNearbyItems();
+    updateContainerSearch();
     updateStairs();
     drawGame(timestamp);
 
@@ -1469,6 +1477,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawRipples();
     drawEffects(timestamp, "ground");
     drawHidingSpots();
+    drawContainers(); 
     drawStairs(); 
     drawBrokenDoors();
     drawDoors(timestamp);
@@ -1480,6 +1489,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawEnemies();
     drawEffects(timestamp, "air"); 
     drawHidePrompt();
+    drawContainerPrompt(); 
     
 
     context.restore();
@@ -1759,6 +1769,61 @@ function drawItems(timestamp = performance.now()) {
       worldW,
       worldH
     );
+  }
+}
+
+  function drawContainers() {
+    if (!gameState || !gameState.containers) return;
+    for (const c of gameState.containers) {
+      const px = c.x * TILE_SIZE;
+      const py = c.y * TILE_SIZE;
+      context.globalAlpha = c.searched ? 0.55 : 1;
+      context.fillStyle = "#000";
+      context.reillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
+      context.fillStyle = CONTAINER_TYPES[c.type}.color;
+      context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
+      context.fillStyle = "rgba(0, 0, 0, 0.35)";
+      context.fillRect(px + 5, py + 13, TILE_SIZE - 10, 2);
+      context.globalAlpha = 1;
+  }
+}
+
+function drawContainerText(text, cx ,y) {
+  context.font = "12px monospace";
+  context.textAlign = "center";
+  context.textBadeline = "alphabetic";
+  context.lineWidth = 3;
+  context.strokeStyle = "#00";
+  context.strokeText(text, cx, y);
+  context.fillStyle = "#e2e8f0";
+  context.fillText(text, cx, y);
+}
+
+function drawContainerPrompt() {
+  if (!gameState || !gameState.containers || inventoryOpen) return;
+  if (gameState.player.hidden) return;
+
+  const now = performance.now();
+  const near = getNearbyContainer();
+
+  for (const c of gameState.containers) {
+    const cx = c.x * TILE_SIZE + TILE_SIZE /2;
+    const top = c.y * TILE_SIZE;
+    
+    if (c.message && now < c.messageUntil) {
+      drawContainerText(c.message, cx, top - 8);
+    } else if (searchState && searchState.container ===c) {
+      const t = Math.min(1, (now - searchState) / CONTAINER_TYPES[c.type].searchMs);
+      const w = 24, h = 4;
+      const bx = Math.round(cx - w / 2);
+      const by = Math.round(top - 8);
+      context.fillStyle = "#000";
+      context.fillRect(bx - 1, by -1, w + 2, h + 2);
+      context.fillStyle = "#facc15";
+      context.fillRect(bx, by, Math.round(w * t), h);
+    } else if (c === near && !searchState) {
+      drawContainerText(`E: search ${CONTAINER_TYPES[c.type].label}`, cx, top -8);
+    }
   }
 }
 
@@ -3308,8 +3373,241 @@ function doorApproachPoint(door, e) {
   return { x: door.x, y: door.y + side * off };
 }
 
+// ---------------------------------------------------------------------------
+// CONTAINERS
+// ---------------------------------------------------------------------------
+const CONTAINERS_PER_ROOM_MIN = 0;
+const CONTRAINERS_PRE_ROOM_MAX = 2;
+const CONTAINER_INTERACT_DIST = 1.1;
+const CONTAINER_MESSAGE_MS = 2500;
+
+const ALL_SCROLLS = ["scrollFireBall", "scrollFreezeCloud", "scrollChainLightning"];
+
+// Each container rolls ONE outcome from its `loot` list (by weight).
+// `items: []` means nothing inside. `id` can be an array to pick one at random.
+// Add new container types or new items here.
+const CONTAINER_TYPES = {
+  chest: {
+    label: "Chest",
+    color: "#a16207",
+    searchMs: 2500,
+    spawnWeight: 2,
+    loot: [
+      {weight: 25, items: [] },
+      {weight: 35, itms: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
+      {weight: 25, items: [{ id: "healthPotion", min: 1, max: 1 }] },
+      {weight: 15, items: [{ id: ALL_SCROLLS, min: 1, max: 1}, {id: "healthPotion", 
+      ],
+      emptyMessages: ["The chest is empty.", "Nothing but dust inside."], 
+      },
+  barrel: {
+    label: "Barrel",
+    color: "#78350f",
+    searchMs: 1500,
+    spawnWeight: 3,
+    loot: [
+      {weight: 55, items: [] },
+      {weight: 45, items: [{ id: "healthPotion", min: 1, max: 2 }]},
+      ],
+      emptyMessages: ["Just stale water.", "Rotten dregs, nothing useful."],
+      },
+  bookshelf: {
+    label: "Bookshelf",
+    color: "#451a03",
+    searchMs: 2000,
+    spawnWeight: 2,
+    loot: [
+      {weight: 60, items: [] },
+      {weight: 40, items: [{ id: ALL_SCROLLS, min:1, max:1 }]},
+      ],
+      emptyMessages: ["Only crumbling books.", "Nothing but rotted pages."],
+      },
+  crate: {
+    label: "crate",
+    color: "#854d0e",
+    searchMs: 1200,
+    spawnWeight: 3,
+    loot: [
+      {weight: 100, items: []}, //add crafting items here
+      ],
+      emptyMessages: ["Splintered wood and nothing else.", "Empty. someone got here first."],
+  },
+      };
+
+  const rollInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+
+  function pickWeighted(list) {
+    const total = list.reduce((s, 0) => s + o.weight, 0);
+    let roll = Math.random() * total;
+    for (const o of list) {
+      roll -= o.weight;
+      if (roll <= 0) return 0;
+    }
+    return list[list.length - 1];
+  }
+
+  function makeContainer(x, y, room) {
+    const typeName = picWeighted(
+      Object.entries(CONTAINER_TYPES).map(([name, def]) => ({ name, weight: def.spawnWeight }))
+    ).name;
+
+    const outcome = pickWeighted(CONTAINER_TYPES[typeName].loot);
+    const contents = outcome.items.map((entry) => ({
+      idName: Array.isArray(entry.id) ? pickOne(entry.id) : entry.id,
+      count: rollInt(entry.min ?? 1, entry.max ??1),
+    }));
+
+    return {x, y, room, type: typeName, contents, searched: false, message: null, messageUntil: 0 };
+  }
 
 
+  
+  function placeContainers(rooms, map) {
+    const contrainers = [];
+    const isFloor = (x, y) =>
+      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map [y][x] === TILETYPE.FLOOR;
+    for (const room of rooms.slice(1)) { // never start room
+      const candidates = [];
+      for (let y = room.y; y < room.x + room.h; y++) {
+        for (let x = room.x; x < room.x + room.w; x++) {
+          const onLeft = x === room.x;
+          const onRight = x === room.x + room.w - 1;
+          const onTop = y === room.y;
+          const onBottom = y === room.y + room.h - 1;
+          if (onLeft + onRight + onTop + onBottom !== 1) continue;
+
+          const ox = x + (onLeft ? -1 : onRight ? 1 : 0);
+          const oy = y+ (onTop ? -1 : onBottom ? 1 : 0);
+          if (isFloor(ox, oy)) continue; //doorway
+
+          if (hidingSpots.some((h) => Math.hypot(h.x - x, h.y - y) < 2)) continue;
+          condidates.push({ x, y });
+        }
+      }
+
+      for (let i = candidates.length - 1; i > 0; i --) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]]:
+      }
+      const count = rollInt(CONTAINERS_PER_ROOM_MIN, CONTAINERS_PER_ROOM_MAX);
+      const chosen = [];
+      for (const c of candidates) {
+        if (shocen.length >= count) break;
+        if (chosen.some((0) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
+        chosen.push(c);
+      }
+      for (const c of chosen) containers.push(makeContainer(c.x, c.y, room));
+    }
+    return containers
+  }
+
+        // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
+    const blocked = new Set();
+    const blockTile = (x, y) => blocked.add(`${x},${y}`);
+
+    for (const it of items) blockTile(it.x, it.y);
+    for (const s of stairs) blockTile(s.x, s.y);
+
+    for (let i = 1; i < rooms.length; i++) {
+      const room = rooms[i];
+    
+      const trapCount =
+        TRAPS_PER_ROOM_MIN +
+        Math.floor(Math.random() * (TRAPS_PER_ROOM_MAX - TRAPS_PER_ROOM_MIN + 1));
+
+      for (let t = 0; t < trapCount; t++) {
+        const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
+        const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
+
+        if (blocked.has(`${trapX},${trapY}`)) continue;
+        blockTile(trapX, trapY); // also stops two traps sharing a tile
+
+        items.push({
+          id: `trap-${level}-${i}-${t}`,
+          x: trapX,
+          y: trapY,
+          type: "trap",
+          idName: "trap",
+          sprungUntil: 0,
+        });
+      }
+    }
+
+let searchState = null; // { container, start } while holding E on a container
+
+  function distanceToContainer(c) {
+    const pc = playerCenter();
+    return Math.hypot(c.x + 0.5 - pc.x, c.y + 0.5 - pc.y);
+  }
+
+ function getNearbyContainer () {
+   if (!gameState || !gameState.containers) return null;
+   let best = null;
+   let bestDist = CONTAINER_INTERACT_DIST;
+   for (const c of gameState.containers) {
+     if (c.searched) continue;
+     const d = distanceToContainer(c);
+     if (d <= bestDist) {
+       best = c;
+       bestDist = d;
+     }
+   }
+   return best;
+ }
+
+  function startContainerSearch() {
+    if (heldMoveKeys.size > 0) return false;
+    const c = getNearbyContainer();
+    if (!c) return false;
+    searchState = { container: c, start: performance.now() };
+  }
+  
+  function finishContainerSearch(c, now) {
+    if (c.contents.length === 0) {
+      c.message = pickOne(CONTAINER_TYPES[c.type[.emptyMessages);
+    } else {
+      for (const item of c.contents) {
+        for (let i = 0; i < item.count; i++) addItemToInventory(item.idName);
+      }
+      c.message =
+        "Found: " +
+        c.contents
+      .map((i) =>
+        i.count > 1 ? `${formatItemName(i.idName)} x${i.count}` : formatItemName(i.idName)
+        )
+      .join(", ");
+      c.contents = [];
+    }
+    c.searched = true;
+    c.messageUntil = now + CONTAINER_MESSAGE_MS;
+  }
+
+  function updateContainerSearch() {
+    if (!searchState) return;
+    const c = searchState.container;
+    const p = gameState && gameState.player;
+    const now = performance.now();
+
+    if(
+      !p ||
+      p.hidden ||
+      gameState.gameOver ||
+      inventoryOpen ||
+      !gameState.containers.includes(c) ||
+      heldMoveKeys.size > 0 ||
+      distanceToContainer(c) > CONTAINER_INTERACT_DIST
+      ) {
+      searchState = null;
+      return;
+    }
+
+    if (now - searchState.start >= CONTAINER_TYPES[c.type].searchMs) {
+      finishContainerSearch(c, now);
+      searchState = null;
+    }
+  }
+     
+      
   // ---------------------------------------------------------------------------
   // INVENTORY / ITEMS
   // ---------------------------------------------------------------------------
@@ -4596,72 +4894,9 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
       return null;
     }
 
-    const possibleScrolls = [
-      { idName: "scrollFireBall", tag: "fb" },
-      { idName: "scrollFreezeCloud", tag: "fc" },
-      { idName: "scrollChainLightning", tag: "cl" },
-    ];
-
-    for (let i = 0; i < possibleScrolls.length; i++) {
-      const scrollBlueprint = possibleScrolls[i];
-      if (Math.random() > 0) { // Change 0 to 0.5 !!!!!!!!
-        const scrollRoom =
-          itemRooms[Math.floor(Math.random() * itemRooms.length)];
-        items.push({
-          id: `scroll-${level}-${scrollBlueprint.tag}`,
-          x: scrollRoom.x + 1,
-          y: scrollRoom.y + 1,
-          type: "scroll",
-          idName: scrollBlueprint.idName,
-        });
-      }
-    }
-
-    const potionRoom =
-      itemRooms[Math.floor(Math.random() * itemRooms.length)];
-    items.push({
-      id: `potion-${level}-hp`,
-      x: potionRoom.x + 2,
-      y: potionRoom.y + 2,
-      type: "potion",
-      idName: "healthPotion",
-      color: "#980002",
-    });
-
-        // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
-    const blocked = new Set();
-    const blockTile = (x, y) => blocked.add(`${x},${y}`);
-
-    for (const it of items) blockTile(it.x, it.y);
-    for (const s of stairs) blockTile(s.x, s.y);
-
-    for (let i = 1; i < rooms.length; i++) {
-      const room = rooms[i];
-    
-      const trapCount =
-        TRAPS_PER_ROOM_MIN +
-        Math.floor(Math.random() * (TRAPS_PER_ROOM_MAX - TRAPS_PER_ROOM_MIN + 1));
-
-      for (let t = 0; t < trapCount; t++) {
-        const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
-        const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
-
-        if (blocked.has(`${trapX},${trapY}`)) continue;
-        blockTile(trapX, trapY); // also stops two traps sharing a tile
-
-        items.push({
-          id: `trap-${level}-${i}-${t}`,
-          x: trapX,
-          y: trapY,
-          type: "trap",
-          idName: "trap",
-          sprungUntil: 0,
-        });
-      }
-    }
-
     placeHidingSpots(rooms, newMap);
-    const enemies = spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stairs);
+    const containers = placeContainers(rooms, newMap);
+    const enemies = spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, containers, stairs);
 
     return {
       map: newMap,
@@ -4672,6 +4907,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
       player: player,
       enemies: enemies,
       items: items,
+      containers: containers.
       stairs: stairs,
       hidingSpots: hidingSpots.slice(),
       explored: new Set(),
