@@ -3502,6 +3502,7 @@ const CONTAINER_TYPES = {
   }
 
         // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
+        const items = [];
     const blocked = new Set();
     const blockTile = (x, y) => blocked.add(`${x},${y}`);
 
