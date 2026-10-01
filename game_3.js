@@ -3454,10 +3454,6 @@ const CONTAINER_TYPES = {
   }
 
   function makeContainer(x, y, room, typeName) {
-    const typeName = pickWeighted(
-      Object.entries(CONTAINER_TYPES).map(([name, def]) => ({ name, weight: def.spawnWeight }))
-    ).name;
-
     const outcome = pickWeighted(CONTAINER_TYPES[typeName].loot);
     const contents = outcome.items.map((entry) => ({
       idName: Array.isArray(entry.id) ? pickOne(entry.id) : entry.id,
