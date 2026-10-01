@@ -280,6 +280,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   let lastFrameTime = null;
   let lastEnemyTime = null;
   let lastProjectileTime = null;
+  let lastSeparationTime = 20000;
 
   let inventoryOpen = false;
   let selectedCol = 0;
@@ -452,6 +453,7 @@ function useStairs(stair) {
   // Carry the player and inventory into the new dungeon.
   target.player = player;
   target.inventory = from.inventory;
+  target.armedScroll = from.armedScroll;
   player.x = arrival.x;
   player.y = arrival.y;
   player.hidden = false;
@@ -521,6 +523,7 @@ function drawStairs() {
   }
 }
 
+ 
   // ---------------------------------------------------------------------------
   // TRAPS
   // ---------------------------------------------------------------------------
@@ -650,7 +653,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   // ---------------------------------------------------------------------------
   // INPUT
   // ---------------------------------------------------------------------------
-// Inventory keys
+  // Inventory keys
   window.addEventListener("keydown", (event) => {
   if (event.code !== "KeyE" || event.repeat) return;
   if (!gameRunning || !gameState) return;
@@ -782,8 +785,110 @@ window.addEventListener("keydown", function (event) {
     minimapVisible = !minimapVisible;
   }
 });
+// ---------------------------------------------------------------------------
+// MOUSE AIM
+// ---------------------------------------------------------------------------
 
 
+const mouse = { clientX: 0, clientY: 0, active: false };
+
+window.addEventListener("mousemove", (event) => {
+  mouse.clientX = event.clientX;
+  mouse.clientY = event.clientY;
+  mouse.active = true;
+
+  if (inventoryOpen) {
+    const slot = getInventorySlotAtMouse();
+    if (slot) {
+      selectedCol = slot.col;
+      selectedRow = slot.row;
+    }
+  }
+});
+
+// Mouse position in world TILE units (same space as player.x / player.y).
+function getMouseWorldTile() {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+
+  // Screen position on the canvas, in display pixels.
+  // (getBoundingClientRect already includes the CSS zoom transform.)
+  const sx = ((mouse.clientX - rect.left) / rect.width) * DISPLAY_WIDTH;
+  const sy = ((mouse.clientY - rect.top) / rect.height) * DISPLAY_HEIGHT;
+
+  // Undo the camera transform used in drawGame.
+  const camera = getCamera();
+  const scale = Math.round(zoom) || 1;
+  const worldX = camera.x + (sx - Math.floor(DISPLAY_WIDTH / 2)) / scale;
+  const worldY = camera.y + (sy - Math.floor(DISPLAY_HEIGHT / 2)) / scale;
+
+  return { x: worldX / TILE_SIZE, y: worldY / TILE_SIZE };
+}
+
+// Vector from the player to the mouse (not normalized), or null.
+function getAimVector() {
+  if (!gameState || !mouse.active) return null;
+  const m = getMouseWorldTile();
+  if (!m) return null;
+  const pc = playerCenter();
+  const dx = m.x - pc.x;
+  const dy = m.y - pc.y;
+  if (Math.hypot(dx, dy) < 0.05) return null;
+  return { dx, dy };
+}
+
+// Snap any vector to one of the 8 sprite directions.
+const DIRS_BY_OCTANT = [
+  "right", "downRight", "down", "downLeft",
+  "left", "upLeft", "up", "upRight",
+];
+function directionFromVector(dx, dy) {
+  const angle = Math.atan2(dy, dx); // 0 = right, +PI/2 = down
+  const octant = (Math.round(angle / (Math.PI / 4)) + 8) % 8;
+  return DIRS_BY_OCTANT[octant];
+}
+
+canvas.addEventListener("mousedown", (event) => {
+  if (event.button !== 0) return;
+  if (!gameRunning || !gameState) return;
+
+if (inventoryOpen) {
+  const slot = getInventorySlotAtMouse();
+  if (slot) {
+    selectedCol = slot.col;
+    selectedRow = slot.row;
+    useSelectedItem();
+  }
+  return;
+}
+  if (gameState.player.hidden || gameState.gameOver) return;
+
+   const now = performance.now();
+  if (now - lastFireTime < FIRE_COOLDOWN) return;
+  chargeStart = now;
+});
+
+let chargeStart = null; // timestamp when the button went down, or null
+
+window.addEventListener("mouseup", (event) => {
+  if (event.button !== 0 || chargeStart === null) return;
+
+  const held = performance.now() - chargeStart;
+  chargeStart = null;
+
+  if (!gameRunning || !gameState || inventoryOpen) return;
+  if (gameState.player.hidden || gameState.gameOver) return;
+
+    const aim = getAimVector();
+  if (!aim) return;
+
+  lastFireTime = performance.now();
+  castSpell(aim.dx, aim.dy, held >= chargeTimeFor(gameState.armedScroll));
+});
+
+window.addEventListener("blur", () => {
+  chargeStart = null;
+});
 
   // ---------------------------------------------------------------------------
   // CORE GAME LOOP
@@ -869,9 +974,15 @@ window.addEventListener("keydown", function (event) {
     updateTraps(timestamp);
     updateEnemies(timestamp);
     updateProjectiles(timestamp);
+    updateEffects(timestamp);
     pickupNearbyItems();
     updateStairs();
     drawGame(timestamp);
+
+
+    const sepDt = lastSeparationTime === null ? 0 : Math.min((timestamp - lastSeparationTime) / 1000, 0.05);
+    lastSeparationTime = timestamp;
+    separateBodies(sepDt);
 
     gameLoopId = requestAnimationFrame(gameLoop);
   }
@@ -917,7 +1028,6 @@ const canRun =
   player.stamina > (player.wasRunning ? 0 : STAMINA_START_MIN);
 
 function rechargeStamina(rechargeRate) {
-  // Exhaustion delay must finish before stamina starts recharging.
   if (player.staminaRechargeDelay > 0) {
     player.staminaRechargeDelay = Math.max(
       0,
@@ -931,9 +1041,7 @@ function rechargeStamina(rechargeRate) {
     player.stamina + rechargeRate * deltaTime
   );
 
-  // The player can run again only after reaching full stamina.
   if (player.stamina >= STAMINA_MAX) {
-    player.stamina = STAMINA_MAX;
     player.staminaExhausted = false;
   }
 }
@@ -947,16 +1055,16 @@ if (sneak) {
 } else if (wantRun && canRun && (dx !== 0 || dy !== 0)) {
   player.gait = "run";
 
-  // Running depletes stamina at the maximum rate.
   player.stamina = Math.max(
     0,
     player.stamina - STAMINA_DEPLETION_RATE * deltaTime
   );
 
+  player.staminaRechargeDelay = STAMINA_RECHARGE_DELAY;
+
   if (player.stamina <= 0) {
     player.stamina = 0;
     player.staminaExhausted = true;
-    player.staminaRechargeDelay = STAMINA_RECHARGE_DELAY;
     player.wasRunning = false;
   } else {
     player.wasRunning = true;
@@ -969,7 +1077,9 @@ if (sneak) {
   rechargeStamina(STAMINA_WALK_RECHARGE_RATE);
 }
 
-    if (dx === 0 && dy === 0) {
+        if (dx === 0 && dy === 0) {
+      const aim = getAimVector();
+      if (aim) player.direction = directionFromVector(aim.dx, aim.dy);
       return;
     }
 
@@ -995,11 +1105,13 @@ if (sneak) {
     const newX = player.x + dx * movementAmount;
     const newY = player.y + dy * movementAmount;
 
-    if (canMoveTo(newX, player.y)) {
+    const passThrough = player.gait === "run";
+
+    if (canMoveTo(newX, player.y) && (passThrough || !wouldStackOnEnemy(newX, player.y))) {
       player.x = newX;
     }
 
-    if (canMoveTo(player.x, newY)) {
+    if (canMoveTo(player.x, newY) && (passThrough || !wouldStackOnEnemy(player.x, newY))) {
       player.y = newY;
     }
 
@@ -1021,13 +1133,81 @@ if (sneak) {
   // Player hitbox inside their tile (0..1).
   const HITBOX = { left: 0.25, right: 0.75, top: 0.5, bottom: 0.9 };
 
+  const BODY_DIST = 0.6;           // minimum distance between two bodies (tiles)
+  const PLAYER_PUSHOUT_SPEED = 3;  // tiles/sec when shoved out of an enemy
+
+  // Would standing at (x, y) put the player inside an enemy, deeper than now?
+  function wouldStackOnEnemy(x, y) {
+    const p = gameState.player;
+    return gameState.enemies.some((e) => {
+      const nd = Math.hypot(e.x - x, e.y - y);
+      return nd < BODY_DIST && nd < Math.hypot(e.x - p.x, e.y - p.y);
+    });
+  }
+
+  function separateBodies(dt) {
+    if (!gameState || gameState.gameOver) return;
+    const enemies = gameState.enemies;
+    const p = gameState.player;
+    const now = performance.now();
+
+    // Enemy vs enemy: push both apart (a frozen one stays put, the other moves).
+    for (let i = 0; i < enemies.length; i++) {
+      for (let j = i + 1; j < enemies.length; j++) {
+        const a = enemies[i];
+        const b = enemies[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist >= BODY_DIST) continue;
+
+        let ux, uy;
+        if (dist < 0.001) {
+          const ang = Math.random() * Math.PI * 2;
+          ux = Math.cos(ang);
+          uy = Math.sin(ang);
+        } else {
+          ux = dx / dist;
+          uy = dy / dist;
+        }
+        const overlap = BODY_DIST - dist;
+        const aF = a.frozenUntil > now;
+        const bF = b.frozenUntil > now;
+        const sa = aF && !bF ? 0 : bF && !aF ? 1 : 0.5;
+
+        tryMove(a, -ux * overlap * sa, -uy * overlap * sa, ENEMY_HITBOX);
+        tryMove(b, ux * overlap * (1 - sa), uy * overlap * (1 - sa), ENEMY_HITBOX);
+      }
+    }
+
+    // Player vs enemy: running passes through, anything else gets pushed out.
+    if (p.hidden || p.gait === "run") return;
+    for (const e of enemies) {
+      const dx = p.x - e.x;
+      const dy = p.y - e.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= BODY_DIST) continue;
+
+      let ux, uy;
+      if (dist < 0.001) {
+        const f = facingVector(p);
+        ux = -f.x;
+        uy = -f.y;
+      } else {
+        ux = dx / dist;
+        uy = dy / dist;
+      }
+      const step = Math.min(BODY_DIST - dist, PLAYER_PUSHOUT_SPEED * dt);
+      tryMove(p, ux * step, uy * step, HITBOX);
+    }
+  }
+
   function isWalkableTile(tileX, tileY) {
     if (tileX < 0 || tileX >= MAP_WIDTH || tileY < 0 || tileY >= MAP_HEIGHT) {
       return false;
     }
     return gameState.map[tileY][tileX] !== TileType.WALL;
   }
-
   // Walkable, and (optionally) not a trap tile.
 function isNavTile(tileX, tileY, avoidTraps = false) {
   if (!isWalkableTile(tileX, tileY)) return false;
@@ -1284,15 +1464,18 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
 
     drawMap();
     drawRipples();
+    drawEffects(timestamp, "ground");
     drawHidingSpots();
     drawStairs(); 
     drawBrokenDoors();
     drawDoors(timestamp);
 //  drawVisionCones(); // hide this in final version
     drawPlayer(timestamp);
+    drawChargeBar();
     drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
+    drawEffects(timestamp, "air"); 
     drawHidePrompt();
     
 
@@ -1473,6 +1656,23 @@ function drawMiniMap() {
   context.restore();
 }
 
+function drawChargeBar() {
+  if (chargeStart === null || inventoryOpen) return;
+  if (!gameState.armedScroll || gameState.player.hidden) return;
+
+  const p = gameState.player;
+  const t = Math.min(1, (performance.now() - chargeStart) / chargeTimeFor(gameState.armedScroll));
+  const w = 20, h = 3;
+  const x = Math.round(p.x * TILE_SIZE + (TILE_SIZE - w) / 2);
+  const y = Math.round(p.y * TILE_SIZE - 4);
+
+  context.fillStyle = "#000";
+  context.fillRect(x - 1, y - 1, w + 2, h + 2);
+  context.fillStyle =
+    t >= 1 ? SCROLL_COLORS[gameState.armedScroll] || "#fff" : "#94a3b8";
+  context.fillRect(x, y, Math.round(w * t), h);
+}
+
   function drawProjectiles() {
     if (!gameState || !gameState.projectiles) return;
 
@@ -1481,7 +1681,7 @@ function drawMiniMap() {
       const centerY = projectile.y * TILE_SIZE + TILE_SIZE / 2;
       context.fillStyle = projectile.color;
       context.beginPath();
-      context.arc(centerX, centerY, 3, 0, Math.PI * 2);
+      context.arc(centerX, centerY, projectile.scroll ? 4 :3, 0, Math.PI * 2);
       context.fill();
     }
   }
@@ -1751,7 +1951,20 @@ function facingVector(entity) {
   return { x: vx / len, y: vy / len };
 }
 
-// Push an entity away from (fromX, fromY), stopping at walls.
+// KNOCKBACK
+const MELEE_KNOCKBACK = 0.35;
+const HIT_STUN_MS = 280;
+
+function knockBoth(a, aHb, b, bHb, distance = MELEE_KNOCKBACK) {
+  knockback(a, b.x, b.y, aHb, distance);
+  knockback(b, a.x, a.y, bHb, distance);
+}
+
+function stunEnemy(e, now, ms = HIT_STUN_MS) {
+  e.hitStunUntil = now + ms;
+  e.steer = null;
+  e.navTimer = 0;
+}
 function knockback(entity, fromX, fromY, hb, distance = TRAP_KNOCKBACK) {
   let ux = entity.x - fromX;
   let uy = entity.y - fromY;
@@ -2228,10 +2441,24 @@ function updateSmashSpot(e, dt) {
     }
   }
 
-  function onEnemyReachedPlayer(e) {
-    // e.g. damagePlayer(10);
-  }
 
+const ENEMY_MELEE_DAMAGE = 10;
+const ENEMY_MELEE_INTERVAL_MS = 2000;
+const ENEMY_MELEE_REACH = 1;
+
+function bodyDist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+function onEnemyReachedPlayer(e, now) {
+  const p = gameState.player;
+  if (p.hidden || gameState.gameOver) return;
+  if (now < (e.nextMeleeTime ?? 0)) return;
+
+  e.nextMeleeTime = now + ENEMY_MELEE_INTERVAL_MS;
+  damagePlayer(ENEMY_MELEE_DAMAGE);
+  knockBoth(p, HITBOX, e, ENEMY_HITBOX);
+  stunEnemy(e, now);
+}
   function updateEnemies(timestamp) {
     const dt =
       lastEnemyTime === null
@@ -2242,12 +2469,14 @@ function updateSmashSpot(e, dt) {
     if (!gameState || !gameState.enemies || !gameState.player) return;
     if (gameState.gameOver) return;
 
-    for (const e of gameState.enemies) {
+        for (const e of gameState.enemies.slice()) {
+      if (e.frozenUntil > timestamp) continue; // frozen: no AI, no movement
       updateEnemyAI(e, dt, timestamp);
     }
   }
 
   function updateEnemyAI(e, dt, now) {
+  if (now < (e.hitStunUntil ?? 0)) return;
     const p = gameState.player;
     const ec = enemyCenter(e);
     const pc = playerCenter();
@@ -2383,11 +2612,13 @@ function updateSmashSpot(e, dt) {
           return;
         }
       }
-      if (e.canSeePlayer && dist < 0.8) {
-        onEnemyReachedPlayer(e);
-      } else if (e.searching && !e.canSeePlayer) {
-        updateSearch(e, dt, now);
-      } else {
+      if (e.canSeePlayer && bodyDist(e, p) <= ENEMY_MELEE_REACH) {
+  onEnemyReachedPlayer(e, now);
+}
+
+if (e.searching && !e.canSeePlayer) {
+  updateSearch(e, dt, now);
+} else {
         e.searching = false;
 
         const arrived = steerToward(
@@ -2396,13 +2627,12 @@ function updateSmashSpot(e, dt) {
           e.lastSeen.y,
           ENEMY_SPEED.alert,
           dt,
-          0.3,
+          Math.max(ENEMY_ARRIVE_DIST, ENEMY_MELEE_REACH * 0.6),
           !e.canSeePlayer
         );
 
         if (arrived && !e.canSeePlayer) beginSearch(e);
       }
-
       if (
         !e.canSeePlayer &&
         !e.searching &&
@@ -2573,6 +2803,7 @@ function updateSmashSpot(e, dt) {
       let body = enemy.color || "#ef4444";
       if (enemy.state === "curious") body = "#f59e0b";
       else if (enemy.state === "alert") body = "#b91c1c";
+      if (enemy.frozenUntil > now) body = "#7dd3fc";
 
       context.fillStyle = body;
       context.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
@@ -2801,7 +3032,7 @@ for (const c of chosen) {
 // ---------------------------------------------------------------------------
 // DOORS
 // ---------------------------------------------------------------------------
-const BROKEN_DOOR_CHANCE = 0.1; // chance a door is already broken when the level is made
+const BROKEN_DOOR_CHANCE = 0.75; // chance a door is already broken when the level is made
   
 function drawDoors(timestamp) {
   if (!gameState || !gameState.doors) return;
@@ -3138,7 +3369,36 @@ function pickupNearbyItems() {
 
 
 
+// Slot under the mouse while the inventory is open, or null.
+function getInventorySlotAtMouse() {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
 
+  const ix = ((mouse.clientX - rect.left) / rect.width) * INV_SPACE;
+  const iy = ((mouse.clientY - rect.top) / rect.height) * INV_SPACE;
+
+  // These must match the values in drawInventory.
+  const panelSize = 750;
+  const invX = Math.floor((INV_SPACE - panelSize) / 2);
+  const invY = Math.floor((INV_SPACE - panelSize) / 2);
+  const SLOT_X = 164, SLOT_Y = 214;
+  const SLOT_WIDTH = 106, SLOT_HEIGHT = 108;
+  const SLOT_STEP_X = 106, SLOT_STEP_Y = 114;
+
+  const relX = ix - (invX + SLOT_X);
+  const relY = iy - (invY + SLOT_Y);
+  if (relX < 0 || relY < 0) return null;
+
+  const col = Math.floor(relX / SLOT_STEP_X);
+  const row = Math.floor(relY / SLOT_STEP_Y);
+  if (col >= INV_COLS || row >= INV_ROWS) return null;
+
+  // Ignore the gap between rows.
+  if (relX - col * SLOT_STEP_X > SLOT_WIDTH) return null;
+  if (relY - row * SLOT_STEP_Y > SLOT_HEIGHT) return null;
+
+  return { col, row };
+}
 
   function getInventorySlots() {
     const slots = [];
@@ -3373,6 +3633,18 @@ function drawHUD() {
   const staminaColor = p.staminaExhausted ? "#a16207" : "#22c55e";
   drawBar(x, 18, w, h, p.stamina / STAMINA_MAX, staminaColor, "STA");
 
+    if (gameState.armedScroll) {
+    context.fillStyle = "#fde68a";
+    context.font = "6px monospace";
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    context.fillText(
+      `${formatItemName(gameState.armedScroll)} x${scrollCount(gameState.armedScroll)}`,
+      x,
+      34
+    );
+  }
+
   context.restore();
 }
 // Removes exactly one item from a stack, cleaning up empty stacks/types.
@@ -3389,6 +3661,11 @@ function useSelectedItem() {
 
   const selected = getSelectedStack();
   if (!selected) return;
+   if (SCROLL_COLORS[selected.type]) {
+    gameState.armedScroll =
+      gameState.armedScroll === selected.type ? null : selected.type;
+    return;
+  }
 
   if (selected.type === "healthPotion") {
     const p = gameState.player;
@@ -3409,72 +3686,340 @@ function useSelectedItem() {
   // ---------------------------------------------------------------------------
   // PROJECTILES / SPELLS
   // ---------------------------------------------------------------------------
-  function castSpell(dx, dy) {
-    if (!gameState || !gameState.player || gameState.gameOver) return;
+ 
+   // ---------------------------------------------------------------------------
+  // SPELLS
+  // ---------------------------------------------------------------------------
+  const SCROLL_COLORS = {
+  scrollFireBall: "#f97316",
+  scrollFreezeCloud: "#67e8f9",
+  scrollChainLightning: "#fde047",
+};
+// Charge time in ms for each scroll. Anything missing falls back to FIRE_COOLDOWN.
+const SCROLL_CHARGE_MS = {
+  scrollFireBall: 2000,
+  scrollFreezeCloud: 1500,
+  scrollChainLightning: 2500,
+};
 
-    const player = gameState.player;
-    player.direction = DIR_FROM_VECTOR[`${dx},${dy}`] || player.direction;
+function chargeTimeFor(type) {
+  return SCROLL_CHARGE_MS[type] ?? FIRE_COOLDOWN;
+}
 
-    const len = Math.hypot(dx, dy) || 1;
+// Fireball
+const FIREBALL_RADIUS = 2;
+const FIREBALL_DAMAGE = 45;          // at the centre, falls to 50% at the edge
+const FIRE_ZONE_RADIUS = 1.75;
+const FIRE_ZONE_MS = 5000;
+const FIRE_TICK_MS = 500;
+const FIRE_TICK_DAMAGE = 5;
+const FIRE_HURTS_PLAYER = false;
 
-    gameState.projectiles.push({
-      x: player.x,
-      y: player.y + 0.2,
-      dx: dx / len,
-      dy: dy / len,
-      damage: 50,
-      color: "#15c4fa",
-    });
+// Freeze cloud
+const FREEZE_RADIUS = 2;
+const FREEZE_DAMAGE = 10;
+const FREEZE_MS = 3500;
+const FREEZE_CLOUD_VISUAL_MS = 1800;
 
-    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#15c4fa", player);
+// Chain lightning
+const LIGHTNING_DAMAGE = 30;
+const LIGHTNING_FALLOFF = 0.85;      // each jump does 85% of the previous
+const LIGHTNING_JUMP_RANGE = 3.5;    // tiles
+const LIGHTNING_MAX_JUMPS = 8;
+const LIGHTNING_VISUAL_MS = 250;
+
+function scrollCount(type) {
+  return (gameState.inventory[type] || []).reduce((a, b) => a + b, 0);
+}
+
+function takeScroll(type) {
+  const stacks = gameState.inventory[type];
+  if (!stacks || stacks.length === 0) return false;
+  removeOneFromStack(type, 0);
+  return true;
+}
+
+// Returns true if the enemy died.
+function hurtEnemy(e, amount, now) {
+  e.hp -= amount;
+  if (e.hp <= 0) {
+    const i = gameState.enemies.indexOf(e);
+    if (i !== -1) gameState.enemies.splice(i, 1);
+    return true;
+  }
+  if (e.state !== "alert") alertEnemy(e, now);
+  return false;
+}
+
+function enemiesInRadius(cx, cy, radius) {
+  return gameState.enemies.filter(
+    (e) =>
+      Math.hypot(e.x - cx, e.y - cy) <= radius &&
+      hasLineOfSight(cx + 0.5, cy + 0.5, e.x + 0.5, e.y + 0.5)
+  );
+}
+
+function detonateScroll(pr, hitEnemy, now) {
+  const fx = (gameState.effects ||= []);
+  const cx = pr.x;
+  const cy = pr.y;
+
+  if (pr.scroll === "scrollFireBall") {
+    const hit = enemiesInRadius(cx, cy, FIREBALL_RADIUS);
+    for (const e of hit) {
+      const d = Math.hypot(e.x - cx, e.y - cy);
+      hurtEnemy(e, FIREBALL_DAMAGE * (1 - 0.5 * (d / FIREBALL_RADIUS)), now);
+    }
+    blastKnock(cx, cy, hit);
+
+    fx.push({ kind: "burst", x: cx, y: cy, radius: FIREBALL_RADIUS,
+      color: "#f97316", start: now, until: now + 350 });
+    fx.push({ kind: "fire", x: cx, y: cy, radius: FIRE_ZONE_RADIUS,
+      start: now, until: now + FIRE_ZONE_MS, nextTick: now + FIRE_TICK_MS });
+
+  } else if (pr.scroll === "scrollFreezeCloud") {
+    const hit = enemiesInRadius(cx, cy, FREEZE_RADIUS);
+    for (const e of hit) {
+      if (hurtEnemy(e, FREEZE_DAMAGE, now)) continue;
+      e.frozenUntil = now + FREEZE_MS;
+      e.steer = null;
+    }
+    blastKnock(cx, cy, hit.filter((e) => gameState.enemies.includes(e)));
+
+    fx.push({ kind: "cloud", x: cx, y: cy, radius: FREEZE_RADIUS,
+      start: now, until: now + FREEZE_CLOUD_VISUAL_MS });
+
+  } else if (pr.scroll === "scrollChainLightning" && hitEnemy) {
+    chainLightning(hitEnemy, pr.x, pr.y, now);
+  }
+}
+function blastKnock(cx, cy, victims, distance = MELEE_KNOCKBACK) {
+  for (const e of victims) {
+    knockback(e, cx, cy, ENEMY_HITBOX, distance);
+    stunEnemy(e, performance.now());
+  }
+}
+function chainLightning(first, ox, oy, now) {
+  const chain = [first];
+  const hit = new Set(chain);
+
+  while (chain.length <= LIGHTNING_MAX_JUMPS) {
+    const cur = chain[chain.length - 1];
+    let best = null;
+    let bestDist = LIGHTNING_JUMP_RANGE;
+    for (const e of gameState.enemies) {
+      if (hit.has(e)) continue;
+      const d = Math.hypot(e.x - cur.x, e.y - cur.y);
+      if (d < bestDist && hasLineOfSight(cur.x + 0.5, cur.y + 0.5, e.x + 0.5, e.y + 0.5)) {
+        best = e;
+        bestDist = d;
+      }
+    }
+    if (!best) break;
+    chain.push(best);
+    hit.add(best);
   }
 
-  function updateProjectiles(timestamp) {
-    const dt =
-      lastProjectileTime === null
-        ? 0
-        : Math.min((timestamp - lastProjectileTime) / 1000, 0.05);
-    lastProjectileTime = timestamp;
+  (gameState.effects ||= []).push({
+    kind: "bolt",
+    pts: [{ x: ox + 0.5, y: oy + 0.5 }, ...chain.map((e) => ({ x: e.x + 0.5, y: e.y + 0.5 }))],
+    start: now,
+    until: now + LIGHTNING_VISUAL_MS,
+  });
 
-    if (!gameState || !gameState.projectiles) return;
+  chain.forEach((e, i) =>
+    hurtEnemy(e, LIGHTNING_DAMAGE * Math.pow(LIGHTNING_FALLOFF, i), now)
+  );
+}
 
-    for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
-      const pr = gameState.projectiles[i];
+function updateEffects(timestamp) {
+  const fx = gameState?.effects;
+  if (!fx || gameState.gameOver) return;
 
-      const total = PROJECTILE_SPEED * dt;
-      const steps = Math.max(1, Math.ceil(total / 0.2));
-      const stepX = (pr.dx * total) / steps;
-      const stepY = (pr.dy * total) / steps;
-      let remove = false;
-
-      for (let s = 0; s < steps && !remove; s++) {
-        pr.x += stepX;
-        pr.y += stepY;
-
-        if (isWallAt(pr.x + 0.5, pr.y + 0.5)) {
-          remove = true;
-          break;
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const f = fx[i];
+    if (timestamp >= f.until) {
+      fx.splice(i, 1);
+      continue;
+    }
+    if (f.kind === "fire" && timestamp >= f.nextTick) {
+      f.nextTick += FIRE_TICK_MS;
+      for (const e of enemiesInRadius(f.x, f.y, f.radius)) {
+        hurtEnemy(e, FIRE_TICK_DAMAGE, timestamp);
+      }
+      if (FIRE_HURTS_PLAYER) {
+        const p = gameState.player;
+        if (!p.hidden && Math.hypot(p.x - f.x, p.y - f.y) <= f.radius) {
+          damagePlayer(FIRE_TICK_DAMAGE);
         }
+      }
+    }
+  }
+}
 
-        const enemy = gameState.enemies.find(
-          (en) => Math.hypot(en.x - pr.x, en.y - pr.y) < PROJECTILE_HIT_RADIUS
-        );
+function drawEffects(now, layer) {
+  const fx = gameState?.effects;
+  if (!fx) return;
 
-        if (enemy) {
+  for (const f of fx) {
+    context.save();
+
+    if (layer === "ground" && f.kind !== "bolt") {
+      const px = (f.x + 0.5) * TILE_SIZE;
+      const py = (f.y + 0.5) * TILE_SIZE;
+      const r = f.radius * TILE_SIZE;
+      const t = (now - f.start) / (f.until - f.start);
+
+      if (f.kind === "burst") {
+        context.globalAlpha = (1 - t) * 0.6;
+        context.fillStyle = f.color;
+        context.beginPath();
+        context.arc(px, py, r * (0.4 + 0.6 * t), 0, Math.PI * 2);
+        context.fill();
+      } else if (f.kind === "fire") {
+        const fade = Math.min(1, (f.until - now) / 800);
+        context.globalAlpha = 0.22 * fade;
+        context.fillStyle = "#ea580c";
+        context.beginPath();
+        context.arc(px, py, r, 0, Math.PI * 2);
+        context.fill();
+
+        context.globalAlpha = 0.85 * fade;
+        for (let i = 0; i < 12; i++) {
+          const a = i * 2.4;
+          const rad = (((i * 37) % 100) / 100) * r * 0.9;
+          const h = 4 + (Math.sin(now / 90 + i * 1.7) + 1) * 3;
+          context.fillStyle = i % 2 ? "#f97316" : "#fde047";
+          context.fillRect(
+            Math.round(px + Math.cos(a) * rad - 2),
+            Math.round(py + Math.sin(a) * rad - h),
+            4,
+            Math.round(h)
+          );
+        }
+      } else if (f.kind === "cloud") {
+        context.globalAlpha = 0.4 * (1 - t * 0.7);
+        context.fillStyle = "#a5f3fc";
+        context.beginPath();
+        context.arc(px, py, r, 0, Math.PI * 2);
+        context.fill();
+        context.fillStyle = "#e0f2fe";
+        for (let i = 0; i < 6; i++) {
+          const a = i * 1.05 + now / 900;
+          context.beginPath();
+          context.arc(px + Math.cos(a) * r * 0.5, py + Math.sin(a) * r * 0.5, r * 0.3, 0, Math.PI * 2);
+          context.fill();
+        }
+      }
+    }
+
+    if (layer === "air" && f.kind === "bolt") {
+      context.globalAlpha = 1 - (now - f.start) / (f.until - f.start);
+      context.lineJoin = "round";
+      for (const [color, width] of [["#fde047", 4], ["#ffffff", 1.5]]) {
+        context.strokeStyle = color;
+        context.lineWidth = width;
+        context.beginPath();
+        f.pts.forEach((pt, i) => {
+          const x = pt.x * TILE_SIZE;
+          const y = pt.y * TILE_SIZE;
+          if (i === 0) return context.moveTo(x, y);
+          const prev = f.pts[i - 1];
+          const px0 = prev.x * TILE_SIZE;
+          const py0 = prev.y * TILE_SIZE;
+          for (let s = 1; s <= 4; s++) {
+            const k = s / 4;
+            const jitter = s === 4 ? 0 : (Math.random() - 0.5) * 8;
+            context.lineTo(px0 + (x - px0) * k + jitter, py0 + (y - py0) * k + jitter);
+          }
+        });
+        context.stroke();
+      }
+    }
+
+    context.restore();
+  }
+}
+
+ 
+function castSpell(dx, dy, useScroll = true) {
+  if (!gameState || !gameState.player || gameState.gameOver) return;
+
+  const player = gameState.player;
+  player.direction = directionFromVector(dx, dy);
+
+  const len = Math.hypot(dx, dy) || 1;
+
+   let scroll = null;
+  if (useScroll && gameState.armedScroll) {
+    if (takeScroll(gameState.armedScroll)) scroll = gameState.armedScroll;
+    if (!scrollCount(gameState.armedScroll)) gameState.armedScroll = null;
+  }
+
+  gameState.projectiles.push({
+    x: player.x,
+    y: player.y + 0.2,
+    dx: dx / len,
+    dy: dy / len,
+    damage: scroll ? 0 : 50,
+    color: SCROLL_COLORS[scroll] || "#15c4fa",
+    scroll,
+  });
+
+  makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#15c4fa", player);
+}
+function updateProjectiles(timestamp) {
+  const dt =
+    lastProjectileTime === null
+      ? 0
+      : Math.min((timestamp - lastProjectileTime) / 1000, 0.05);
+  lastProjectileTime = timestamp;
+
+  if (!gameState || !gameState.projectiles) return;
+
+  for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+    const pr = gameState.projectiles[i];
+
+    const total = PROJECTILE_SPEED * dt;
+    const steps = Math.max(1, Math.ceil(total / 0.2));
+    const stepX = (pr.dx * total) / steps;
+    const stepY = (pr.dy * total) / steps;
+    let remove = false;
+
+    for (let s = 0; s < steps && !remove; s++) {
+      pr.x += stepX;
+      pr.y += stepY;
+
+      if (isWallAt(pr.x + 0.5, pr.y + 0.5)) {
+        pr.x -= stepX;
+        pr.y -= stepY;
+        if (pr.scroll) detonateScroll(pr, null, timestamp);
+        remove = true;
+        break;
+      }
+
+      const enemy = gameState.enemies.find(
+        (en) => Math.hypot(en.x - pr.x, en.y - pr.y) < PROJECTILE_HIT_RADIUS
+      );
+
+      if (enemy) {
+        if (pr.scroll) {
+          detonateScroll(pr, enemy, timestamp);
+        } else {
           enemy.hp -= pr.damage;
           if (enemy.hp <= 0) {
             gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
           } else {
             alertEnemy(enemy, timestamp);
           }
-          remove = true;
         }
+        remove = true;
       }
-
-      if (remove) gameState.projectiles.splice(i, 1);
     }
-  }
 
+    if (remove) gameState.projectiles.splice(i, 1);
+  }
+}
   // ---------------------------------------------------------------------------
   // ZOOM
   // ---------------------------------------------------------------------------
@@ -4137,6 +4682,8 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
         healthPotion: [],
       },
       projectiles: [],
+      effects: [], 
+      armedScroll: null,
     };
   }
 
