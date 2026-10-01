@@ -297,13 +297,6 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
     d: [1, 0],
   };
 
-  const fireKeys = {
-    ArrowUp: [0, -1],
-    ArrowDown: [0, 1],
-    ArrowLeft: [-1, 0],
-    ArrowRight: [1, 0],
-  };
-
   const heldMoveKeys = new Set();
   const movementKeys = new Set(["w", "a", "s", "d"]);
   const heldGaitKeys = { sneak: false, run: false };
@@ -666,7 +659,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
     toggleHide();
     return;
   }
-  if (startsearch()) return;
+  if (startContainerSearch()) return;
   toggleNearbyDoor();
 });
 window.addEventListener("keydown", (event) => {
@@ -758,21 +751,6 @@ window.addEventListener("keyup", (event) => {
     if (moveKeys[key]) {
       event.preventDefault();
       return;
-    }
-
-    const fireDirection = fireKeys[event.key];
-
-    if (fireDirection) {
-      event.preventDefault();
-      if (gameState.player.hidden) return;
-      if (event.repeat) return;
-
-      const now = performance.now();
-      if (now - lastFireTime < FIRE_COOLDOWN) return;
-
-      lastFireTime = now;
-      const [dx, dy] = fireDirection;
-      castSpell(dx, dy);
     }
   });
 
