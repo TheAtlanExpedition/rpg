@@ -3376,7 +3376,7 @@ function doorApproachPoint(door, e) {
 // CONTAINERS
 // ---------------------------------------------------------------------------
 const CONTAINERS_PER_ROOM_MIN = 0;
-const CONTRAINERS_PER_ROOM_MAX = 2;
+const CONTAINERS_PER_ROOM_MAX = 2;
 const CONTAINER_INTERACT_DIST = 1.1;
 const CONTAINER_MESSAGE_MS = 2500;
 
