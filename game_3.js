@@ -3480,7 +3480,7 @@ const CONTAINER_TYPES = {
           if (isFloor(ox, oy)) continue; //doorway
 
           if (hidingSpots.some((h) => Math.hypot(h.x - x, h.y - y) < 2)) continue;
-          condidates.push({ x, y });
+          candidates.push({ x, y });
         }
       }
 
