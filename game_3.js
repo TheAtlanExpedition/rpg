@@ -1770,7 +1770,7 @@ function drawItems(timestamp = performance.now()) {
       worldH
     );
   }
-}
+
 
   function drawContainers() {
     if (!gameState || !gameState.containers) return;
