@@ -1793,7 +1793,7 @@ function drawContainerPrompt() {
     
     if (c.message && now < c.messageUntil) {
       drawContainerText(c.message, cx, top - 8);
-    } else if (searchState && searchState.container ===c) {
+    } else if (searchState && searchState.container === c) {
       const t = Math.min(1, (now - searchState) / CONTAINER_TYPES[c.type].searchMs);
       const w = 24, h = 4;
       const bx = Math.round(cx - w / 2);
