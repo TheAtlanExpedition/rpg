@@ -859,7 +859,7 @@ function directionFromVector(dx, dy) {
 }
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("mousedown", (event) => {
-  if (event.button !== 2) {
+  if (event.button == 2) {
     chargeStart = null;
     return;
   }
