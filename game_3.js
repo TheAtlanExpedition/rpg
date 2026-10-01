@@ -3446,7 +3446,7 @@ const CONTAINER_TYPES = {
   }
 
   function makeContainer(x, y, room) {
-    const typeName = picWeighted(
+    const typeName = pickWeighted(
       Object.entries(CONTAINER_TYPES).map(([name, def]) => ({ name, weight: def.spawnWeight }))
     ).name;
 
