@@ -1759,7 +1759,7 @@ function drawItems(timestamp = performance.now()) {
       const px = c.x * TILE_SIZE;
       const py = c.y * TILE_SIZE;
       context.globalAlpha = c.searched ? 0.55 : 1;
-      context.fillStyle = "#fff";
+      context.fillStyle = "#000";
       context.fillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
       context.fillStyle = CONTAINER_TYPES[c.type].color;
       context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
@@ -1798,7 +1798,7 @@ function drawContainerPrompt() {
       const w = 24, h = 4;
       const bx = Math.round(cx - w / 2);
       const by = Math.round(top - 8);
-      context.fillStyle = "#000";
+      context.fillStyle = "#fff";
       context.fillRect(bx - 1, by -1, w + 2, h + 2);
       context.fillStyle = "#facc15";
       context.fillRect(bx, by, Math.round(w * t), h);
