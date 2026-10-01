@@ -676,6 +676,7 @@ window.addEventListener("keydown", (event) => {
 
   dropSelectedItem();
 });
+
 window.addEventListener("keyup", (event) => {
   if (event.code === "KeyE") searchState = null;
 });
@@ -3503,6 +3504,7 @@ const CONTAINER_TYPES = {
 
         // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
         const items = [];
+        const stairs = [];
     const blocked = new Set();
     const blockTile = (x, y) => blocked.add(`${x},${y}`);
 
