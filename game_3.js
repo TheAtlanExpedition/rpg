@@ -698,6 +698,10 @@ window.addEventListener("keyup", (event) => {
     heldGaitKeys.run = false;
     searchState = null;
   });
+    window.addEventListener("blur", () => {
+    searchState = null;
+  });
+
 
   window.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
