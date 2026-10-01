@@ -1759,11 +1759,11 @@ function drawItems(timestamp = performance.now()) {
       const px = c.x * TILE_SIZE;
       const py = c.y * TILE_SIZE;
       context.globalAlpha = c.searched ? 0.55 : 1;
-      context.fillStyle = "#000";
+      context.fillStyle = "#fff";
       context.fillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
       context.fillStyle = CONTAINER_TYPES[c.type].color;
       context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
-      context.fillStyle = "rgba(250, 250, 250, 0.35)";
+      context.fillStyle = "rgba(0, 0, 0, 0.35)";
       context.fillRect(px + 5, py + 13, TILE_SIZE - 10, 2);
       context.globalAlpha = 1;
   }
