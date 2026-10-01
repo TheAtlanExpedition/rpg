@@ -3393,7 +3393,7 @@ const CONTAINER_TYPES = {
     spawnWeight: 2,
     loot: [
       {weight: 25, items: [] },
-      {weight: 35, itms: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
+      {weight: 35, items: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
       {weight: 25, items: [{ id: "healthPotion", min: 1, max: 1 }] },
       {weight: 15, items: [{ id: ALL_SCROLLS, min: 1, max: 1}, {id: "healthPotion",}]},
       ],
@@ -3422,7 +3422,7 @@ const CONTAINER_TYPES = {
       emptyMessages: ["Only crumbling books.", "Nothing but rotted pages."],
       },
   crate: {
-    label: "Crate",
+    label: "crate",
     color: "#854d0e",
     searchMs: 1200,
     spawnWeight: 3,
