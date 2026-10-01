@@ -1778,7 +1778,7 @@ function drawItems(timestamp = performance.now()) {
       const py = c.y * TILE_SIZE;
       context.globalAlpha = c.searched ? 0.55 : 1;
       context.fillStyle = "#000";
-      context.reillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
+      context.fillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
       context.fillStyle = CONTAINER_TYPES[c.type].color;
       context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
       context.fillStyle = "rgba(0, 0, 0, 0.35)";
