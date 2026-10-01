@@ -681,9 +681,6 @@ window.addEventListener("keyup", (event) => {
   if (event.code === "KeyE") searchState = null;
 });
 
-window.addEventListener("blur", () => {
-  searchState = null;
-});
 
   window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
@@ -699,6 +696,7 @@ window.addEventListener("blur", () => {
   window.addEventListener("blur", () => {
     heldGaitKeys.sneak = false;
     heldGaitKeys.run = false;
+    searchState = null;
   });
 
   window.addEventListener("keydown", (event) => {
