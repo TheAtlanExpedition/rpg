@@ -3491,7 +3491,7 @@ const CONTAINER_TYPES = {
       const count = rollInt(CONTAINERS_PER_ROOM_MIN, CONTAINERS_PER_ROOM_MAX);
       const chosen = [];
       for (const c of candidates) {
-        if (shocen.length >= count) break;
+        if (chosen.length >= count) break;
         if (chosen.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
         chosen.push(c);
       }
