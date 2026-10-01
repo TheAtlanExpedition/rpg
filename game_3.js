@@ -3422,7 +3422,7 @@ const CONTAINER_TYPES = {
       emptyMessages: ["Only crumbling books.", "Nothing but rotted pages."],
       },
   crate: {
-    label: "crate",
+    label: "Crate",
     color: "#854d0e",
     searchMs: 1200,
     spawnWeight: 3,
