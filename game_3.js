@@ -2097,8 +2097,7 @@ function updateTraps(timestamp) {
     makeNoise(item.x, item.y, TRAP_NOISE_RADIUS, "#ef4444");
   }
 }
-
-  // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
   // ENEMY AI
   // ---------------------------------------------------------------------------
   function isPlayerInLight() {
@@ -2114,7 +2113,7 @@ function updateTraps(timestamp) {
     return { x: p.x + 0.5, y: p.y + 0.7 };
   }
 
-    function isWallAt(x, y, ignoreDoors = false) {
+  function isWallAt(x, y, ignoreDoors = false) {
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return true;
@@ -2137,7 +2136,9 @@ function updateTraps(timestamp) {
     const dy = by - ay;
     const dist = Math.hypot(dx, dy);
     if (dist === 0) return true;
-    return castRay(ax, ay, Math.atan2(dy, dx), dist, ignoreDoors) >= dist - 0.001;
+    return (
+      castRay(ax, ay, Math.atan2(dy, dx), dist, ignoreDoors) >= dist - 0.001
+    );
   }
 
   function angleDiff(a, b) {
@@ -2154,167 +2155,169 @@ function updateTraps(timestamp) {
   }
 
   function lookAround(e, now) {
-  e.facing =
-    e.baseFacing +
-    Math.sin(now / 450 + (e.lookPhase ?? 0)) * (e.lookSweep ?? 0.9);
-}
+    e.facing =
+      e.baseFacing +
+      Math.sin(now / 450 + (e.lookPhase ?? 0)) * (e.lookSweep ?? 0.9);
+  }
 
-function findPath(sx, sy, gx, gy, avoidTraps = false, passDoors = false) {
-  if (!isNavTile(gx, gy, avoidTraps) || !isWalkableTile(sx, sy)) return null;
-  if (sx === gx && sy === gy) return [];
+  function findPath(sx, sy, gx, gy, avoidTraps = false, passDoors = false) {
+    if (!isNavTile(gx, gy, avoidTraps) || !isWalkableTile(sx, sy)) return null;
+    if (sx === gx && sy === gy) return [];
 
-  const key = (x, y) => y * MAP_WIDTH + x;
-  const startKey = key(sx, sy);
-  const prev = new Map([[startKey, -1]]);
-  const queue = [[sx, sy]];
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ];
+    const key = (x, y) => y * MAP_WIDTH + x;
+    const startKey = key(sx, sy);
+    const prev = new Map([[startKey, -1]]);
+    const queue = [[sx, sy]];
+    const dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
 
-  for (let head = 0; head < queue.length; head++) {
-    const [x, y] = queue[head];
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx;
-      const ny = y + dy;
-      const k = key(nx, ny);
-      if (!isNavTile(nx, ny, avoidTraps) || prev.has(k)) continue;
-      if (!passDoors && isDoorClosedAt(nx, ny)) continue;
-      prev.set(k, key(x, y));
+    for (let head = 0; head < queue.length; head++) {
+      const [x, y] = queue[head];
+      for (const [dx, dy] of dirs) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const k = key(nx, ny);
+        if (!isNavTile(nx, ny, avoidTraps) || prev.has(k)) continue;
+        if (!passDoors && isDoorClosedAt(nx, ny)) continue;
+        prev.set(k, key(x, y));
 
-      if (nx === gx && ny === gy) {
-        const path = [];
-        let cur = k;
-        while (cur !== startKey) {
-          path.push({ x: cur % MAP_WIDTH, y: Math.floor(cur / MAP_WIDTH) });
-          cur = prev.get(cur);
+        if (nx === gx && ny === gy) {
+          const path = [];
+          let cur = k;
+          while (cur !== startKey) {
+            path.push({ x: cur % MAP_WIDTH, y: Math.floor(cur / MAP_WIDTH) });
+            cur = prev.get(cur);
+          }
+          return path.reverse();
         }
-        return path.reverse();
-      }
-      queue.push([nx, ny]);
-    }
-  }
-  return null;
-}
-
-// If the goal sits on a trap, pick the closest non-trap tile nearby.
-function nearestSafeGoal(gx, gy) {
-  const tx = Math.floor(gx + 0.5);
-  const ty = Math.floor(gy + 0.5);
-  if (!gameState.trapTiles.has(ty * MAP_WIDTH + tx)) return { x: gx, y: gy };
-
-  let best = null;
-  let bestDist = Infinity;
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
-      const nx = tx + dx;
-      const ny = ty + dy;
-      if (!isNavTile(nx, ny, true)) continue;
-      const d = Math.hypot(nx - gx, ny - gy);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { x: nx, y: ny };
+        queue.push([nx, ny]);
       }
     }
-  }
-  return best || { x: gx, y: gy };
-}
-// Enemies only ignore traps while alert AND actually looking at the player.
-// An alert enemy that lost sight (searching, or player hiding) still avoids them.
-function enemyAvoidsTraps(e) {
-  return !(e.state === "alert" && e.canSeePlayer);
-}
-function planSteer(e, gx, gy) {
-  const avoid = enemyAvoidsTraps(e);
-
-  if (isSegmentClear(e.x, e.y, gx, gy, ENEMY_HITBOX, avoid)) {
-    return { x: gx, y: gy, isGoal: true };
+    return null;
   }
 
-  const path = findPath(
-    Math.floor(e.x + 0.5),
-    Math.floor(e.y + 0.5),
-    Math.floor(gx + 0.5),
-    Math.floor(gy + 0.5),
-    avoid
-  );
-  if (!path || path.length === 0) {
-    return { x: gx, y: gy, isGoal: true };
-  }
+  // If the goal sits on a trap, pick the closest non-trap tile nearby.
+  function nearestSafeGoal(gx, gy) {
+    const tx = Math.floor(gx + 0.5);
+    const ty = Math.floor(gy + 0.5);
+    if (!gameState.trapTiles.has(ty * MAP_WIDTH + tx)) return { x: gx, y: gy };
 
-  let best = path[0];
-  let foundClear = false;
-  const limit = Math.min(path.length, 16);
-  for (let i = 0; i < limit; i++) {
-    if (isSegmentClear(e.x, e.y, path[i].x, path[i].y, ENEMY_HITBOX, avoid)) {
-      best = path[i];
-      foundClear = true;
-    } else if (foundClear) {
-      break;
+    let best = null;
+    let bestDist = Infinity;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = tx + dx;
+        const ny = ty + dy;
+        if (!isNavTile(nx, ny, true)) continue;
+        const d = Math.hypot(nx - gx, ny - gy);
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x: nx, y: ny };
+        }
+      }
     }
-  }
-  return { x: best.x, y: best.y, isGoal: false };
-}
-
-function steerToward(
-  e,
-  gx,
-  gy,
-  speed,
-  dt,
-  arriveDist = ENEMY_ARRIVE_DIST,
-  faceMovement = true
-) {
-  const avoid = enemyAvoidsTraps(e);
-  if (avoid) {
-    const safe = nearestSafeGoal(gx, gy);
-    gx = safe.x;
-    gy = safe.y;
+    return best || { x: gx, y: gy };
   }
 
-  if (Math.hypot(gx - e.x, gy - e.y) <= arriveDist) {
-    e.steer = null;
-    return true;
+  // Enemies only ignore traps while alert AND actually looking at the player.
+  // An alert enemy that lost sight (searching, or player hiding) still avoids them.
+  function enemyAvoidsTraps(e) {
+    return !(e.state === "alert" && e.canSeePlayer);
   }
 
-  e.navTimer -= dt * 1000;
-  const goalMoved =
-    !e.navGoal || Math.hypot(e.navGoal.x - gx, e.navGoal.y - gy) > 1;
+  function planSteer(e, gx, gy) {
+    const avoid = enemyAvoidsTraps(e);
 
-  if (!e.steer || e.navTimer <= 0 || goalMoved) {
-    e.steer = planSteer(e, gx, gy);
-    e.navGoal = { x: gx, y: gy };
-    e.navTimer = NAV_REPLAN_MS;
-  } else if (e.steer.isGoal) {
-    e.steer.x = gx;
-    e.steer.y = gy;
-  }
+    if (isSegmentClear(e.x, e.y, gx, gy, ENEMY_HITBOX, avoid)) {
+      return { x: gx, y: gy, isGoal: true };
+    }
 
-  const dx = e.steer.x - e.x;
-  const dy = e.steer.y - e.y;
-  const d = Math.hypot(dx, dy);
-  if (d < 0.05) {
-    e.navTimer = 0;
-    return false;
-  }
-
-  if (faceMovement) turnToward(e, Math.atan2(dy, dx), dt);
-
-  const step = Math.min(speed * dt, d);
-  if (step > 0) {
-    const moved = tryMove(
-      e,
-      (dx / d) * step,
-      (dy / d) * step,
-      ENEMY_HITBOX,
+    const path = findPath(
+      Math.floor(e.x + 0.5),
+      Math.floor(e.y + 0.5),
+      Math.floor(gx + 0.5),
+      Math.floor(gy + 0.5),
       avoid
     );
-    if (moved < step * 0.25) e.navTimer = 0;
+    if (!path || path.length === 0) {
+      return { x: gx, y: gy, isGoal: true };
+    }
+
+    let best = path[0];
+    let foundClear = false;
+    const limit = Math.min(path.length, 16);
+    for (let i = 0; i < limit; i++) {
+      if (isSegmentClear(e.x, e.y, path[i].x, path[i].y, ENEMY_HITBOX, avoid)) {
+        best = path[i];
+        foundClear = true;
+      } else if (foundClear) {
+        break;
+      }
+    }
+    return { x: best.x, y: best.y, isGoal: false };
   }
-  return false;
-}
+
+  function steerToward(
+    e,
+    gx,
+    gy,
+    speed,
+    dt,
+    arriveDist = ENEMY_ARRIVE_DIST,
+    faceMovement = true
+  ) {
+    const avoid = enemyAvoidsTraps(e);
+    if (avoid) {
+      const safe = nearestSafeGoal(gx, gy);
+      gx = safe.x;
+      gy = safe.y;
+    }
+
+    if (Math.hypot(gx - e.x, gy - e.y) <= arriveDist) {
+      e.steer = null;
+      return true;
+    }
+
+    e.navTimer -= dt * 1000;
+    const goalMoved =
+      !e.navGoal || Math.hypot(e.navGoal.x - gx, e.navGoal.y - gy) > 1;
+
+    if (!e.steer || e.navTimer <= 0 || goalMoved) {
+      e.steer = planSteer(e, gx, gy);
+      e.navGoal = { x: gx, y: gy };
+      e.navTimer = NAV_REPLAN_MS;
+    } else if (e.steer.isGoal) {
+      e.steer.x = gx;
+      e.steer.y = gy;
+    }
+
+    const dx = e.steer.x - e.x;
+    const dy = e.steer.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 0.05) {
+      e.navTimer = 0;
+      return false;
+    }
+
+    if (faceMovement) turnToward(e, Math.atan2(dy, dx), dt);
+
+    const step = Math.min(speed * dt, d);
+    if (step > 0) {
+      const moved = tryMove(
+        e,
+        (dx / d) * step,
+        (dy / d) * step,
+        ENEMY_HITBOX,
+        avoid
+      );
+      if (moved < step * 0.25) e.navTimer = 0;
+    }
+    return false;
+  }
 
   function alertEnemy(e, now) {
     const p = gameState.player;
@@ -2330,48 +2333,48 @@ function steerToward(
   }
 
   function startInvestigating(e, x, y) {
-  e.state = "curious";
-  e.investigate = { x, y };
-  e.arrived = false;
-  e.waitTimer = 0;
-  e.hideSearchTimer = 0;
-  e.steer = null;
-  e.investigateTime = 0;
-  noteSuspicionAtSpot(e, x, y);   // <-- new
-}
+    e.state = "curious";
+    e.investigate = { x, y };
+    e.arrived = false;
+    e.waitTimer = 0;
+    e.hideSearchTimer = 0;
+    e.steer = null;
+    e.investigateTime = 0;
+    noteSuspicionAtSpot(e, x, y);
+  }
 
   // Counts how often this enemy has been drawn to the same hiding spot.
-function noteSuspicionAtSpot(e, x, y) {
-  let spot = null;
-  let best = HIDE_SUSPECT_RADIUS;
-  for (const s of hidingSpots) {
-    const d = Math.hypot(s.x - x, s.y - y);
-    if (d <= best) {
-      best = d;
-      spot = s;
+  function noteSuspicionAtSpot(e, x, y) {
+    let spot = null;
+    let best = HIDE_SUSPECT_RADIUS;
+    for (const s of hidingSpots) {
+      const d = Math.hypot(s.x - x, s.y - y);
+      if (d <= best) {
+        best = d;
+        spot = s;
+      }
+    }
+    if (!spot) return;
+
+    const now = performance.now();
+    spot.suspects ??= new Map();
+    const rec = spot.suspects.get(e.id) ?? { count: 0, last: -Infinity };
+
+    if (now - rec.last < HIDE_SUSPECT_COOLDOWN_MS) return;
+    rec.count++;
+    rec.last = now;
+    spot.suspects.set(e.id, rec);
+
+    if (rec.count >= HIDE_SUSPECT_LIMIT) {
+      rec.count = 0;
+      e.smashSpot = spot;
+      e.smashForced = true; // smash it even if the player is inside
+      e.breakTimer = null;
+      e.investigate = { x: spot.x, y: spot.y };
     }
   }
-  if (!spot) return;
 
-  const now = performance.now();
-  spot.suspects ??= new Map();
-  const rec = spot.suspects.get(e.id) ?? { count: 0, last: -Infinity };
-
-  if (now - rec.last < HIDE_SUSPECT_COOLDOWN_MS) return;
-  rec.count++;
-  rec.last = now;
-  spot.suspects.set(e.id, rec);
-
-  if (rec.count >= HIDE_SUSPECT_LIMIT) {
-    rec.count = 0;
-    e.smashSpot = spot;
-    e.smashForced = true;               // smash it even if the player is inside
-    e.breakTimer = null;
-    e.investigate = { x: spot.x, y: spot.y };
-  }
-}
-
-    function pickSearchPoints(cx, cy, room = null) {
+  function pickSearchPoints(cx, cy, room = null) {
     const tx = Math.floor(cx + 0.5);
     const ty = Math.floor(cy + 0.5);
     const candidates = [];
@@ -2408,72 +2411,71 @@ function noteSuspicionAtSpot(e, x, y) {
     }
     return points;
   }
-function roomAtPoint(x, y) {
-  const tx = Math.floor(x + 0.5);
-  const ty = Math.floor(y + 0.5);
-  return (
-    gameState.rooms.find(
-      (r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h
-    ) || null
-  );
-}
 
-// Called once when an enemy starts searching. Only the first enemy to search
-// a room within the cooldown gets to roll, so a room loses at most one spot.
-function rollHidingSpotSmash(e, room) {
-  if (e.smashSpot) return; // already has a plan (e.g. from repeated suspicion)
-  if (!room) return;
+  function roomAtPoint(x, y) {
+    const tx = Math.floor(x + 0.5);
+    const ty = Math.floor(y + 0.5);
+    return (
+      gameState.rooms.find(
+        (r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h
+      ) || null
+    );
+  }
 
-  const now = performance.now();
-  if (now < (room.hideRollUntil ?? 0)) return;
-  room.hideRollUntil = now + HIDE_ROOM_ROLL_COOLDOWN_MS;
+  // Called once when an enemy starts searching. Only the first enemy to search
+  // a room within the cooldown gets to roll, so a room loses at most one spot.
+  function rollHidingSpotSmash(e, room) {
+    if (e.smashSpot) return; // already has a plan (e.g. from repeated suspicion)
+    if (!room) return;
 
-  if (Math.random() >= HIDE_SMASH_CHANCE) return;
+    const now = performance.now();
+    if (now < (room.hideRollUntil ?? 0)) return;
+    room.hideRollUntil = now + HIDE_ROOM_ROLL_COOLDOWN_MS;
 
-  const spots = hidingSpots.filter((s) => s.room === room && !s.occupied);
-  if (spots.length === 0) return;
-  e.smashSpot = spots[Math.floor(Math.random() * spots.length)];
-  e.smashForced = false;
-}
+    if (Math.random() >= HIDE_SMASH_CHANCE) return;
 
-// Walk to the chosen spot and smash it. Returns true while still busy.
-function updateSmashSpot(e, dt) {
-  const spot = e.smashSpot;
-  if (!spot) return false;
-
-  // Already destroyed, or the player is inside and this wasn't a forced smash.
-  if (!hidingSpots.includes(spot) || (spot.occupied && !e.smashForced)) {
-    e.smashSpot = null;
+    const spots = hidingSpots.filter((s) => s.room === room && !s.occupied);
+    if (spots.length === 0) return;
+    e.smashSpot = spots[Math.floor(Math.random() * spots.length)];
     e.smashForced = false;
-    e.breakTimer = null;
-    return false;
   }
 
-  const arrived = steerToward(
-    e,
-    spot.x,
-    spot.y,
-    ENEMY_SPEED.curious,
-    dt,
-    HIDE_ATTACK_REACH
-  );
-  if (!arrived) return true;
+  // Walk to the chosen spot and smash it. Returns true while still busy.
+  function updateSmashSpot(e, dt) {
+    const spot = e.smashSpot;
+    if (!spot) return false;
 
-  e.breakTimer ??= HIDE_BREAK_DELAY_MS;
-  e.breakTimer -= dt * 1000;
-  turnToward(e, Math.atan2(spot.y - e.y, spot.x - e.x), dt);
+    // Already destroyed, or the player is inside and this wasn't a forced smash.
+    if (!hidingSpots.includes(spot) || (spot.occupied && !e.smashForced)) {
+      e.smashSpot = null;
+      e.smashForced = false;
+      e.breakTimer = null;
+      return false;
+    }
 
-  if (e.breakTimer <= 0) {
-    e.breakTimer = null;
-    e.smashSpot = null;
-    breakHidingSpot(spot);
-    return false;
+    const arrived = steerToward(
+      e,
+      spot.x,
+      spot.y,
+      ENEMY_SPEED.curious,
+      dt,
+      HIDE_ATTACK_REACH
+    );
+    if (!arrived) return true;
+
+    e.breakTimer ??= HIDE_BREAK_DELAY_MS;
+    e.breakTimer -= dt * 1000;
+    turnToward(e, Math.atan2(spot.y - e.y, spot.x - e.x), dt);
+
+    if (e.breakTimer <= 0) {
+      e.breakTimer = null;
+      e.smashSpot = null;
+      breakHidingSpot(spot);
+      return false;
+    }
+    return true;
   }
-  return true;
-}
 
-
-  
   function beginSearch(e) {
     const room = e.searchRoom || roomAtPoint(e.lastSeen.x, e.lastSeen.y);
     rollHidingSpotSmash(e, room);
@@ -2495,7 +2497,7 @@ function updateSmashSpot(e, dt) {
     const target = e.searchPoints[e.searchIndex];
 
     if (!target) {
-        if (updateSmashSpot(e, dt)) return; // still walking to / smashing the spot
+      if (updateSmashSpot(e, dt)) return; // still walking to / smashing the spot
 
       e.searching = false;
       e.state = "patrol";
@@ -2512,24 +2514,25 @@ function updateSmashSpot(e, dt) {
     }
   }
 
+  const ENEMY_MELEE_DAMAGE = 10;
+  const ENEMY_MELEE_INTERVAL_MS = 2000;
+  const ENEMY_MELEE_REACH = 1;
 
-const ENEMY_MELEE_DAMAGE = 10;
-const ENEMY_MELEE_INTERVAL_MS = 2000;
-const ENEMY_MELEE_REACH = 1;
+  function bodyDist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
 
-function bodyDist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-function onEnemyReachedPlayer(e, now) {
-  const p = gameState.player;
-  if (p.hidden || gameState.gameOver) return;
-  if (now < (e.nextMeleeTime ?? 0)) return;
+  function onEnemyReachedPlayer(e, now) {
+    const p = gameState.player;
+    if (p.hidden || gameState.gameOver) return;
+    if (now < (e.nextMeleeTime ?? 0)) return;
 
-  e.nextMeleeTime = now + ENEMY_MELEE_INTERVAL_MS;
-  damagePlayer(ENEMY_MELEE_DAMAGE);
-  knockBoth(p, HITBOX, e, ENEMY_HITBOX);
-  stunEnemy(e, now);
-}
+    e.nextMeleeTime = now + ENEMY_MELEE_INTERVAL_MS;
+    damagePlayer(ENEMY_MELEE_DAMAGE);
+    knockBoth(p, HITBOX, e, ENEMY_HITBOX);
+    stunEnemy(e, now);
+  }
+
   function updateEnemies(timestamp) {
     const dt =
       lastEnemyTime === null
@@ -2540,14 +2543,14 @@ function onEnemyReachedPlayer(e, now) {
     if (!gameState || !gameState.enemies || !gameState.player) return;
     if (gameState.gameOver) return;
 
-        for (const e of gameState.enemies.slice()) {
+    for (const e of gameState.enemies.slice()) {
       if (e.frozenUntil > timestamp) continue; // frozen: no AI, no movement
       updateEnemyAI(e, dt, timestamp);
     }
   }
 
   function updateEnemyAI(e, dt, now) {
-  if (now < (e.hitStunUntil ?? 0)) return;
+    if (now < (e.hitStunUntil ?? 0)) return;
     const p = gameState.player;
     const ec = enemyCenter(e);
     const pc = playerCenter();
@@ -2570,10 +2573,7 @@ function onEnemyReachedPlayer(e, now) {
 
       if (e.state === "alert") {
         e.canSeePlayer = true;
-      } else if (
-        dist <= ENEMY_INNER_RANGE &&
-        diff <= ENEMY_INNER_HALF_ANGLE
-      ) {
+      } else if (dist <= ENEMY_INNER_RANGE && diff <= ENEMY_INNER_HALF_ANGLE) {
         alertEnemy(e, now);
       } else if (diff <= ENEMY_OUTER_HALF_ANGLE && isPlayerExposed(now)) {
         seenOuter = true;
@@ -2598,10 +2598,7 @@ function onEnemyReachedPlayer(e, now) {
 
         if (e.suspicion >= 1) {
           alertEnemy(e, now);
-        } else if (
-          e.state === "patrol" &&
-          e.suspicion >= CURIOUS_THRESHOLD
-        ) {
+        } else if (e.state === "patrol" && e.suspicion >= CURIOUS_THRESHOLD) {
           startInvestigating(e, p.x, p.y);
         } else if (
           e.state === "curious" &&
@@ -2648,6 +2645,7 @@ function onEnemyReachedPlayer(e, now) {
         }
         return;
       }
+
       // Bash down a door the player closed in front of us.
       if (e.doorTarget) {
         const door = e.doorTarget;
@@ -2683,13 +2681,14 @@ function onEnemyReachedPlayer(e, now) {
           return;
         }
       }
-      if (e.canSeePlayer && bodyDist(e, p) <= ENEMY_MELEE_REACH) {
-  onEnemyReachedPlayer(e, now);
-}
 
-if (e.searching && !e.canSeePlayer) {
-  updateSearch(e, dt, now);
-} else {
+      if (e.canSeePlayer && bodyDist(e, p) <= ENEMY_MELEE_REACH) {
+        onEnemyReachedPlayer(e, now);
+      }
+
+      if (e.searching && !e.canSeePlayer) {
+        updateSearch(e, dt, now);
+      } else {
         e.searching = false;
 
         const arrived = steerToward(
@@ -2713,62 +2712,60 @@ if (e.searching && !e.canSeePlayer) {
         e.suspicion = 0.6;
       }
     } else if (e.state === "curious") {
-    if (e.smashSpot) {
-      if (updateSmashSpot(e, dt)) return;
+      if (e.smashSpot) {
+        if (updateSmashSpot(e, dt)) return;
 
-      e.state = "patrol";
-      e.suspicion = Math.min(e.suspicion, 0.2);
-      e.waitTimer = 0;
-      e.steer = null;
-      return;
-    }
-
-    if (e.investigate) {
-      if (
-        steerToward(
-          e,
-          e.investigate.x,
-          e.investigate.y,
-          ENEMY_SPEED.curious,
-          dt,
-          0.3
-        )
-      ) {
-        e.arrived = true;
-        e.waitTimer = CURIOUS_WAIT_MS;
-        e.baseFacing = e.facing;
-        e.investigate = null;
-      }
-    } else {
-      e.waitTimer -= dt * 1000;
-      lookAround(e, now);
-
-      if (e.waitTimer <= 0) {
         e.state = "patrol";
         e.suspicion = Math.min(e.suspicion, 0.2);
         e.waitTimer = 0;
         e.steer = null;
+        return;
       }
-    }
 
-  } else {
-    // patrol
-    if (e.waitTimer > 0) {
-      e.waitTimer -= dt * 1000;
-      lookAround(e, now);
+      if (e.investigate) {
+        if (
+          steerToward(
+            e,
+            e.investigate.x,
+            e.investigate.y,
+            ENEMY_SPEED.curious,
+            dt,
+            0.3
+          )
+        ) {
+          e.arrived = true;
+          e.waitTimer = CURIOUS_WAIT_MS;
+          e.baseFacing = e.facing;
+          e.investigate = null;
+        }
+      } else {
+        e.waitTimer -= dt * 1000;
+        lookAround(e, now);
+
+        if (e.waitTimer <= 0) {
+          e.state = "patrol";
+          e.suspicion = Math.min(e.suspicion, 0.2);
+          e.waitTimer = 0;
+          e.steer = null;
+        }
+      }
     } else {
-      const wp = e.patrol[e.patrolIndex];
+      // patrol
+      if (e.waitTimer > 0) {
+        e.waitTimer -= dt * 1000;
+        lookAround(e, now);
+      } else {
+        const wp = e.patrol[e.patrolIndex];
 
-      if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
-        e.patrolIndex =
-          (e.patrolIndex + 1) % e.patrol.length;
+        if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
+          e.patrolIndex = (e.patrolIndex + 1) % e.patrol.length;
 
-        e.waitTimer = wp.wait ?? PATROL_WAIT_MS;
-        e.baseFacing = e.holdFacing ?? e.facing;
+          e.waitTimer = wp.wait ?? PATROL_WAIT_MS;
+          e.baseFacing = e.holdFacing ?? e.facing;
+        }
       }
     }
   }
-};
 
   function drawVisionCone(e, range, halfAngle, fill) {
     const c = enemyCenter(e);
@@ -2879,27 +2876,21 @@ if (e.searching && !e.canSeePlayer) {
       context.fillStyle = body;
       context.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
 
-      const eyeX = Math.round(
-        px + TILE_SIZE / 2 + Math.cos(enemy.facing) * 8
-      );
-      const eyeY = Math.round(
-        py + TILE_SIZE / 2 + Math.sin(enemy.facing) * 8
-      );
+      const eyeX = Math.round(px + TILE_SIZE / 2 + Math.cos(enemy.facing) * 8);
+      const eyeY = Math.round(py + TILE_SIZE / 2 + Math.sin(enemy.facing) * 8);
       context.fillStyle = "#fff";
       context.fillRect(eyeX - 2, eyeY - 2, 4, 4);
 
       drawEnemyStateIcon(enemy, px, py, now);
     }
   }
-
-  // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
   // HIDING
   // ---------------------------------------------------------------------------
   function isPlayerExposed(now) {
     const p = gameState.player;
     if (p.hidden) return false;
-    const moving =
-      now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
+    const moving = now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
     return moving || isPlayerInLight();
   }
 
@@ -2952,23 +2943,23 @@ if (e.searching && !e.canSeePlayer) {
       }
 
       const chosen = [];
-for (const c of candidates) {
-  if (chosen.length >= HIDE_SPOTS_PER_ROOM) break;
-  if (chosen.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
-  chosen.push(c);
-}
+      for (const c of candidates) {
+        if (chosen.length >= HIDE_SPOTS_PER_ROOM) break;
+        if (chosen.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 2)) continue;
+        chosen.push(c);
+      }
 
-for (const c of chosen) {
-  hidingSpots.push({
-    x: c.x,
-    y: c.y,
-    room,
-    type: HIDE_SPOT_TYPES[
-      Math.floor(Math.random() * HIDE_SPOT_TYPES.length)
-    ],
-    occupied: false,
-  });
-}
+      for (const c of chosen) {
+        hidingSpots.push({
+          x: c.x,
+          y: c.y,
+          room,
+          type: HIDE_SPOT_TYPES[
+            Math.floor(Math.random() * HIDE_SPOT_TYPES.length)
+          ],
+          occupied: false,
+        });
+      }
     }
   }
 
@@ -3070,7 +3061,7 @@ for (const c of chosen) {
     }
   }
 
-   function drawHidePrompt() {
+  function drawHidePrompt() {
     if (!gameState || !gameState.player || inventoryOpen) return;
     const p = gameState.player;
 
@@ -3100,346 +3091,355 @@ for (const c of chosen) {
     }
   }
 
-// ---------------------------------------------------------------------------
-// DOORS
-// ---------------------------------------------------------------------------
-const BROKEN_DOOR_CHANCE = 0.75; // chance a door is already broken when the level is made
-  
-function drawDoors(timestamp) {
-  if (!gameState || !gameState.doors) return;
+  // ---------------------------------------------------------------------------
+  // DOORS
+  // ---------------------------------------------------------------------------
+  const BROKEN_DOOR_CHANCE = 0.75; // chance a door is already broken when the level is made
 
-  for (const door of gameState.doors) {
-    const px = door.x * TILE_SIZE;
-    const py = door.y * TILE_SIZE;
-    const t = Math.round(DOOR_THICKNESS * TILE_SIZE);
-    const flash = timestamp < door.flashUntil;
-    const east = door.dir === "h"; // passage runs east-west
+  function drawDoors(timestamp) {
+    if (!gameState || !gameState.doors) return;
 
-    if (door.open) {
-      // Swung back against the passage wall.
-      context.fillStyle = "#78350f";
-      if (east) context.fillRect(px, py + 1, TILE_SIZE, 4);
-      else context.fillRect(px + 1, py, 4, TILE_SIZE);
-      continue;
-    }
+    for (const door of gameState.doors) {
+      const px = door.x * TILE_SIZE;
+      const py = door.y * TILE_SIZE;
+      const t = Math.round(DOOR_THICKNESS * TILE_SIZE);
+      const flash = timestamp < door.flashUntil;
+      const east = door.dir === "h"; // passage runs east-west
 
-    const x = east ? px + Math.round((TILE_SIZE - t) / 2) : px;
-    const y = east ? py : py + Math.round((TILE_SIZE - t) / 2);
-    const w = east ? t : TILE_SIZE;
-    const h = east ? TILE_SIZE : t;
+      if (door.open) {
+        // Swung back against the passage wall.
+        context.fillStyle = "#78350f";
+        if (east) context.fillRect(px, py + 1, TILE_SIZE, 4);
+        else context.fillRect(px + 1, py, 4, TILE_SIZE);
+        continue;
+      }
 
-    context.fillStyle = "#000";
-    context.fillRect(x - 1, y - 1, w + 2, h + 2);
-    context.fillStyle = flash ? "#fef3c7" : "#92400e";
-    context.fillRect(x, y, w, h);
+      const x = east ? px + Math.round((TILE_SIZE - t) / 2) : px;
+      const y = east ? py : py + Math.round((TILE_SIZE - t) / 2);
+      const w = east ? t : TILE_SIZE;
+      const h = east ? TILE_SIZE : t;
 
-    // Damage bar once it's been hit.
-    if (door.hp < door.maxHp) {
-      const bw = TILE_SIZE - 8;
-      const bx = px + 4;
-      const by = py - 4;
       context.fillStyle = "#000";
-      context.fillRect(bx - 1, by - 1, bw + 2, 4);
-      context.fillStyle = "#ef4444";
-      context.fillRect(bx, by, Math.round(bw * (door.hp / door.maxHp)), 2);
+      context.fillRect(x - 1, y - 1, w + 2, h + 2);
+      context.fillStyle = flash ? "#fef3c7" : "#92400e";
+      context.fillRect(x, y, w, h);
+
+      // Damage bar once it's been hit.
+      if (door.hp < door.maxHp) {
+        const bw = TILE_SIZE - 8;
+        const bx = px + 4;
+        const by = py - 4;
+        context.fillStyle = "#000";
+        context.fillRect(bx - 1, by - 1, bw + 2, 4);
+        context.fillStyle = "#ef4444";
+        context.fillRect(bx, by, Math.round(bw * (door.hp / door.maxHp)), 2);
+      }
     }
   }
-}
 
   // ---------------------------------------------------------------------------
-// BROKEN DOOR ART (placeholder)
-// ---------------------------------------------------------------------------
-function drawBrokenDoors() {
-  if (!gameState || !gameState.brokenDoors) return;
+  // BROKEN DOOR ART (placeholder)
+  // ---------------------------------------------------------------------------
+  function drawBrokenDoors() {
+    if (!gameState || !gameState.brokenDoors) return;
 
-  for (const door of gameState.brokenDoors) {
-    drawBrokenDoorSprite(door, door.x * TILE_SIZE, door.y * TILE_SIZE);
-  }
-}
-
-// REPLACE THIS with a drawImage call once you have a sprite.
-// (px, py) is the top-left pixel of the door's tile; door.dir is "h" or "v".
-// Example later:
-//   context.drawImage(BROKEN_DOOR_SPRITE, 0, door.dir === "h" ? 0 : 32, 32, 32, px, py, 32, 32);
-function drawBrokenDoorSprite(door, px, py) {
-  const east = door.dir === "h"; // passage runs east-west
-
-  // Splintered planks scattered across the doorway (fixed, so it doesn't flicker).
-  const planks = east
-    ? [[13, 3, 3, 9], [17, 14, 4, 7], [12, 23, 3, 6], [20, 6, 2, 5]]
-    : [[3, 13, 9, 3], [14, 17, 7, 4], [23, 12, 6, 3], [6, 20, 5, 2]];
-
-  for (const [ox, oy, w, h] of planks) {
-    context.fillStyle = "#000";
-    context.fillRect(px + ox - 1, py + oy - 1, w + 2, h + 2);
-    context.fillStyle = "#78350f";
-    context.fillRect(px + ox, py + oy, w, h);
-  }
-
-  // Bent hinge stub on the door frame.
-  context.fillStyle = "#71717a";
-  if (east) context.fillRect(px + 14, py, 4, 3);
-  else context.fillRect(px, py + 14, 3, 4);
-}
-  
-  function isDoorClosedAt(tx, ty) {
-  if (!gameState || !gameState.doorMap) return false;
-
-  const door = gameState.doorMap.get(ty * MAP_WIDTH + tx);
-  return !!door && !door.open;
-}
-
-function getNearbyDoor() {
-  if (!gameState || !gameState.doors) return null;
-
-  const pc = playerCenter();
-  let closestDoor = null;
-  let closestDistance = DOOR_INTERACT_DIST;
-
-  for (const door of gameState.doors) {
-    const doorCenterX = door.x + 0.5;
-    const doorCenterY = door.y + 0.5;
-
-    const distance = Math.hypot(
-      doorCenterX - pc.x,
-      doorCenterY - pc.y
-    );
-
-    if (distance <= closestDistance) {
-      closestDoor = door;
-      closestDistance = distance;
+    for (const door of gameState.brokenDoors) {
+      drawBrokenDoorSprite(door, door.x * TILE_SIZE, door.y * TILE_SIZE);
     }
   }
 
-  return closestDoor;
-}
+  // REPLACE THIS with a drawImage call once you have a sprite.
+  // (px, py) is the top-left pixel of the door's tile; door.dir is "h" or "v".
+  function drawBrokenDoorSprite(door, px, py) {
+    const east = door.dir === "h"; // passage runs east-west
 
-function breakDoor(door) {
-  const index = gameState.doors.indexOf(door);
-  if (index !== -1) gameState.doors.splice(index, 1);
+    // Splintered planks scattered across the doorway (fixed, so it doesn't flicker).
+    const planks = east
+      ? [[13, 3, 3, 9], [17, 14, 4, 7], [12, 23, 3, 6], [20, 6, 2, 5]]
+      : [[3, 13, 9, 3], [14, 17, 7, 4], [23, 12, 6, 3], [6, 20, 5, 2]];
 
-  gameState.doorMap.delete(door.y * MAP_WIDTH + door.x);
+    for (const [ox, oy, w, h] of planks) {
+      context.fillStyle = "#000";
+      context.fillRect(px + ox - 1, py + oy - 1, w + 2, h + 2);
+      context.fillStyle = "#78350f";
+      context.fillRect(px + ox, py + oy, w, h);
+    }
 
-  door.hp = 0;
-  door.open = true;
-  (gameState.brokenDoors ||= []).push(door);
-
-  makeNoise(door.x, door.y, DOOR_BREAK_NOISE_RADIUS, "#ef4444");
-}
-
-function hitDoor(door, damage) {
-  if (!door || door.open) return;
-
-  door.hp -= damage;
-  door.flashUntil = performance.now() + 120;
-
-  if (door.hp <= 0) {
-    breakDoor(door);
-  }
-}
-
-// Returns the room on the opposite side of the door
-// relative to the supplied side direction.
-function roomBeyondDoor(door, sideX, sideY) {
-  for (let step = 1; step <= 3; step++) {
-    const tx = door.x + sideX * step;
-    const ty = door.y + sideY * step;
-
-    const room = gameState.rooms.find((room) => {
-      return (
-        tx >= room.x &&
-        tx < room.x + room.w &&
-        ty >= room.y &&
-        ty < room.y + room.h
-      );
-    });
-
-    if (room) return room;
+    // Bent hinge stub on the door frame.
+    context.fillStyle = "#71717a";
+    if (east) context.fillRect(px + 14, py, 4, 3);
+    else context.fillRect(px, py + 14, 3, 4);
   }
 
-  return null;
-}
+  function isDoorClosedAt(tx, ty) {
+    if (!gameState || !gameState.doorMap) return false;
 
-// ---------------------------------------------------------------------------
-// DOOR COLLISION
-// ---------------------------------------------------------------------------
-const DOOR_THICKNESS = 0.1; // tiles
-
-// Thin slab across the middle of the door tile, perpendicular to the passage.
-function getDoorSlab(door) {
-  const t = DOOR_THICKNESS;
-  return door.dir === "h"
-    ? { x: door.x + 0.5 - t / 2, y: door.y, w: t, h: 1 } // east-west passage -> vertical slab
-    : { x: door.x, y: door.y + 0.5 - t / 2, w: 1, h: t }; // north-south passage -> horizontal slab
-}
-
-// Does an entity at (x, y) with hitbox `hb` overlap rect `r`?
-function boxHitsRect(x, y, hb, r) {
-  return (
-    x + hb.right > r.x &&
-    x + hb.left < r.x + r.w &&
-    y + hb.bottom > r.y &&
-    y + hb.top < r.y + r.h
-  );
-}
-
-function isBoxBlockedByDoor(x, y, hb) {
-  if (!gameState || !gameState.doors) return false;
-  for (const door of gameState.doors) {
-    if (door.open) continue;
-    if (Math.abs(door.x - x) > 2 || Math.abs(door.y - y) > 2) continue; // cheap reject
-    if (boxHitsRect(x, y, hb, getDoorSlab(door))) return true;
-  }
-  return false;
-}
-
-const DOOR_PUSH_EPS = 0.02;
-
-// If an entity overlaps the door's slab, slide it to whichever side its
-// centre is already on. Returns false if there's no room to do that.
-function nudgeOutOfDoor(entity, hb, door) {
-  const slab = getDoorSlab(door);
-  if (!boxHitsRect(entity.x, entity.y, hb, slab)) return true;
-
-  let nx = entity.x;
-  let ny = entity.y;
-
-  if (door.dir === "h") {
-    const cx = entity.x + (hb.left + hb.right) / 2;
-    nx =
-      cx >= door.x + 0.5
-        ? slab.x + slab.w - hb.left + DOOR_PUSH_EPS
-        : slab.x - hb.right - DOOR_PUSH_EPS;
-  } else {
-    const cy = entity.y + (hb.top + hb.bottom) / 2;
-    ny =
-      cy >= door.y + 0.5
-        ? slab.y + slab.h - hb.top + DOOR_PUSH_EPS
-        : slab.y - hb.bottom - DOOR_PUSH_EPS;
+    const door = gameState.doorMap.get(ty * MAP_WIDTH + tx);
+    return !!door && !door.open;
   }
 
-  if (!isBoxClear(nx, ny, hb)) return false; // would push into a wall
-  entity.x = nx;
-  entity.y = ny;
-  entity.steer = null;
-  return true;
-}
+  function getNearbyDoor() {
+    if (!gameState || !gameState.doors) return null;
 
-function toggleNearbyDoor() {
-  const door = getNearbyDoor();
-  if (!door) return;
+    const pc = playerCenter();
+    let closestDoor = null;
+    let closestDistance = DOOR_INTERACT_DIST;
 
-  if (!door.open) {
+    for (const door of gameState.doors) {
+      const doorCenterX = door.x + 0.5;
+      const doorCenterY = door.y + 0.5;
+
+      const distance = Math.hypot(doorCenterX - pc.x, doorCenterY - pc.y);
+
+      if (distance <= closestDistance) {
+        closestDoor = door;
+        closestDistance = distance;
+      }
+    }
+
+    return closestDoor;
+  }
+
+  function breakDoor(door) {
+    const index = gameState.doors.indexOf(door);
+    if (index !== -1) gameState.doors.splice(index, 1);
+
+    gameState.doorMap.delete(door.y * MAP_WIDTH + door.x);
+
+    door.hp = 0;
     door.open = true;
-    return;
+    (gameState.brokenDoors ||= []).push(door);
+
+    makeNoise(door.x, door.y, DOOR_BREAK_NOISE_RADIUS, "#ef4444");
   }
 
-  // Close it even if someone is clipping the frame: slide them to their side.
-  // Do this while the door is still open so the slab isn't in the way.
-  if (!nudgeOutOfDoor(gameState.player, HITBOX, door)) return;
-  for (const e of gameState.enemies) {
-    if (!nudgeOutOfDoor(e, ENEMY_HITBOX, door)) return;
+  function hitDoor(door, damage) {
+    if (!door || door.open) return;
+
+    door.hp -= damage;
+    door.flashUntil = performance.now() + 120;
+
+    if (door.hp <= 0) {
+      breakDoor(door);
+    }
   }
 
-  door.open = false;
-  enemiesReactToDoorClose(door);
-}
+  // Returns the room on the opposite side of the door
+  // relative to the supplied side direction.
+  function roomBeyondDoor(door, sideX, sideY) {
+    for (let step = 1; step <= 3; step++) {
+      const tx = door.x + sideX * step;
+      const ty = door.y + sideY * step;
 
-// Alert enemies that were watching the player make them bash the door down.
-function enemiesReactToDoorClose(door) {
-  const pc = playerCenter();
-  const dcx = door.x + 0.5;
-  const dcy = door.y + 0.5;
+      const room = gameState.rooms.find((room) => {
+        return (
+          tx >= room.x &&
+          tx < room.x + room.w &&
+          ty >= room.y &&
+          ty < room.y + room.h
+        );
+      });
 
-  // Which side of the door the player is on = the room enemies will search.
-  const sideX = door.dir === "h" ? (pc.x >= dcx ? 1 : -1) : 0;
-  const sideY = door.dir === "v" ? (pc.y >= dcy ? 1 : -1) : 0;
-  const room = roomBeyondDoor(door, sideX, sideY);
+      if (room) return room;
+    }
 
-  for (const e of gameState.enemies) {
-    if (e.state !== "alert" || !e.canSeePlayer) continue;
-    e.doorTarget = door;
-    e.doorRoom = room;
-    e.doorHitTimer = ENEMY_DOOR_HIT_INTERVAL_MS;
-    e.steer = null;
+    return null;
   }
-}
 
-// Where an enemy should stand to hit the door: on its own side of it.
-function doorApproachPoint(door, e) {
-  const off = 0.8;
-  if (door.dir === "h") {
-    const side = e.x + 0.5 >= door.x + 0.5 ? 1 : -1;
-    return { x: door.x + side * off, y: door.y };
+  // ---------------------------------------------------------------------------
+  // DOOR COLLISION
+  // ---------------------------------------------------------------------------
+  const DOOR_THICKNESS = 0.1; // tiles
+
+  // Thin slab across the middle of the door tile, perpendicular to the passage.
+  function getDoorSlab(door) {
+    const t = DOOR_THICKNESS;
+    return door.dir === "h"
+      ? { x: door.x + 0.5 - t / 2, y: door.y, w: t, h: 1 } // east-west passage -> vertical slab
+      : { x: door.x, y: door.y + 0.5 - t / 2, w: 1, h: t }; // north-south passage -> horizontal slab
   }
-  const side = e.y + 0.5 >= door.y + 0.5 ? 1 : -1;
-  return { x: door.x, y: door.y + side * off };
-}
 
-// ---------------------------------------------------------------------------
-// CONTAINERS
-// ---------------------------------------------------------------------------
-const CONTAINERS_PER_ROOM_MIN = 0;
-const CONTAINERS_PER_ROOM_MAX = 2;
-const CONTAINER_INTERACT_DIST = 1.1;
-const CONTAINER_MESSAGE_MS = 2500;
+  // Does an entity at (x, y) with hitbox `hb` overlap rect `r`?
+  function boxHitsRect(x, y, hb, r) {
+    return (
+      x + hb.right > r.x &&
+      x + hb.left < r.x + r.w &&
+      y + hb.bottom > r.y &&
+      y + hb.top < r.y + r.h
+    );
+  }
 
-const ALL_SCROLLS = ["scrollFireBall", "scrollFreezeCloud", "scrollChainLightning"];
+  function isBoxBlockedByDoor(x, y, hb) {
+    if (!gameState || !gameState.doors) return false;
+    for (const door of gameState.doors) {
+      if (door.open) continue;
+      if (Math.abs(door.x - x) > 2 || Math.abs(door.y - y) > 2) continue; // cheap reject
+      if (boxHitsRect(x, y, hb, getDoorSlab(door))) return true;
+    }
+    return false;
+  }
 
-// Each container rolls ONE outcome from its `loot` list (by weight).
-// `items: []` means nothing inside. `id` can be an array to pick one at random.
-// Add new container types or new items here.
-const CONTAINER_TYPES = {
-  chest: {
-    label: "Chest",
-    placement: "wall",
-    color: "#a16207",
-    searchMs: 2500,
-    spawnWeight: 2,
-    loot: [
-      {weight: 25, items: [] },
-      {weight: 35, items: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
-      {weight: 25, items: [{ id: "healthPotion", min: 1, max: 1 }] },
-      {weight: 15, items: [{ id: ALL_SCROLLS, min: 1, max: 1}, {id: "healthPotion",}]},
+  const DOOR_PUSH_EPS = 0.02;
+
+  // If an entity overlaps the door's slab, slide it to whichever side its
+  // centre is already on. Returns false if there's no room to do that.
+  function nudgeOutOfDoor(entity, hb, door) {
+    const slab = getDoorSlab(door);
+    if (!boxHitsRect(entity.x, entity.y, hb, slab)) return true;
+
+    let nx = entity.x;
+    let ny = entity.y;
+
+    if (door.dir === "h") {
+      const cx = entity.x + (hb.left + hb.right) / 2;
+      nx =
+        cx >= door.x + 0.5
+          ? slab.x + slab.w - hb.left + DOOR_PUSH_EPS
+          : slab.x - hb.right - DOOR_PUSH_EPS;
+    } else {
+      const cy = entity.y + (hb.top + hb.bottom) / 2;
+      ny =
+        cy >= door.y + 0.5
+          ? slab.y + slab.h - hb.top + DOOR_PUSH_EPS
+          : slab.y - hb.bottom - DOOR_PUSH_EPS;
+    }
+
+    if (!isBoxClear(nx, ny, hb)) return false; // would push into a wall
+    entity.x = nx;
+    entity.y = ny;
+    entity.steer = null;
+    return true;
+  }
+
+  function toggleNearbyDoor() {
+    const door = getNearbyDoor();
+    if (!door) return;
+
+    if (!door.open) {
+      door.open = true;
+      return;
+    }
+
+    // Close it even if someone is clipping the frame: slide them to their side.
+    // Do this while the door is still open so the slab isn't in the way.
+    if (!nudgeOutOfDoor(gameState.player, HITBOX, door)) return;
+    for (const e of gameState.enemies) {
+      if (!nudgeOutOfDoor(e, ENEMY_HITBOX, door)) return;
+    }
+
+    door.open = false;
+    enemiesReactToDoorClose(door);
+  }
+
+  // Alert enemies that were watching the player make them bash the door down.
+  function enemiesReactToDoorClose(door) {
+    const pc = playerCenter();
+    const dcx = door.x + 0.5;
+    const dcy = door.y + 0.5;
+
+    // Which side of the door the player is on = the room enemies will search.
+    const sideX = door.dir === "h" ? (pc.x >= dcx ? 1 : -1) : 0;
+    const sideY = door.dir === "v" ? (pc.y >= dcy ? 1 : -1) : 0;
+    const room = roomBeyondDoor(door, sideX, sideY);
+
+    for (const e of gameState.enemies) {
+      if (e.state !== "alert" || !e.canSeePlayer) continue;
+      e.doorTarget = door;
+      e.doorRoom = room;
+      e.doorHitTimer = ENEMY_DOOR_HIT_INTERVAL_MS;
+      e.steer = null;
+    }
+  }
+
+  // Where an enemy should stand to hit the door: on its own side of it.
+  function doorApproachPoint(door, e) {
+    const off = 0.8;
+    if (door.dir === "h") {
+      const side = e.x + 0.5 >= door.x + 0.5 ? 1 : -1;
+      return { x: door.x + side * off, y: door.y };
+    }
+    const side = e.y + 0.5 >= door.y + 0.5 ? 1 : -1;
+    return { x: door.x, y: door.y + side * off };
+  }
+
+  // ---------------------------------------------------------------------------
+  // CONTAINERS
+  // ---------------------------------------------------------------------------
+  const CONTAINERS_PER_ROOM_MIN = 0;
+  const CONTAINERS_PER_ROOM_MAX = 2;
+  const CONTAINER_INTERACT_DIST = 1.1;
+  const CONTAINER_MESSAGE_MS = 2500;
+
+  const ALL_SCROLLS = [
+    "scrollFireBall",
+    "scrollFreezeCloud",
+    "scrollChainLightning",
+  ];
+
+  // Each container rolls ONE outcome from its `loot` list (by weight).
+  // `items: []` means nothing inside. `id` can be an array to pick one at random.
+  // `placement`: "wall" = on the floor against a wall, "center" = in the room.
+  // Add new container types or new items here.
+  const CONTAINER_TYPES = {
+    chest: {
+      label: "Chest",
+      placement: "wall",
+      color: "#a16207",
+      searchMs: 2500,
+      spawnWeight: 2,
+      loot: [
+        { weight: 25, items: [] },
+        { weight: 35, items: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
+        { weight: 25, items: [{ id: "healthPotion", min: 1, max: 1 }] },
+        {
+          weight: 15,
+          items: [
+            { id: ALL_SCROLLS, min: 1, max: 1 },
+            { id: "healthPotion", min: 1, max: 1 },
+          ],
+        },
       ],
-      emptyMessages: ["The chest is empty.", "Nothing but dust inside."], 
-      },
-  barrel: {
-    label: "Barrel",
-    placement: "center",
-    color: "#78350f",
-    searchMs: 1500,
-    spawnWeight: 3,
-    loot: [
-      {weight: 55, items: [] },
-      {weight: 45, items: [{ id: "healthPotion", min: 1, max: 2 }]},
+      emptyMessages: ["The chest is empty.", "Nothing but dust inside."],
+    },
+    barrel: {
+      label: "Barrel",
+      placement: "center",
+      color: "#78350f",
+      searchMs: 1500,
+      spawnWeight: 3,
+      loot: [
+        { weight: 55, items: [] },
+        { weight: 45, items: [{ id: "healthPotion", min: 1, max: 2 }] },
       ],
       emptyMessages: ["Just stale water.", "Rotten dregs, nothing useful."],
-      },
-  bookshelf: {
-    label: "Bookshelf",
-    placement: "wall",
-    color: "#451a03",
-    searchMs: 2000,
-    spawnWeight: 2,
-    loot: [
-      {weight: 60, items: [] },
-      {weight: 40, items: [{ id: ALL_SCROLLS, min:1, max:1 }]},
+    },
+    bookshelf: {
+      label: "Bookshelf",
+      placement: "wall",
+      color: "#451a03",
+      searchMs: 2000,
+      spawnWeight: 2,
+      loot: [
+        { weight: 60, items: [] },
+        { weight: 40, items: [{ id: ALL_SCROLLS, min: 1, max: 1 }] },
       ],
       emptyMessages: ["Only crumbling books.", "Nothing but rotted pages."],
-      },
-  crate: {
-    label: "crate",
-    placement: "center",
-    color: "#854d0e",
-    searchMs: 1200,
-    spawnWeight: 3,
-    loot: [
-      {weight: 100, items: []}, //add crafting items here
+    },
+    crate: {
+      label: "Crate",
+      placement: "center",
+      color: "#854d0e",
+      searchMs: 1200,
+      spawnWeight: 3,
+      loot: [
+        { weight: 100, items: [] }, // add crafting items here
       ],
-      emptyMessages: ["Splintered wood and nothing else.", "Empty. someone got here first."],
-  },
-      };
+      emptyMessages: [
+        "Splintered wood and nothing else.",
+        "Empty. Someone got here first.",
+      ],
+    },
+  };
 
   const rollInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
@@ -3455,72 +3455,85 @@ const CONTAINER_TYPES = {
 
   function makeContainer(x, y, room, typeName) {
     const outcome = pickWeighted(CONTAINER_TYPES[typeName].loot);
-    const contents = outcome.items.map((entry) => ({
+    const contents = (outcome.items ?? []).map((entry) => ({
       idName: Array.isArray(entry.id) ? pickOne(entry.id) : entry.id,
-      count: rollInt(entry.min ?? 1, entry.max ??1),
+      count: rollInt(entry.min ?? 1, entry.max ?? 1),
     }));
 
-    return {x, y, room, type: typeName, contents, searched: false, message: null, messageUntil: 0 };
+    return {
+      x,
+      y,
+      room,
+      type: typeName,
+      contents,
+      searched: false,
+      message: null,
+      messageUntil: 0,
+    };
   }
 
-
-  
   function placeContainers(rooms, map, doorList = [], blockedList = []) {
     const containers = [];
     const isFloor = (x, y) =>
-      x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map[y][x] === TileType.FLOOR;
+      x >= 0 &&
+      x < MAP_WIDTH &&
+      y >= 0 &&
+      y < MAP_HEIGHT &&
+      map[y][x] === TileType.FLOOR;
     const blocked = new Set(blockedList.map((b) => `${b.x},${b.y}`));
     const typeEntries = Object.entries(CONTAINER_TYPES).map(([name, def]) => ({
       name,
       weight: def.spawnWeight,
     }));
-  
-    for (const room of rooms.slice(1)) { // never the start room
+
+    for (const room of rooms.slice(1)) {
+      // never the start room
       const pools = { wall: [], center: [] };
-  
+
       for (let y = room.y; y < room.y + room.h; y++) {
         for (let x = room.x; x < room.x + room.w; x++) {
           if (blocked.has(`${x},${y}`)) continue;
           if (hidingSpots.some((h) => Math.hypot(h.x - x, h.y - y) < 2)) continue;
           if (doorList.some((d) => Math.hypot(d.x - x, d.y - y) < 2.5)) continue;
-  
+
           const onLeft = x === room.x;
           const onRight = x === room.x + room.w - 1;
           const onTop = y === room.y;
           const onBottom = y === room.y + room.h - 1;
           const edgeCount = onLeft + onRight + onTop + onBottom;
-  
+
           if (edgeCount === 0) {
             pools.center.push({ x, y });
             continue;
           }
           if (edgeCount !== 1) continue; // corners
-  
+
           const ox = x + (onLeft ? -1 : onRight ? 1 : 0);
           const oy = y + (onTop ? -1 : onBottom ? 1 : 0);
           if (isFloor(ox, oy)) continue; // doorway
-  
+
           // Skip tiles beside a doorway: the wall behind the neighbours must be solid too.
           const lx = onTop || onBottom ? 1 : 0;
           const ly = onLeft || onRight ? 1 : 0;
           if (isFloor(ox + lx, oy + ly) || isFloor(ox - lx, oy - ly)) continue;
-  
+
           pools.wall.push({ x, y });
         }
       }
-  
+
       for (const pool of [pools.wall, pools.center]) {
         for (let i = pool.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [pool[i], pool[j]] = [pool[j], pool[i]];
         }
       }
-  
+
       const count = rollInt(CONTAINERS_PER_ROOM_MIN, CONTAINERS_PER_ROOM_MAX);
       const placed = [];
       for (let n = 0; n < count; n++) {
         const typeName = pickWeighted(typeEntries).name;
-        const pool = pools[CONTAINER_TYPES[typeName].placement === "center" ? "center" : "wall"];
+        const pool =
+          pools[CONTAINER_TYPES[typeName].placement === "center" ? "center" : "wall"];
         const spot = pool.find((c) =>
           placed.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2)
         );
@@ -3532,70 +3545,38 @@ const CONTAINER_TYPES = {
     return containers;
   }
 
-        // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
-        const items = [];
-        const stairs = [];
-        const rooms = [];
-    const blocked = new Set();
-    const blockTile = (x, y) => blocked.add(`${x},${y}`);
-
-    for (const it of items) blockTile(it.x, it.y);
-    for (const s of stairs) blockTile(s.x, s.y);
-
-    for (let i = 1; i < rooms.length; i++) {
-      const room = rooms[i];
-    
-      const trapCount =
-        TRAPS_PER_ROOM_MIN +
-        Math.floor(Math.random() * (TRAPS_PER_ROOM_MAX - TRAPS_PER_ROOM_MIN + 1));
-
-      for (let t = 0; t < trapCount; t++) {
-        const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
-        const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
-
-        if (blocked.has(`${trapX},${trapY}`)) continue;
-        blockTile(trapX, trapY); // also stops two traps sharing a tile
-
-        items.push({
-          id: `trap-${level}-${i}-${t}`,
-          x: trapX,
-          y: trapY,
-          type: "trap",
-          idName: "trap",
-          sprungUntil: 0,
-        });
-      }
-    }
-
-let searchState = null; // { container, start } while holding E on a container
+  let searchState = null; // { container, start } while holding E on a container
 
   function distanceToContainer(c) {
     const pc = playerCenter();
     return Math.hypot(c.x + 0.5 - pc.x, c.y + 0.5 - pc.y);
   }
 
- function getNearbyContainer () {
-   if (!gameState || !gameState.containers) return null;
-   let best = null;
-   let bestDist = CONTAINER_INTERACT_DIST;
-   for (const c of gameState.containers) {
-     if (c.searched) continue;
-     const d = distanceToContainer(c);
-     if (d <= bestDist) {
-       best = c;
-       bestDist = d;
-     }
-   }
-   return best;
- }
+  // Nearest container that hasn't been searched yet, within reach.
+  function getNearbyContainer() {
+    if (!gameState || !gameState.containers) return null;
+    let best = null;
+    let bestDist = CONTAINER_INTERACT_DIST;
+    for (const c of gameState.containers) {
+      if (c.searched) continue;
+      const d = distanceToContainer(c);
+      if (d <= bestDist) {
+        best = c;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
 
+  // Returns true if a search began, so E doesn't also toggle a door.
   function startContainerSearch() {
     if (heldMoveKeys.size > 0) return false;
     const c = getNearbyContainer();
     if (!c) return false;
     searchState = { container: c, start: performance.now() };
+    return true;
   }
-  
+
   function finishContainerSearch(c, now) {
     if (c.contents.length === 0) {
       c.message = pickOne(CONTAINER_TYPES[c.type].emptyMessages);
@@ -3606,10 +3587,12 @@ let searchState = null; // { container, start } while holding E on a container
       c.message =
         "Found: " +
         c.contents
-      .map((i) =>
-        i.count > 1 ? `${formatItemName(i.idName)} x${i.count}` : formatItemName(i.idName)
-        )
-      .join(", ");
+          .map((i) =>
+            i.count > 1
+              ? `${formatItemName(i.idName)} x${i.count}`
+              : formatItemName(i.idName)
+          )
+          .join(", ");
       c.contents = [];
     }
     c.searched = true;
@@ -3622,7 +3605,7 @@ let searchState = null; // { container, start } while holding E on a container
     const p = gameState && gameState.player;
     const now = performance.now();
 
-    if(
+    if (
       !p ||
       p.hidden ||
       gameState.gameOver ||
@@ -3630,7 +3613,7 @@ let searchState = null; // { container, start } while holding E on a container
       !gameState.containers.includes(c) ||
       heldMoveKeys.size > 0 ||
       distanceToContainer(c) > CONTAINER_INTERACT_DIST
-      ) {
+    ) {
       searchState = null;
       return;
     }
@@ -3640,8 +3623,6 @@ let searchState = null; // { container, start } while holding E on a container
       searchState = null;
     }
   }
-     
-      
   // ---------------------------------------------------------------------------
   // INVENTORY / ITEMS
   // ---------------------------------------------------------------------------
@@ -3663,77 +3644,77 @@ let searchState = null; // { container, start } while holding E on a container
   const PICKUP_RADIUS = 0.6;
   const POTION_HEAL = 30; // change to taste (use Infinity for a full heal)
 
-function pickupNearbyItems() {
-  if (!gameState || !globalPlayer) return;
+  function pickupNearbyItems() {
+    if (!gameState || !globalPlayer) return;
 
-  const remainingItems = [];
+    const remainingItems = [];
 
-  for (const item of gameState.items) {
-    if (item.type === "trap") {
-      remainingItems.push(item);
-      continue;
-    }
-
-    const distance = Math.hypot(
-      item.x - globalPlayer.x,
-      item.y - globalPlayer.y
-    );
-
-    // A dropped item stays unavailable until the player
-    // moves outside the pickup range.
-    if (item.mustMoveAway) {
-      if (distance > PICKUP_RADIUS) {
-        item.mustMoveAway = false;
-      } else {
+    for (const item of gameState.items) {
+      if (item.type === "trap") {
         remainingItems.push(item);
         continue;
       }
+
+      const distance = Math.hypot(
+        item.x - globalPlayer.x,
+        item.y - globalPlayer.y
+      );
+
+      // A dropped item stays unavailable until the player
+      // moves outside the pickup range.
+      if (item.mustMoveAway) {
+        if (distance > PICKUP_RADIUS) {
+          item.mustMoveAway = false;
+        } else {
+          remainingItems.push(item);
+          continue;
+        }
+      }
+
+      if (distance < PICKUP_RADIUS) {
+        addItemToInventory(item.idName);
+        console.log("Picked up:", item.idName);
+      } else {
+        remainingItems.push(item);
+      }
     }
 
-    if (distance < PICKUP_RADIUS) {
-      addItemToInventory(item.idName);
-      console.log("Picked up:", item.idName);
-    } else {
-      remainingItems.push(item);
-    }
+    gameState.items = remainingItems;
   }
 
-  gameState.items = remainingItems;
-}
+  // Slot under the mouse while the inventory is open, or null.
+  function getInventorySlotAtMouse() {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
 
+    const ix = ((mouse.clientX - rect.left) / rect.width) * INV_SPACE;
+    const iy = ((mouse.clientY - rect.top) / rect.height) * INV_SPACE;
 
+    // These must match the values in drawInventory.
+    const panelSize = 750;
+    const invX = Math.floor((INV_SPACE - panelSize) / 2);
+    const invY = Math.floor((INV_SPACE - panelSize) / 2);
+    const SLOT_X = 164,
+      SLOT_Y = 214;
+    const SLOT_WIDTH = 106,
+      SLOT_HEIGHT = 108;
+    const SLOT_STEP_X = 106,
+      SLOT_STEP_Y = 114;
 
+    const relX = ix - (invX + SLOT_X);
+    const relY = iy - (invY + SLOT_Y);
+    if (relX < 0 || relY < 0) return null;
 
-// Slot under the mouse while the inventory is open, or null.
-function getInventorySlotAtMouse() {
-  const rect = canvas.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return null;
+    const col = Math.floor(relX / SLOT_STEP_X);
+    const row = Math.floor(relY / SLOT_STEP_Y);
+    if (col >= INV_COLS || row >= INV_ROWS) return null;
 
-  const ix = ((mouse.clientX - rect.left) / rect.width) * INV_SPACE;
-  const iy = ((mouse.clientY - rect.top) / rect.height) * INV_SPACE;
+    // Ignore the gap between rows.
+    if (relX - col * SLOT_STEP_X > SLOT_WIDTH) return null;
+    if (relY - row * SLOT_STEP_Y > SLOT_HEIGHT) return null;
 
-  // These must match the values in drawInventory.
-  const panelSize = 750;
-  const invX = Math.floor((INV_SPACE - panelSize) / 2);
-  const invY = Math.floor((INV_SPACE - panelSize) / 2);
-  const SLOT_X = 164, SLOT_Y = 214;
-  const SLOT_WIDTH = 106, SLOT_HEIGHT = 108;
-  const SLOT_STEP_X = 106, SLOT_STEP_Y = 114;
-
-  const relX = ix - (invX + SLOT_X);
-  const relY = iy - (invY + SLOT_Y);
-  if (relX < 0 || relY < 0) return null;
-
-  const col = Math.floor(relX / SLOT_STEP_X);
-  const row = Math.floor(relY / SLOT_STEP_Y);
-  if (col >= INV_COLS || row >= INV_ROWS) return null;
-
-  // Ignore the gap between rows.
-  if (relX - col * SLOT_STEP_X > SLOT_WIDTH) return null;
-  if (relY - row * SLOT_STEP_Y > SLOT_HEIGHT) return null;
-
-  return { col, row };
-}
+    return { col, row };
+  }
 
   function getInventorySlots() {
     const slots = [];
@@ -3834,39 +3815,38 @@ function getInventorySlotAtMouse() {
         const itemY = slotY + Math.floor((SLOT_HEIGHT - itemHeight) / 2);
 
         context.drawImage(
-  anim.image,
-  sourceX,
-  0,
-  anim.frameWidth,
-  anim.frameHeight,
-  itemX,
-  itemY,
-  itemWidth,
-  itemHeight
-);
+          anim.image,
+          sourceX,
+          0,
+          anim.frameWidth,
+          anim.frameHeight,
+          itemX,
+          itemY,
+          itemWidth,
+          itemHeight
+        );
 
-// Stack count badge
-if (slot.count > 1) {
-  const badgeSize = 28;
-  const badgeX = slotX + SLOT_WIDTH - badgeSize - 6;
-  const badgeY = slotY + SLOT_HEIGHT - badgeSize - 6;
+        // Stack count badge
+        if (slot.count > 1) {
+          const badgeSize = 28;
+          const badgeX = slotX + SLOT_WIDTH - badgeSize - 6;
+          const badgeY = slotY + SLOT_HEIGHT - badgeSize - 6;
 
-  // Badge background
-  context.fillStyle = "rgba(0, 0, 0, 0.8)";
-  context.fillRect(badgeX, badgeY, badgeSize, badgeSize);
+          // Badge background
+          context.fillStyle = "rgba(0, 0, 0, 0.8)";
+          context.fillRect(badgeX, badgeY, badgeSize, badgeSize);
 
-  // Count text
-  context.fillStyle = "#ffffff";
-  context.font = "bold 20px Arial";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(
-    slot.count,
-    badgeX + badgeSize / 2,
-    badgeY + badgeSize / 2
-  );
-}
-
+          // Count text
+          context.fillStyle = "#ffffff";
+          context.font = "bold 20px Arial";
+          context.textAlign = "center";
+          context.textBaseline = "middle";
+          context.fillText(
+            slot.count,
+            badgeX + badgeSize / 2,
+            badgeY + badgeSize / 2
+          );
+        }
       }
     }
 
@@ -3887,516 +3867,554 @@ if (slot.count > 1) {
       nameBoxY + nameBoxHeight / 2 + 3
     );
   }
-function dropSelectedItem() {
-  if (!gameState || !globalPlayer || !inventoryOpen) return;
 
-  const selected = getSelectedStack();
-  if (!selected) {
-    console.log("No item selected.");
-    return;
-  }
+  function dropSelectedItem() {
+    if (!gameState || !globalPlayer || !inventoryOpen) return;
 
-  gameState.items.push({
-    idName: selected.type,
-    type: selected.type,
-    x: globalPlayer.x,
-    y: globalPlayer.y + 0.1,
-    mustMoveAway: true,
-  });
-
-  removeOneFromStack(selected.type, selected.stackIndex);
-  console.log("Dropped:", selected.type);
-}
-// Finds the inventory stack under the cursor.
-function getSelectedStack() {
-  const selectedIndex = selectedRow * INV_COLS + selectedCol;
-  let currentIndex = 0;
-
-  for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
-    for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
-      if (currentIndex === selectedIndex) return { type, stackIndex };
-      currentIndex++;
+    const selected = getSelectedStack();
+    if (!selected) {
+      console.log("No item selected.");
+      return;
     }
+
+    gameState.items.push({
+      idName: selected.type,
+      type: selected.type,
+      x: globalPlayer.x,
+      y: globalPlayer.y + 0.1,
+      mustMoveAway: true,
+    });
+
+    removeOneFromStack(selected.type, selected.stackIndex);
+    console.log("Dropped:", selected.type);
   }
-  return null;
-}
-// Health and Stamina
-function drawBar(x, y, w, h, fraction, fillColor, label) {
-  const f = Math.max(0, Math.min(1, fraction));
 
-  // Border + background
-  context.fillStyle = "#000";
-  context.fillRect(x - 1, y - 1, w + 2, h + 2);
-  context.fillStyle = "#27272a";
-  context.fillRect(x, y, w, h);
+  // Finds the inventory stack under the cursor.
+  function getSelectedStack() {
+    const selectedIndex = selectedRow * INV_COLS + selectedCol;
+    let currentIndex = 0;
 
-  // Fill
-  context.fillStyle = fillColor;
-  context.fillRect(x, y, Math.round(w * f), h);
+    for (const [type, stacks] of Object.entries(gameState.inventory || {})) {
+      for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
+        if (currentIndex === selectedIndex) return { type, stackIndex };
+        currentIndex++;
+      }
+    }
+    return null;
+  }
 
-  // Label
-  context.fillStyle = "#fff";
-  context.font = "6px monospace";
-  context.textAlign = "left";
-  context.textBaseline = "middle";
-  context.fillText(label, x + 2, y + h / 2 + 0.5);
-}
+  // Health and Stamina
+  function drawBar(x, y, w, h, fraction, fillColor, label) {
+    const f = Math.max(0, Math.min(1, fraction));
 
-// Placeholder HUD, drawn in screen space (not affected by camera or zoom).
-function drawHUD() {
-  if (!gameState || !gameState.player || inventoryOpen) return;
-  const p = gameState.player;
+    // Border + background
+    context.fillStyle = "#000";
+    context.fillRect(x - 1, y - 1, w + 2, h + 2);
+    context.fillStyle = "#27272a";
+    context.fillRect(x, y, w, h);
 
-  context.save();
-  // Reset to screen space (256x256 view), ignoring camera and zoom.
-  context.setTransform(
-    devicePixelRatioValue,
-    0,
-    0,
-    devicePixelRatioValue,
-    0,
-    0
-  );
-  context.imageSmoothingEnabled = false;
+    // Fill
+    context.fillStyle = fillColor;
+    context.fillRect(x, y, Math.round(w * f), h);
 
-  const x = 6;
-  const w = 80;
-  const h = 8;
-
-  drawBar(x, 6, w, h, p.hp / (p.maxHp ?? 100), "#dc2626", "HP");
-
-  const staminaColor = p.staminaExhausted ? "#a16207" : "#22c55e";
-  drawBar(x, 18, w, h, p.stamina / STAMINA_MAX, staminaColor, "STA");
-
-    if (gameState.armedScroll) {
-    context.fillStyle = "#fde68a";
+    // Label
+    context.fillStyle = "#fff";
     context.font = "6px monospace";
     context.textAlign = "left";
     context.textBaseline = "middle";
-    context.fillText(
-      `${formatItemName(gameState.armedScroll)} x${scrollCount(gameState.armedScroll)}`,
-      x,
-      34
-    );
+    context.fillText(label, x + 2, y + h / 2 + 0.5);
   }
 
-  context.restore();
-}
-// Removes exactly one item from a stack, cleaning up empty stacks/types.
-function removeOneFromStack(type, stackIndex) {
-  const stacks = gameState.inventory[type];
-  stacks[stackIndex]--;
-
-  if (stacks[stackIndex] <= 0) stacks.splice(stackIndex, 1);
-  if (stacks.length === 0) delete gameState.inventory[type];
-}
-
-function useSelectedItem() {
-  if (!gameState || !gameState.player || !inventoryOpen) return;
-
-  const selected = getSelectedStack();
-  if (!selected) return;
-   if (SCROLL_COLORS[selected.type]) {
-    gameState.armedScroll =
-      gameState.armedScroll === selected.type ? null : selected.type;
-    return;
-  }
-
-  if (selected.type === "healthPotion") {
+  // Placeholder HUD, drawn in screen space (not affected by camera or zoom).
+  function drawHUD() {
+    if (!gameState || !gameState.player || inventoryOpen) return;
     const p = gameState.player;
-    const maxHp = p.maxHp ?? 100;
 
-    // Don't waste a potion at full health.
-    if (p.hp >= maxHp) return;
-
-    p.hp = Math.min(maxHp, p.hp + POTION_HEAL);
-    removeOneFromStack(selected.type, selected.stackIndex);
-    console.log("Used health potion. HP:", p.hp);
-  }
-}
-
-
-
-
-  // ---------------------------------------------------------------------------
-  // PROJECTILES / SPELLS
-  // ---------------------------------------------------------------------------
- 
-   // ---------------------------------------------------------------------------
-  // SPELLS
-  // ---------------------------------------------------------------------------
-  const SCROLL_COLORS = {
-  scrollFireBall: "#f97316",
-  scrollFreezeCloud: "#67e8f9",
-  scrollChainLightning: "#fde047",
-};
-// Charge time in ms for each scroll. Anything missing falls back to FIRE_COOLDOWN.
-const SCROLL_CHARGE_MS = {
-  scrollFireBall: 2000,
-  scrollFreezeCloud: 1500,
-  scrollChainLightning: 2500,
-};
-
-function chargeTimeFor(type) {
-  return SCROLL_CHARGE_MS[type] ?? FIRE_COOLDOWN;
-}
-
-// Fireball
-const FIREBALL_RADIUS = 2;
-const FIREBALL_DAMAGE = 45;          // at the centre, falls to 50% at the edge
-const FIRE_ZONE_RADIUS = 1.75;
-const FIRE_ZONE_MS = 5000;
-const FIRE_TICK_MS = 1000;
-const FIRE_TICK_DAMAGE = 5;
-const FIRE_HURTS_PLAYER = false;
-
-// Freeze cloud
-const FREEZE_RADIUS = 2;
-const FREEZE_DAMAGE = 10;
-const FREEZE_MS = 3500;
-const FREEZE_CLOUD_VISUAL_MS = 1800;
-
-// Chain lightning
-const LIGHTNING_DAMAGE = 30;
-const LIGHTNING_FALLOFF = 0.85;      // each jump does 85% of the previous
-const LIGHTNING_JUMP_RANGE = 3.5;    // tiles
-const LIGHTNING_MAX_JUMPS = 8;
-const LIGHTNING_VISUAL_MS = 250;
-
-function scrollCount(type) {
-  return (gameState.inventory[type] || []).reduce((a, b) => a + b, 0);
-}
-
-function takeScroll(type) {
-  const stacks = gameState.inventory[type];
-  if (!stacks || stacks.length === 0) return false;
-  removeOneFromStack(type, 0);
-  return true;
-}
-
-// Returns true if the enemy died.
-function hurtEnemy(e, amount, now) {
-  e.hp -= amount;
-  if (e.hp <= 0) {
-    const i = gameState.enemies.indexOf(e);
-    if (i !== -1) gameState.enemies.splice(i, 1);
-    return true;
-  }
-  if (e.state !== "alert") alertEnemy(e, now);
-  return false;
-}
-
-function enemiesInRadius(cx, cy, radius) {
-  return gameState.enemies.filter(
-    (e) =>
-      Math.hypot(e.x - cx, e.y - cy) <= radius &&
-      hasLineOfSight(cx + 0.5, cy + 0.5, e.x + 0.5, e.y + 0.5)
-  );
-}
-
-function detonateScroll(pr, hitEnemy, now) {
-  const fx = (gameState.effects ||= []);
-  const cx = pr.x;
-  const cy = pr.y;
-
-  if (pr.scroll === "scrollFireBall") {
-    const hit = enemiesInRadius(cx, cy, FIREBALL_RADIUS);
-    for (const e of hit) {
-      const d = Math.hypot(e.x - cx, e.y - cy);
-      hurtEnemy(e, FIREBALL_DAMAGE * (1 - 0.5 * (d / FIREBALL_RADIUS)), now);
-    }
-    blastKnock(cx, cy, hit);
-
-    fx.push({ kind: "burst", x: cx, y: cy, radius: FIREBALL_RADIUS,
-      color: "#f97316", start: now, until: now + 350 });
-    fx.push({ kind: "fire", x: cx, y: cy, radius: FIRE_ZONE_RADIUS,
-      start: now, until: now + FIRE_ZONE_MS, nextTick: now + FIRE_TICK_MS });
-
-  } else if (pr.scroll === "scrollFreezeCloud") {
-    const hit = enemiesInRadius(cx, cy, FREEZE_RADIUS);
-    for (const e of hit) {
-      if (hurtEnemy(e, FREEZE_DAMAGE, now)) continue;
-      e.frozenUntil = now + FREEZE_MS;
-      e.steer = null;
-    }
-    blastKnock(cx, cy, hit.filter((e) => gameState.enemies.includes(e)));
-
-    fx.push({ kind: "cloud", x: cx, y: cy, radius: FREEZE_RADIUS,
-      start: now, until: now + FREEZE_CLOUD_VISUAL_MS });
-
-  } else if (pr.scroll === "scrollChainLightning" && hitEnemy) {
-    chainLightning(hitEnemy, pr.x, pr.y, now);
-  }
-}
-function blastKnock(cx, cy, victims, distance = MELEE_KNOCKBACK) {
-  for (const e of victims) {
-    knockback(e, cx, cy, ENEMY_HITBOX, distance);
-    stunEnemy(e, performance.now());
-  }
-}
-function chainLightning(first, ox, oy, now) {
-  const chain = [first];
-  const hit = new Set(chain);
-
-  while (chain.length <= LIGHTNING_MAX_JUMPS) {
-    const cur = chain[chain.length - 1];
-    let best = null;
-    let bestDist = LIGHTNING_JUMP_RANGE;
-    for (const e of gameState.enemies) {
-      if (hit.has(e)) continue;
-      const d = Math.hypot(e.x - cur.x, e.y - cur.y);
-      if (d < bestDist && hasLineOfSight(cur.x + 0.5, cur.y + 0.5, e.x + 0.5, e.y + 0.5)) {
-        best = e;
-        bestDist = d;
-      }
-    }
-    if (!best) break;
-    chain.push(best);
-    hit.add(best);
-  }
-
-  (gameState.effects ||= []).push({
-    kind: "bolt",
-    pts: [{ x: ox + 0.5, y: oy + 0.5 }, ...chain.map((e) => ({ x: e.x + 0.5, y: e.y + 0.5 }))],
-    start: now,
-    until: now + LIGHTNING_VISUAL_MS,
-  });
-
-  chain.forEach((e, i) =>
-    hurtEnemy(e, LIGHTNING_DAMAGE * Math.pow(LIGHTNING_FALLOFF, i), now)
-  );
-}
-
-function updateEffects(timestamp) {
-  const fx = gameState?.effects;
-  if (!fx || gameState.gameOver) return;
-
-  for (let i = fx.length - 1; i >= 0; i--) {
-    const f = fx[i];
-    if (timestamp >= f.until) {
-      fx.splice(i, 1);
-      continue;
-    }
-    if (f.kind === "fire" && timestamp >= f.nextTick) {
-      f.nextTick += FIRE_TICK_MS;
-      for (const e of enemiesInRadius(f.x, f.y, f.radius)) {
-        hurtEnemy(e, FIRE_TICK_DAMAGE, timestamp);
-      }
-      if (FIRE_HURTS_PLAYER) {
-        const p = gameState.player;
-        if (!p.hidden && Math.hypot(p.x - f.x, p.y - f.y) <= f.radius) {
-          damagePlayer(FIRE_TICK_DAMAGE);
-        }
-      }
-    }
-  }
-}
-
-function drawEffects(now, layer) {
-  const fx = gameState?.effects;
-  if (!fx) return;
-
-  for (const f of fx) {
     context.save();
+    // Reset to screen space (256x256 view), ignoring camera and zoom.
+    context.setTransform(
+      devicePixelRatioValue,
+      0,
+      0,
+      devicePixelRatioValue,
+      0,
+      0
+    );
+    context.imageSmoothingEnabled = false;
 
-    if (layer === "ground" && f.kind !== "bolt") {
-      const px = (f.x + 0.5) * TILE_SIZE;
-      const py = (f.y + 0.5) * TILE_SIZE;
-      const r = f.radius * TILE_SIZE;
-      const t = (now - f.start) / (f.until - f.start);
+    const x = 6;
+    const w = 80;
+    const h = 8;
 
-      if (f.kind === "burst") {
-        context.globalAlpha = (1 - t) * 0.6;
-        context.fillStyle = f.color;
-        context.beginPath();
-        context.arc(px, py, r * (0.4 + 0.6 * t), 0, Math.PI * 2);
-        context.fill();
-      } else if (f.kind === "fire") {
-        const fade = Math.min(1, (f.until - now) / 800);
-        context.globalAlpha = 0.22 * fade;
-        context.fillStyle = "#ea580c";
-        context.beginPath();
-        context.arc(px, py, r, 0, Math.PI * 2);
-        context.fill();
+    drawBar(x, 6, w, h, p.hp / (p.maxHp ?? 100), "#dc2626", "HP");
 
-        context.globalAlpha = 0.85 * fade;
-        for (let i = 0; i < 12; i++) {
-          const a = i * 2.4;
-          const rad = (((i * 37) % 100) / 100) * r * 0.9;
-          const h = 4 + (Math.sin(now / 90 + i * 1.7) + 1) * 3;
-          context.fillStyle = i % 2 ? "#f97316" : "#fde047";
-          context.fillRect(
-            Math.round(px + Math.cos(a) * rad - 2),
-            Math.round(py + Math.sin(a) * rad - h),
-            4,
-            Math.round(h)
-          );
-        }
-      } else if (f.kind === "cloud") {
-        context.globalAlpha = 0.4 * (1 - t * 0.7);
-        context.fillStyle = "#a5f3fc";
-        context.beginPath();
-        context.arc(px, py, r, 0, Math.PI * 2);
-        context.fill();
-        context.fillStyle = "#e0f2fe";
-        for (let i = 0; i < 6; i++) {
-          const a = i * 1.05 + now / 900;
-          context.beginPath();
-          context.arc(px + Math.cos(a) * r * 0.5, py + Math.sin(a) * r * 0.5, r * 0.3, 0, Math.PI * 2);
-          context.fill();
-        }
-      }
-    }
+    const staminaColor = p.staminaExhausted ? "#a16207" : "#22c55e";
+    drawBar(x, 18, w, h, p.stamina / STAMINA_MAX, staminaColor, "STA");
 
-    if (layer === "air" && f.kind === "bolt") {
-      context.globalAlpha = 1 - (now - f.start) / (f.until - f.start);
-      context.lineJoin = "round";
-      for (const [color, width] of [["#fde047", 4], ["#ffffff", 1.5]]) {
-        context.strokeStyle = color;
-        context.lineWidth = width;
-        context.beginPath();
-        f.pts.forEach((pt, i) => {
-          const x = pt.x * TILE_SIZE;
-          const y = pt.y * TILE_SIZE;
-          if (i === 0) return context.moveTo(x, y);
-          const prev = f.pts[i - 1];
-          const px0 = prev.x * TILE_SIZE;
-          const py0 = prev.y * TILE_SIZE;
-          for (let s = 1; s <= 4; s++) {
-            const k = s / 4;
-            const jitter = s === 4 ? 0 : (Math.random() - 0.5) * 8;
-            context.lineTo(px0 + (x - px0) * k + jitter, py0 + (y - py0) * k + jitter);
-          }
-        });
-        context.stroke();
-      }
+    if (gameState.armedScroll) {
+      context.fillStyle = "#fde68a";
+      context.font = "6px monospace";
+      context.textAlign = "left";
+      context.textBaseline = "middle";
+      context.fillText(
+        `${formatItemName(gameState.armedScroll)} x${scrollCount(
+          gameState.armedScroll
+        )}`,
+        x,
+        34
+      );
     }
 
     context.restore();
   }
-}
 
- 
-function castSpell(dx, dy, useScroll = true) {
-  if (!gameState || !gameState.player || gameState.gameOver) return;
+  // Removes exactly one item from a stack, cleaning up empty stacks/types.
+  function removeOneFromStack(type, stackIndex) {
+    const stacks = gameState.inventory[type];
+    stacks[stackIndex]--;
 
-  const player = gameState.player;
-  player.direction = directionFromVector(dx, dy);
-
-  const len = Math.hypot(dx, dy) || 1;
-
-   let scroll = null;
-  if (useScroll && gameState.armedScroll) {
-    if (takeScroll(gameState.armedScroll)) scroll = gameState.armedScroll;
-    if (!scrollCount(gameState.armedScroll)) gameState.armedScroll = null;
+    if (stacks[stackIndex] <= 0) stacks.splice(stackIndex, 1);
+    if (stacks.length === 0) delete gameState.inventory[type];
   }
 
-  gameState.projectiles.push({
-    x: player.x,
-    y: player.y + 0.2,
-    dx: dx / len,
-    dy: dy / len,
-    damage: scroll ? 0 : 10,
-    color: SCROLL_COLORS[scroll] || "#15c4fa",
-    scroll,
-  });
+  function useSelectedItem() {
+    if (!gameState || !gameState.player || !inventoryOpen) return;
 
-  makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#15c4fa", player);
-}
-function updateProjectiles(timestamp) {
-  const dt =
-    lastProjectileTime === null
-      ? 0
-      : Math.min((timestamp - lastProjectileTime) / 1000, 0.05);
-  lastProjectileTime = timestamp;
-
-  if (!gameState || !gameState.projectiles) return;
-
-  for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
-    const pr = gameState.projectiles[i];
-
-    const total = PROJECTILE_SPEED * dt;
-    const steps = Math.max(1, Math.ceil(total / 0.2));
-    const stepX = (pr.dx * total) / steps;
-    const stepY = (pr.dy * total) / steps;
-    let remove = false;
-
-    for (let s = 0; s < steps && !remove; s++) {
-      pr.x += stepX;
-      pr.y += stepY;
-
-      if (isWallAt(pr.x + 0.5, pr.y + 0.5)) {
-        pr.x -= stepX;
-        pr.y -= stepY;
-        if (pr.scroll) detonateScroll(pr, null, timestamp);
-        remove = true;
-        break;
-      }
-
-      const enemy = gameState.enemies.find(
-        (en) => Math.hypot(en.x - pr.x, en.y - pr.y) < PROJECTILE_HIT_RADIUS
-      );
-
-      if (enemy) {
-        if (pr.scroll) {
-          detonateScroll(pr, enemy, timestamp);
-        } else {
-          enemy.hp -= pr.damage;
-          if (enemy.hp <= 0) {
-            gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
-          } else {
-            alertEnemy(enemy, timestamp);
-          }
-        }
-        remove = true;
-      }
+    const selected = getSelectedStack();
+    if (!selected) return;
+    if (SCROLL_COLORS[selected.type]) {
+      gameState.armedScroll =
+        gameState.armedScroll === selected.type ? null : selected.type;
+      return;
     }
 
-    if (remove) gameState.projectiles.splice(i, 1);
+    if (selected.type === "healthPotion") {
+      const p = gameState.player;
+      const maxHp = p.maxHp ?? 100;
+
+      // Don't waste a potion at full health.
+      if (p.hp >= maxHp) return;
+
+      p.hp = Math.min(maxHp, p.hp + POTION_HEAL);
+      removeOneFromStack(selected.type, selected.stackIndex);
+      console.log("Used health potion. HP:", p.hp);
+    }
   }
-}
+
+  // ---------------------------------------------------------------------------
+  // SPELLS
+  // ---------------------------------------------------------------------------
+  const SCROLL_COLORS = {
+    scrollFireBall: "#f97316",
+    scrollFreezeCloud: "#67e8f9",
+    scrollChainLightning: "#fde047",
+  };
+
+  // Charge time in ms for each scroll. Anything missing falls back to FIRE_COOLDOWN.
+  const SCROLL_CHARGE_MS = {
+    scrollFireBall: 2000,
+    scrollFreezeCloud: 1500,
+    scrollChainLightning: 2500,
+  };
+
+  function chargeTimeFor(type) {
+    return SCROLL_CHARGE_MS[type] ?? FIRE_COOLDOWN;
+  }
+
+  // Fireball
+  const FIREBALL_RADIUS = 2;
+  const FIREBALL_DAMAGE = 45; // at the centre, falls to 50% at the edge
+  const FIRE_ZONE_RADIUS = 1.75;
+  const FIRE_ZONE_MS = 5000;
+  const FIRE_TICK_MS = 1000;
+  const FIRE_TICK_DAMAGE = 5;
+  const FIRE_HURTS_PLAYER = false;
+
+  // Freeze cloud
+  const FREEZE_RADIUS = 2;
+  const FREEZE_DAMAGE = 10;
+  const FREEZE_MS = 3500;
+  const FREEZE_CLOUD_VISUAL_MS = 1800;
+
+  // Chain lightning
+  const LIGHTNING_DAMAGE = 30;
+  const LIGHTNING_FALLOFF = 0.85; // each jump does 85% of the previous
+  const LIGHTNING_JUMP_RANGE = 3.5; // tiles
+  const LIGHTNING_MAX_JUMPS = 8;
+  const LIGHTNING_VISUAL_MS = 250;
+
+  function scrollCount(type) {
+    return (gameState.inventory[type] || []).reduce((a, b) => a + b, 0);
+  }
+
+  function takeScroll(type) {
+    const stacks = gameState.inventory[type];
+    if (!stacks || stacks.length === 0) return false;
+    removeOneFromStack(type, 0);
+    return true;
+  }
+
+  // Returns true if the enemy died.
+  function hurtEnemy(e, amount, now) {
+    e.hp -= amount;
+    if (e.hp <= 0) {
+      const i = gameState.enemies.indexOf(e);
+      if (i !== -1) gameState.enemies.splice(i, 1);
+      return true;
+    }
+    if (e.state !== "alert") alertEnemy(e, now);
+    return false;
+  }
+
+  function enemiesInRadius(cx, cy, radius) {
+    return gameState.enemies.filter(
+      (e) =>
+        Math.hypot(e.x - cx, e.y - cy) <= radius &&
+        hasLineOfSight(cx + 0.5, cy + 0.5, e.x + 0.5, e.y + 0.5)
+    );
+  }
+
+  function detonateScroll(pr, hitEnemy, now) {
+    const fx = (gameState.effects ||= []);
+    const cx = pr.x;
+    const cy = pr.y;
+
+    if (pr.scroll === "scrollFireBall") {
+      const hit = enemiesInRadius(cx, cy, FIREBALL_RADIUS);
+      for (const e of hit) {
+        const d = Math.hypot(e.x - cx, e.y - cy);
+        hurtEnemy(e, FIREBALL_DAMAGE * (1 - 0.5 * (d / FIREBALL_RADIUS)), now);
+      }
+      blastKnock(cx, cy, hit);
+
+      fx.push({
+        kind: "burst",
+        x: cx,
+        y: cy,
+        radius: FIREBALL_RADIUS,
+        color: "#f97316",
+        start: now,
+        until: now + 350,
+      });
+      fx.push({
+        kind: "fire",
+        x: cx,
+        y: cy,
+        radius: FIRE_ZONE_RADIUS,
+        start: now,
+        until: now + FIRE_ZONE_MS,
+        nextTick: now + FIRE_TICK_MS,
+      });
+    } else if (pr.scroll === "scrollFreezeCloud") {
+      const hit = enemiesInRadius(cx, cy, FREEZE_RADIUS);
+      for (const e of hit) {
+        if (hurtEnemy(e, FREEZE_DAMAGE, now)) continue;
+        e.frozenUntil = now + FREEZE_MS;
+        e.steer = null;
+      }
+      blastKnock(
+        cx,
+        cy,
+        hit.filter((e) => gameState.enemies.includes(e))
+      );
+
+      fx.push({
+        kind: "cloud",
+        x: cx,
+        y: cy,
+        radius: FREEZE_RADIUS,
+        start: now,
+        until: now + FREEZE_CLOUD_VISUAL_MS,
+      });
+    } else if (pr.scroll === "scrollChainLightning" && hitEnemy) {
+      chainLightning(hitEnemy, pr.x, pr.y, now);
+    }
+  }
+
+  function blastKnock(cx, cy, victims, distance = MELEE_KNOCKBACK) {
+    for (const e of victims) {
+      knockback(e, cx, cy, ENEMY_HITBOX, distance);
+      stunEnemy(e, performance.now());
+    }
+  }
+
+  function chainLightning(first, ox, oy, now) {
+    const chain = [first];
+    const hit = new Set(chain);
+
+    while (chain.length <= LIGHTNING_MAX_JUMPS) {
+      const cur = chain[chain.length - 1];
+      let best = null;
+      let bestDist = LIGHTNING_JUMP_RANGE;
+      for (const e of gameState.enemies) {
+        if (hit.has(e)) continue;
+        const d = Math.hypot(e.x - cur.x, e.y - cur.y);
+        if (
+          d < bestDist &&
+          hasLineOfSight(cur.x + 0.5, cur.y + 0.5, e.x + 0.5, e.y + 0.5)
+        ) {
+          best = e;
+          bestDist = d;
+        }
+      }
+      if (!best) break;
+      chain.push(best);
+      hit.add(best);
+    }
+
+    (gameState.effects ||= []).push({
+      kind: "bolt",
+      pts: [
+        { x: ox + 0.5, y: oy + 0.5 },
+        ...chain.map((e) => ({ x: e.x + 0.5, y: e.y + 0.5 })),
+      ],
+      start: now,
+      until: now + LIGHTNING_VISUAL_MS,
+    });
+
+    chain.forEach((e, i) =>
+      hurtEnemy(e, LIGHTNING_DAMAGE * Math.pow(LIGHTNING_FALLOFF, i), now)
+    );
+  }
+
+  function updateEffects(timestamp) {
+    const fx = gameState?.effects;
+    if (!fx || gameState.gameOver) return;
+
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i];
+      if (timestamp >= f.until) {
+        fx.splice(i, 1);
+        continue;
+      }
+      if (f.kind === "fire" && timestamp >= f.nextTick) {
+        f.nextTick += FIRE_TICK_MS;
+        for (const e of enemiesInRadius(f.x, f.y, f.radius)) {
+          hurtEnemy(e, FIRE_TICK_DAMAGE, timestamp);
+        }
+        if (FIRE_HURTS_PLAYER) {
+          const p = gameState.player;
+          if (!p.hidden && Math.hypot(p.x - f.x, p.y - f.y) <= f.radius) {
+            damagePlayer(FIRE_TICK_DAMAGE);
+          }
+        }
+      }
+    }
+  }
+
+  function drawEffects(now, layer) {
+    const fx = gameState?.effects;
+    if (!fx) return;
+
+    for (const f of fx) {
+      context.save();
+
+      if (layer === "ground" && f.kind !== "bolt") {
+        const px = (f.x + 0.5) * TILE_SIZE;
+        const py = (f.y + 0.5) * TILE_SIZE;
+        const r = f.radius * TILE_SIZE;
+        const t = (now - f.start) / (f.until - f.start);
+
+        if (f.kind === "burst") {
+          context.globalAlpha = (1 - t) * 0.6;
+          context.fillStyle = f.color;
+          context.beginPath();
+          context.arc(px, py, r * (0.4 + 0.6 * t), 0, Math.PI * 2);
+          context.fill();
+        } else if (f.kind === "fire") {
+          const fade = Math.min(1, (f.until - now) / 800);
+          context.globalAlpha = 0.22 * fade;
+          context.fillStyle = "#ea580c";
+          context.beginPath();
+          context.arc(px, py, r, 0, Math.PI * 2);
+          context.fill();
+
+          context.globalAlpha = 0.85 * fade;
+          for (let i = 0; i < 12; i++) {
+            const a = i * 2.4;
+            const rad = (((i * 37) % 100) / 100) * r * 0.9;
+            const h = 4 + (Math.sin(now / 90 + i * 1.7) + 1) * 3;
+            context.fillStyle = i % 2 ? "#f97316" : "#fde047";
+            context.fillRect(
+              Math.round(px + Math.cos(a) * rad - 2),
+              Math.round(py + Math.sin(a) * rad - h),
+              4,
+              Math.round(h)
+            );
+          }
+        } else if (f.kind === "cloud") {
+          context.globalAlpha = 0.4 * (1 - t * 0.7);
+          context.fillStyle = "#a5f3fc";
+          context.beginPath();
+          context.arc(px, py, r, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = "#e0f2fe";
+          for (let i = 0; i < 6; i++) {
+            const a = i * 1.05 + now / 900;
+            context.beginPath();
+            context.arc(
+              px + Math.cos(a) * r * 0.5,
+              py + Math.sin(a) * r * 0.5,
+              r * 0.3,
+              0,
+              Math.PI * 2
+            );
+            context.fill();
+          }
+        }
+      }
+
+      if (layer === "air" && f.kind === "bolt") {
+        context.globalAlpha = 1 - (now - f.start) / (f.until - f.start);
+        context.lineJoin = "round";
+        for (const [color, width] of [
+          ["#fde047", 4],
+          ["#ffffff", 1.5],
+        ]) {
+          context.strokeStyle = color;
+          context.lineWidth = width;
+          context.beginPath();
+          f.pts.forEach((pt, i) => {
+            const x = pt.x * TILE_SIZE;
+            const y = pt.y * TILE_SIZE;
+            if (i === 0) return context.moveTo(x, y);
+            const prev = f.pts[i - 1];
+            const px0 = prev.x * TILE_SIZE;
+            const py0 = prev.y * TILE_SIZE;
+            for (let s = 1; s <= 4; s++) {
+              const k = s / 4;
+              const jitter = s === 4 ? 0 : (Math.random() - 0.5) * 8;
+              context.lineTo(
+                px0 + (x - px0) * k + jitter,
+                py0 + (y - py0) * k + jitter
+              );
+            }
+          });
+          context.stroke();
+        }
+      }
+
+      context.restore();
+    }
+  }
+
+  function castSpell(dx, dy, useScroll = true) {
+    if (!gameState || !gameState.player || gameState.gameOver) return;
+
+    const player = gameState.player;
+    player.direction = directionFromVector(dx, dy);
+
+    const len = Math.hypot(dx, dy) || 1;
+
+    let scroll = null;
+    if (useScroll && gameState.armedScroll) {
+      if (takeScroll(gameState.armedScroll)) scroll = gameState.armedScroll;
+      if (!scrollCount(gameState.armedScroll)) gameState.armedScroll = null;
+    }
+
+    gameState.projectiles.push({
+      x: player.x,
+      y: player.y + 0.2,
+      dx: dx / len,
+      dy: dy / len,
+      damage: scroll ? 0 : 10,
+      color: SCROLL_COLORS[scroll] || "#15c4fa",
+      scroll,
+    });
+
+    makeNoise(player.x, player.y, NOISE_RADIUS_SPELL, "#15c4fa", player);
+  }
+
+  function updateProjectiles(timestamp) {
+    const dt =
+      lastProjectileTime === null
+        ? 0
+        : Math.min((timestamp - lastProjectileTime) / 1000, 0.05);
+    lastProjectileTime = timestamp;
+
+    if (!gameState || !gameState.projectiles) return;
+
+    for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+      const pr = gameState.projectiles[i];
+
+      const total = PROJECTILE_SPEED * dt;
+      const steps = Math.max(1, Math.ceil(total / 0.2));
+      const stepX = (pr.dx * total) / steps;
+      const stepY = (pr.dy * total) / steps;
+      let remove = false;
+
+      for (let s = 0; s < steps && !remove; s++) {
+        pr.x += stepX;
+        pr.y += stepY;
+
+        if (isWallAt(pr.x + 0.5, pr.y + 0.5)) {
+          pr.x -= stepX;
+          pr.y -= stepY;
+          if (pr.scroll) detonateScroll(pr, null, timestamp);
+          remove = true;
+          break;
+        }
+
+        const enemy = gameState.enemies.find(
+          (en) => Math.hypot(en.x - pr.x, en.y - pr.y) < PROJECTILE_HIT_RADIUS
+        );
+
+        if (enemy) {
+          if (pr.scroll) {
+            detonateScroll(pr, enemy, timestamp);
+          } else {
+            enemy.hp -= pr.damage;
+            if (enemy.hp <= 0) {
+              gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
+            } else {
+              alertEnemy(enemy, timestamp);
+            }
+          }
+          remove = true;
+        }
+      }
+
+      if (remove) gameState.projectiles.splice(i, 1);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // ZOOM
   // ---------------------------------------------------------------------------
   function applyZoom() {
-  canvas.style.transform = `scale(${zoom})`;
-}
-
-
-function animateZoom(startZoom, targetZoom, duration, onComplete) {
-  if (zoomAnimationId !== null) {
-    cancelAnimationFrame(zoomAnimationId);
+    canvas.style.transform = `scale(${zoom})`;
   }
 
-  const startTime = performance.now();
+  function animateZoom(startZoom, targetZoom, duration, onComplete) {
+    if (zoomAnimationId !== null) {
+      cancelAnimationFrame(zoomAnimationId);
+    }
 
-  function updateZoom(currentTime) {
-    const progress = Math.min(
-      (currentTime - startTime) / duration,
-      1
-    );
+    const startTime = performance.now();
 
-    zoom = startZoom + (targetZoom - startZoom) * progress;
-    applyZoom();
+    function updateZoom(currentTime) {
+      const progress = Math.min((currentTime - startTime) / duration, 1);
 
-    if (progress < 1) {
-      zoomAnimationId = requestAnimationFrame(updateZoom);
-    } else {
-      zoom = targetZoom;
+      zoom = startZoom + (targetZoom - startZoom) * progress;
       applyZoom();
 
-      zoomAnimationId = null;
+      if (progress < 1) {
+        zoomAnimationId = requestAnimationFrame(updateZoom);
+      } else {
+        zoom = targetZoom;
+        applyZoom();
 
-      if (onComplete) {
-        onComplete();
+        zoomAnimationId = null;
+
+        if (onComplete) {
+          onComplete();
+        }
       }
     }
+
+    // This line starts the animation
+    zoomAnimationId = requestAnimationFrame(updateZoom);
   }
-
-  // This line starts the animation
-  zoomAnimationId = requestAnimationFrame(updateZoom);
-}
-
 
   function activateZoomAbility() {
     if (zoomAbilityActive || zoomAbilityOnCooldown) return;
@@ -4407,311 +4425,332 @@ function animateZoom(startZoom, targetZoom, duration, onComplete) {
     animateZoom(zoom, ZOOM_OUT_MIN, ZOOM_OUT_TIME);
 
     maxHoldTimer = setTimeout(() => {
-  returnFromZoom();
-}, MAX_HOLD_TIME);
+      returnFromZoom();
+    }, MAX_HOLD_TIME);
   }
 
- function returnFromZoom() {
-  if (!zoomAbilityActive) return;
+  function returnFromZoom() {
+    if (!zoomAbilityActive) return;
 
-  zoomAbilityActive = false;
-  zoomKeyHeld = false;
+    zoomAbilityActive = false;
+    zoomKeyHeld = false;
 
-  if (maxHoldTimer !== null) {
-    clearTimeout(maxHoldTimer);
-    maxHoldTimer = null;
-  }
-
-  const heldDuration = performance.now() - zoomActivationTime;
-
-  animateZoom(zoom, NORMAL_ZOOM, ZOOM_IN_TIME);
-
-  if (heldDuration >= MIN_HOLD_TIME) {
-    zoomAbilityOnCooldown = true;
-
-    if (cooldownTimer !== null) {
-      clearTimeout(cooldownTimer);
+    if (maxHoldTimer !== null) {
+      clearTimeout(maxHoldTimer);
+      maxHoldTimer = null;
     }
 
-    cooldownTimer = setTimeout(() => {
-      zoomAbilityOnCooldown = false;
-      cooldownTimer = null;
-    }, COOLDOWN_TIME);
-  }
-}
+    const heldDuration = performance.now() - zoomActivationTime;
 
+    animateZoom(zoom, NORMAL_ZOOM, ZOOM_IN_TIME);
 
+    if (heldDuration >= MIN_HOLD_TIME) {
+      zoomAbilityOnCooldown = true;
 
-
-// ---------------------------------------------------------------------------
-// ENEMY SPAWNING
-// ---------------------------------------------------------------------------
-const ENEMY_ROOM_CHANCE_BASE = 0.3;       // chance a room has anyone, on depth 1
-const ENEMY_ROOM_CHANCE_PER_DEPTH = 0.08;
-const ENEMY_ROOM_CHANCE_MAX = 0.85;
-const ENEMY_SECOND_CHANCE_BASE = 0.25;    // chance a big room holds two
-const ENEMY_SECOND_CHANCE_PER_DEPTH = 0.06;
-const ENEMY_SECOND_CHANCE_MAX = 0.7;
-const ENEMY_BIG_ROOM_AREA = 30;
-const ENEMY_CLOSET_AREA = 16;             // rooms this small stay empty
-const ENEMY_ROLE_WEIGHTS = { guard: 0.4, wanderer: 0.35, idler: 0.25 };
-const ENEMY_MIN_SPACING = 2.5;            // tiles between spawn points
-
-const spawnRand = (lo, hi) => lo + Math.random() * (hi - lo);
-const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-// Ordered ring of the room's outermost tiles (the ones touching walls).
-function roomPerimeter(room) {
-  const { x, y, w, h } = room;
-  const pts = [];
-  for (let i = 0; i < w; i++) pts.push({ x: x + i, y });
-  for (let j = 1; j < h; j++) pts.push({ x: x + w - 1, y: y + j });
-  for (let i = w - 2; i >= 0; i--) pts.push({ x: x + i, y: y + h - 1 });
-  for (let j = h - 2; j >= 1; j--) pts.push({ x, y: y + j });
-  return pts;
-}
-
-// Every place a connector enters this room.
-//  tile   = the room tile just inside the entrance
-//  target = what a guard should watch (the door if there is one, else the gap)
-//  dx,dy  = direction of travel into the room
-function roomEntrances(room, connectors, allDoors) {
-  const inRoom = (x, y) =>
-    x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h;
-  const out = [];
-
-  for (const c of connectors) {
-    const r = c.rect;
-    const door = allDoors.find(
-      (d) => d.x >= r.x && d.x < r.x + r.w && d.y >= r.y && d.y < r.y + r.h
-    );
-    for (let cy = r.y; cy < r.y + r.h; cy++) {
-      for (let cx = r.x; cx < r.x + r.w; cx++) {
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          if (!inRoom(cx + dx, cy + dy)) continue;
-          out.push({
-            tile: { x: cx + dx, y: cy + dy },
-            target: door ? { x: door.x, y: door.y } : { x: cx, y: cy },
-            dx,
-            dy,
-          });
-        }
+      if (cooldownTimer !== null) {
+        clearTimeout(cooldownTimer);
       }
+
+      cooldownTimer = setTimeout(() => {
+        zoomAbilityOnCooldown = false;
+        cooldownTimer = null;
+      }, COOLDOWN_TIME);
     }
   }
-  return out;
-}
 
-function spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stairs) {
-  const enemies = [];
-  const allDoors = [...doors, ...brokenDoors];
+  // ---------------------------------------------------------------------------
+  // ENEMY SPAWNING
+  // ---------------------------------------------------------------------------
+  const ENEMY_ROOM_CHANCE_BASE = 0.3; // chance a room has anyone, on depth 1
+  const ENEMY_ROOM_CHANCE_PER_DEPTH = 0.08;
+  const ENEMY_ROOM_CHANCE_MAX = 0.85;
+  const ENEMY_SECOND_CHANCE_BASE = 0.25; // chance a big room holds two
+  const ENEMY_SECOND_CHANCE_PER_DEPTH = 0.06;
+  const ENEMY_SECOND_CHANCE_MAX = 0.7;
+  const ENEMY_BIG_ROOM_AREA = 30;
+  const ENEMY_CLOSET_AREA = 16; // rooms this small stay empty
+  const ENEMY_ROLE_WEIGHTS = { guard: 0.4, wanderer: 0.35, idler: 0.25 };
+  const ENEMY_MIN_SPACING = 2.5; // tiles between spawn points
 
-  // Furniture: nobody spawns on, or parks on, any of these.
-  const furniture = new Set();
-  const mark = (x, y) => furniture.add(`${x},${y}`);
-  for (const it of items) mark(it.x, it.y);
-  for (const s of stairs) mark(s.x, s.y);
-  for (const h of hidingSpots) mark(h.x, h.y);
+  const spawnRand = (lo, hi) => lo + Math.random() * (hi - lo);
+  const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-  const roomChance = Math.min(
-    ENEMY_ROOM_CHANCE_MAX,
-    ENEMY_ROOM_CHANCE_BASE + ENEMY_ROOM_CHANCE_PER_DEPTH * (level - 1)
-  );
-  const secondChance = Math.min(
-    ENEMY_SECOND_CHANCE_MAX,
-    ENEMY_SECOND_CHANCE_BASE + ENEMY_SECOND_CHANCE_PER_DEPTH * (level - 1)
-  );
+  // Ordered ring of the room's outermost tiles (the ones touching walls).
+  function roomPerimeter(room) {
+    const { x, y, w, h } = room;
+    const pts = [];
+    for (let i = 0; i < w; i++) pts.push({ x: x + i, y });
+    for (let j = 1; j < h; j++) pts.push({ x: x + w - 1, y: y + j });
+    for (let i = w - 2; i >= 0; i--) pts.push({ x: x + i, y: y + h - 1 });
+    for (let j = h - 2; j >= 1; j--) pts.push({ x, y: y + j });
+    return pts;
+  }
 
-  const eligible = rooms
-    .slice(1) // never the start room
-    .filter((r) => r.w * r.h > ENEMY_CLOSET_AREA);
+  // Every place a connector enters this room.
+  //  tile   = the room tile just inside the entrance
+  //  target = what a guard should watch (the door if there is one, else the gap)
+  //  dx,dy  = direction of travel into the room
+  function roomEntrances(room, connectors, allDoors) {
+    const inRoom = (x, y) =>
+      x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h;
+    const out = [];
 
-  function planRole(role, room, ctx) {
-    const { perimeter, entrances, free } = ctx;
-
-    if (role === "guard") {
-      const spots = [];
-      for (const en of entrances) {
-        for (const t of perimeter) {
-          const d = Math.hypot(t.x - en.tile.x, t.y - en.tile.y);
-          if (d < 1 || d > 3) continue;
-          // Stand beside the doorway, not in the line of traffic.
-          if (en.dx !== 0 ? t.y === en.tile.y : t.x === en.tile.x) continue;
-          if (!free(t.x, t.y)) continue;
-          spots.push({ t, en });
-        }
-      }
-      if (spots.length === 0) return null;
-      const { t, en } = pickOne(spots);
-      const face = Math.atan2(en.target.y - t.y, en.target.x - t.x);
-      return {
-        role,
-        x: t.x,
-        y: t.y,
-        patrol: [{ x: t.x, y: t.y, wait: spawnRand(1500, 3500) }],
-        facing: face,
-        holdFacing: face,
-        lookSweep: 0.6,
-      };
-    }
-
-    if (role === "idler") {
-      const corners = [
-        { x: room.x, y: room.y },
-        { x: room.x + room.w - 1, y: room.y },
-        { x: room.x, y: room.y + room.h - 1 },
-        { x: room.x + room.w - 1, y: room.y + room.h - 1 },
-      ].filter((c) => free(c.x, c.y));
-      const pool = corners.length ? corners : perimeter.filter((t) => free(t.x, t.y));
-      if (pool.length === 0) return null;
-      const t = pickOne(pool);
-      const face = Math.atan2(
-        room.y + (room.h - 1) / 2 - t.y,
-        room.x + (room.w - 1) / 2 - t.x
+    for (const c of connectors) {
+      const r = c.rect;
+      const door = allDoors.find(
+        (d) => d.x >= r.x && d.x < r.x + r.w && d.y >= r.y && d.y < r.y + r.h
       );
-      return {
-        role,
+      for (let cy = r.y; cy < r.y + r.h; cy++) {
+        for (let cx = r.x; cx < r.x + r.w; cx++) {
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ]) {
+            if (!inRoom(cx + dx, cy + dy)) continue;
+            out.push({
+              tile: { x: cx + dx, y: cy + dy },
+              target: door ? { x: door.x, y: door.y } : { x: cx, y: cy },
+              dx,
+              dy,
+            });
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  function spawnEnemies(
+    level,
+    rooms,
+    connectors,
+    doors,
+    brokenDoors,
+    items,
+    stairs
+  ) {
+    const enemies = [];
+    const allDoors = [...doors, ...brokenDoors];
+
+    // Furniture: nobody spawns on, or parks on, any of these.
+    const furniture = new Set();
+    const mark = (x, y) => furniture.add(`${x},${y}`);
+    for (const it of items) mark(it.x, it.y);
+    for (const s of stairs) mark(s.x, s.y);
+    for (const h of hidingSpots) mark(h.x, h.y);
+
+    const roomChance = Math.min(
+      ENEMY_ROOM_CHANCE_MAX,
+      ENEMY_ROOM_CHANCE_BASE + ENEMY_ROOM_CHANCE_PER_DEPTH * (level - 1)
+    );
+    const secondChance = Math.min(
+      ENEMY_SECOND_CHANCE_MAX,
+      ENEMY_SECOND_CHANCE_BASE + ENEMY_SECOND_CHANCE_PER_DEPTH * (level - 1)
+    );
+
+    const eligible = rooms
+      .slice(1) // never the start room
+      .filter((r) => r.w * r.h > ENEMY_CLOSET_AREA);
+
+    function planRole(role, room, ctx) {
+      const { perimeter, entrances, free } = ctx;
+
+      if (role === "guard") {
+        const spots = [];
+        for (const en of entrances) {
+          for (const t of perimeter) {
+            const d = Math.hypot(t.x - en.tile.x, t.y - en.tile.y);
+            if (d < 1 || d > 3) continue;
+            // Stand beside the doorway, not in the line of traffic.
+            if (en.dx !== 0 ? t.y === en.tile.y : t.x === en.tile.x) continue;
+            if (!free(t.x, t.y)) continue;
+            spots.push({ t, en });
+          }
+        }
+        if (spots.length === 0) return null;
+        const { t, en } = pickOne(spots);
+        const face = Math.atan2(en.target.y - t.y, en.target.x - t.x);
+        return {
+          role,
+          x: t.x,
+          y: t.y,
+          patrol: [{ x: t.x, y: t.y, wait: spawnRand(1500, 3500) }],
+          facing: face,
+          holdFacing: face,
+          lookSweep: 0.6,
+        };
+      }
+
+      if (role === "idler") {
+        const corners = [
+          { x: room.x, y: room.y },
+          { x: room.x + room.w - 1, y: room.y },
+          { x: room.x, y: room.y + room.h - 1 },
+          { x: room.x + room.w - 1, y: room.y + room.h - 1 },
+        ].filter((c) => free(c.x, c.y));
+        const pool = corners.length
+          ? corners
+          : perimeter.filter((t) => free(t.x, t.y));
+        if (pool.length === 0) return null;
+        const t = pickOne(pool);
+        const face = Math.atan2(
+          room.y + (room.h - 1) / 2 - t.y,
+          room.x + (room.w - 1) / 2 - t.x
+        );
+        return {
+          role,
+          x: t.x,
+          y: t.y,
+          patrol: [{ x: t.x, y: t.y, wait: spawnRand(2000, 4500) }],
+          facing: face,
+          holdFacing: face,
+          lookSweep: 0.4,
+        };
+      }
+
+      // wanderer: walks the ring, mostly without stopping, pausing at a few spots
+      const step = 3;
+      const offset = Math.floor(Math.random() * step);
+      let route = perimeter.filter(
+        (t, i) => i % step === offset && free(t.x, t.y)
+      );
+      if (route.length < 3) return null;
+      if (Math.random() < 0.5) route.reverse();
+
+      route = route.map((t) => ({
         x: t.x,
         y: t.y,
-        patrol: [{ x: t.x, y: t.y, wait: spawnRand(2000, 4500) }],
-        facing: face,
-        holdFacing: face,
-        lookSweep: 0.4,
+        wait: Math.random() < 0.3 ? spawnRand(1500, 3500) : 0,
+      }));
+
+      const k = Math.floor(Math.random() * route.length); // start mid-route
+      const next = route[(k + 1) % route.length];
+      return {
+        role,
+        x: route[k].x,
+        y: route[k].y,
+        patrol: route,
+        patrolIndex: (k + 1) % route.length,
+        facing: Math.atan2(next.y - route[k].y, next.x - route[k].x),
+        holdFacing: null,
+        lookSweep: 0.9,
       };
     }
 
-    // wanderer: walks the ring, mostly without stopping, pausing at a few spots
-    const step = 3;
-    const offset = Math.floor(Math.random() * step);
-    let route = perimeter.filter((t, i) => i % step === offset && free(t.x, t.y));
-    if (route.length < 3) return null;
-    if (Math.random() < 0.5) route.reverse();
+    function buildEnemy(id, plan) {
+      const hp = 50 + level * 5;
+      return {
+        id,
+        x: plan.x,
+        y: plan.y,
+        hp,
+        maxHp: hp,
+        type: "enemy",
+        color: "#f57676",
+        role: plan.role,
 
-    route = route.map((t) => ({
-      x: t.x,
-      y: t.y,
-      wait: Math.random() < 0.3 ? spawnRand(1500, 3500) : 0,
-    }));
+        state: "patrol",
+        suspicion: 0,
+        facing: plan.facing,
+        baseFacing: plan.facing,
+        holdFacing: plan.holdFacing, // guards/idlers keep looking here
+        lookSweep: plan.lookSweep,
+        lookPhase: Math.random() * Math.PI * 2, // so nobody scans in sync
+        canSeePlayer: false,
+        steer: null,
+        navGoal: null,
+        navTimer: 0,
+        searching: false,
+        searchPoints: [],
+        searchIndex: 0,
+        searchWait: 0,
+        attackSpot: null,
+        breakTimer: null,
+        hideSearchTimer: 0,
+        patrol: plan.patrol,
+        patrolIndex: plan.patrolIndex ?? 0,
+        waitTimer: spawnRand(0, 2500), // staggered starts
+        investigate: null,
+        arrived: false,
+        lastSeen: null,
+        lastSeenTime: 0,
+      };
+    }
 
-    const k = Math.floor(Math.random() * route.length); // start mid-route
-    const next = route[(k + 1) % route.length];
-    return {
-      role,
-      x: route[k].x,
-      y: route[k].y,
-      patrol: route,
-      patrolIndex: (k + 1) % route.length,
-      facing: Math.atan2(next.y - route[k].y, next.x - route[k].x),
-      holdFacing: null,
-      lookSweep: 0.9,
-    };
-  }
+    function populateRoom(room, count) {
+      const roomIndex = rooms.indexOf(room);
+      const perimeter = roomPerimeter(room);
+      const entrances = roomEntrances(room, connectors, allDoors);
+      const doorways = new Set(entrances.map((e) => `${e.tile.x},${e.tile.y}`));
 
-  function buildEnemy(id, plan) {
-    const hp = 50 + level * 5;
-    return {
-      id,
-      x: plan.x,
-      y: plan.y,
-      hp,
-      maxHp: hp,
-      type: "enemy",
-      color: "#f57676",
-      role: plan.role,
+      const free = (x, y) =>
+        !furniture.has(`${x},${y}`) &&
+        !doorways.has(`${x},${y}`) &&
+        enemies.every((e) => Math.hypot(e.x - x, e.y - y) >= ENEMY_MIN_SPACING);
 
-      state: "patrol",
-      suspicion: 0,
-      facing: plan.facing,
-      baseFacing: plan.facing,
-      holdFacing: plan.holdFacing,           // guards/idlers keep looking here
-      lookSweep: plan.lookSweep,
-      lookPhase: Math.random() * Math.PI * 2, // so nobody scans in sync
-      canSeePlayer: false,
-      steer: null,
-      navGoal: null,
-      navTimer: 0,
-      searching: false,
-      searchPoints: [],
-      searchIndex: 0,
-      searchWait: 0,
-      attackSpot: null,
-      breakTimer: null,
-      hideSearchTimer: 0,
-      patrol: plan.patrol,
-      patrolIndex: plan.patrolIndex ?? 0,
-      waitTimer: spawnRand(0, 2500),          // staggered starts
-      investigate: null,
-      arrived: false,
-      lastSeen: null,
-      lastSeenTime: 0,
-    };
-  }
+      let lastRole = null;
+      let placed = 0;
 
-  function populateRoom(room, count) {
-    const roomIndex = rooms.indexOf(room);
-    const perimeter = roomPerimeter(room);
-    const entrances = roomEntrances(room, connectors, allDoors);
-    const doorways = new Set(entrances.map((e) => `${e.tile.x},${e.tile.y}`));
+      for (let n = 0; n < count; n++) {
+        // Weighted pick, avoiding a repeat of the role just used in this room.
+        const roles = Object.keys(ENEMY_ROLE_WEIGHTS).filter(
+          (r) => r !== lastRole
+        );
+        const total = roles.reduce((s, r) => s + ENEMY_ROLE_WEIGHTS[r], 0);
+        let roll = Math.random() * total;
+        let first = roles[roles.length - 1];
+        for (const r of roles) {
+          roll -= ENEMY_ROLE_WEIGHTS[r];
+          if (roll <= 0) {
+            first = r;
+            break;
+          }
+        }
 
-    const free = (x, y) =>
-      !furniture.has(`${x},${y}`) &&
-      !doorways.has(`${x},${y}`) &&
-      enemies.every((e) => Math.hypot(e.x - x, e.y - y) >= ENEMY_MIN_SPACING);
-
-    let lastRole = null;
-    let placed = 0;
-
-    for (let n = 0; n < count; n++) {
-      // Weighted pick, avoiding a repeat of the role just used in this room.
-      const roles = Object.keys(ENEMY_ROLE_WEIGHTS).filter((r) => r !== lastRole);
-      const total = roles.reduce((s, r) => s + ENEMY_ROLE_WEIGHTS[r], 0);
-      let roll = Math.random() * total;
-      let first = roles[roles.length - 1];
-      for (const r of roles) {
-        roll -= ENEMY_ROLE_WEIGHTS[r];
-        if (roll <= 0) {
-          first = r;
+        const order = [
+          first,
+          ...Object.keys(ENEMY_ROLE_WEIGHTS).filter((r) => r !== first),
+        ];
+        for (const role of order) {
+          const plan = planRole(role, room, { perimeter, entrances, free });
+          if (!plan) continue;
+          enemies.push(buildEnemy(`e-${level}-${roomIndex}-${n}`, plan));
+          lastRole = role;
+          placed++;
           break;
         }
       }
-
-      const order = [first, ...Object.keys(ENEMY_ROLE_WEIGHTS).filter((r) => r !== first)];
-      for (const role of order) {
-        const plan = planRole(role, room, { perimeter, entrances, free });
-        if (!plan) continue;
-        enemies.push(buildEnemy(`e-${level}-${roomIndex}-${n}`, plan));
-        lastRole = role;
-        placed++;
-        break;
-      }
+      return placed;
     }
-    return placed;
+
+    for (const room of eligible) {
+      if (Math.random() >= roomChance) continue; // a quiet room
+      const big = room.w * room.h >= ENEMY_BIG_ROOM_AREA;
+      populateRoom(room, big && Math.random() < secondChance ? 2 : 1);
+    }
+
+    // A floor with nobody on it is a bug, not atmosphere.
+    if (enemies.length === 0 && eligible.length > 0) {
+      const biggest = eligible.reduce((a, b) =>
+        a.w * a.h >= b.w * b.h ? a : b
+      );
+      populateRoom(biggest, 1);
+    }
+
+    return enemies;
   }
 
-  for (const room of eligible) {
-    if (Math.random() >= roomChance) continue; // a quiet room
-    const big = room.w * room.h >= ENEMY_BIG_ROOM_AREA;
-    populateRoom(room, big && Math.random() < secondChance ? 2 : 1);
-  }
-
-  // A floor with nobody on it is a bug, not atmosphere.
-  if (enemies.length === 0 && eligible.length > 0) {
-    const biggest = eligible.reduce((a, b) => (a.w * a.h >= b.w * b.h ? a : b));
-    populateRoom(biggest, 1);
-  }
-
-  return enemies;
-}
   // ---------------------------------------------------------------------------
   // LEVEL GENERATION
   // ---------------------------------------------------------------------------
-  
- function createGameState(level, existingPlayer, options = {}) {
+  function createGameState(level, existingPlayer, options = {}) {
     const newMap = Array.from({ length: MAP_HEIGHT }, () =>
       Array(MAP_WIDTH).fill(TileType.WALL)
     );
 
-        const rooms = [];
+    const rooms = [];
     const connectors = [];
     const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
@@ -4721,7 +4760,6 @@ function spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stair
         a.x + a.w + padding > b.x &&
         a.y - padding < b.y + b.h &&
         a.y + a.h + padding > b.y
-        
       );
     }
 
@@ -4816,7 +4854,7 @@ function spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stair
 
     // One door on the 1-wide connectors (wide ones stay open).
     const doors = [];
-   const brokenDoors = [];
+    const brokenDoors = [];
     for (const c of connectors) {
       if (c.wide) continue;
       const cells = [];
@@ -4827,20 +4865,20 @@ function spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, stair
       }
       const cell = cells[randInt(0, cells.length - 1)];
       const door = {
-  x: cell.x,
-  y: cell.y,
-  dir: c.horizontal ? "h" : "v", // h = passage runs east-west
-  open: false,
-  hp: DOOR_HP,
-  maxHp: DOOR_HP,
-  flashUntil: 0,
-};
+        x: cell.x,
+        y: cell.y,
+        dir: c.horizontal ? "h" : "v", // h = passage runs east-west
+        open: false,
+        hp: DOOR_HP,
+        maxHp: DOOR_HP,
+        flashUntil: 0,
+      };
 
-if (Math.random() < BROKEN_DOOR_CHANCE) {
-  brokenDoors.push(door); // never enters doors/doorMap, so it's just an open gap
-} else {
-  doors.push(door);
-}
+      if (Math.random() < BROKEN_DOOR_CHANCE) {
+        brokenDoors.push(door); // never enters doors/doorMap, so it's just an open gap
+      } else {
+        doors.push(door);
+      }
     }
     if (rooms.length === 0) {
       console.error("No rooms were generated.");
@@ -4848,7 +4886,8 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
     }
 
     const startRoom = rooms[0];
-        // --- Stairs ---------------------------------------------------------
+
+    // --- Stairs ---------------------------------------------------------
     const stairs = [];
 
     // Return stairs sit on the start room's spawn tile.
@@ -4876,6 +4915,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
         plan,
       });
     });
+
     const player = existingPlayer
       ? {
           ...existingPlayer,
@@ -4886,7 +4926,6 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
           isMoving: false,
           width: PLAYER_WIDTH,
           height: PLAYER_HEIGHT,
-          stamina: existingPlayer.stamina ?? STAMINA_MAX,
           gait: existingPlayer.gait || "walk",
           wasRunning: false,
           hidden: false,
@@ -4907,7 +4946,6 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
           color: "#3b82f6",
           width: PLAYER_WIDTH,
           height: PLAYER_HEIGHT,
-          stamina: STAMINA_MAX,
           gait: "walk",
           wasRunning: false,
           hidden: false,
@@ -4919,8 +4957,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
 
     globalPlayer = player;
 
-  
-
+    // Items on the ground: only traps now (scrolls and potions come from containers).
     const items = [];
     const itemRooms = rooms.slice(1);
     if (itemRooms.length === 0) {
@@ -4928,9 +4965,56 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
       return null;
     }
 
+    // Tiles traps must never use: items, stairs, enemy spawns and patrol points.
+    const blocked = new Set();
+    const blockTile = (x, y) => blocked.add(`${x},${y}`);
+
+    for (const it of items) blockTile(it.x, it.y);
+    for (const s of stairs) blockTile(s.x, s.y);
+
+    for (let i = 1; i < rooms.length; i++) {
+      const room = rooms[i];
+
+      const trapCount =
+        TRAPS_PER_ROOM_MIN +
+        Math.floor(
+          Math.random() * (TRAPS_PER_ROOM_MAX - TRAPS_PER_ROOM_MIN + 1)
+        );
+
+      for (let t = 0; t < trapCount; t++) {
+        const trapX = Math.floor(Math.random() * (room.w - 2)) + room.x + 1;
+        const trapY = Math.floor(Math.random() * (room.h - 2)) + room.y + 1;
+
+        if (blocked.has(`${trapX},${trapY}`)) continue;
+        blockTile(trapX, trapY); // also stops two traps sharing a tile
+
+        items.push({
+          id: `trap-${level}-${i}-${t}`,
+          x: trapX,
+          y: trapY,
+          type: "trap",
+          idName: "trap",
+          sprungUntil: 0,
+        });
+      }
+    }
+
     placeHidingSpots(rooms, newMap);
-    const containers = placeContainers(rooms, newMap, [...doors, ...brokenDoors], [...items, ...stairs]);
-    const enemies = spawnEnemies(level, rooms, connectors, doors, brokenDoors, items, containers, stairs);
+    const containers = placeContainers(
+      rooms,
+      newMap,
+      [...doors, ...brokenDoors],
+      [...items, ...stairs]
+    );
+    const enemies = spawnEnemies(
+      level,
+      rooms,
+      connectors,
+      doors,
+      brokenDoors,
+      [...items, ...containers],
+      stairs
+    );
 
     return {
       map: newMap,
@@ -4946,7 +5030,9 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
       hidingSpots: hidingSpots.slice(),
       explored: new Set(),
       trapTiles: new Set(
-        items.filter((it) => it.type === "trap").map((it) => it.y * MAP_WIDTH + it.x)
+        items
+          .filter((it) => it.type === "trap")
+          .map((it) => it.y * MAP_WIDTH + it.x)
       ),
       inventory: {
         scrollFireBall: [],
@@ -4955,7 +5041,7 @@ if (Math.random() < BROKEN_DOOR_CHANCE) {
         healthPotion: [],
       },
       projectiles: [],
-      effects: [], 
+      effects: [],
       armedScroll: null,
     };
   }
