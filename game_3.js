@@ -1798,7 +1798,7 @@ function drawContainerPrompt() {
       const w = 24, h = 4;
       const bx = Math.round(cx - w / 2);
       const by = Math.round(top - 8);
-      context.fillStyle = "#fff";
+      context.fillStyle = "#000";
       context.fillRect(bx - 1, by -1, w + 2, h + 2);
       context.fillStyle = "#facc15";
       context.fillRect(bx, by, Math.round(w * t), h);
