@@ -3117,7 +3117,7 @@ function giveDungeonRoute(e, rooms) {
 
 // Only torch carriers roam the whole dungeon; everyone else keeps their room job.
 function assignTorchesAndRoutes(enemies, rooms, map) {
-  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms, map);{
+  for (const e of enemies) {
     e.hasTorch = Math.random() < ENEMY_TORCH_CHANCE;
     e.torchLit = e.hasTorch;
   }
@@ -3125,7 +3125,7 @@ function assignTorchesAndRoutes(enemies, rooms, map) {
     const e = pickOne(enemies);
     e.hasTorch = e.torchLit = true;
   }
-  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms);
+  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms, map);
 }
 
 function openDoorAhead(e) {
