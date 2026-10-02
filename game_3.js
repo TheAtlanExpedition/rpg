@@ -50,11 +50,13 @@
 const TileType = {
   WALL: 0, FLOOR: 1, DOOR: 2, TRAP: 3, SWITCH: 4, PILLAR: 5,
   LOW_WALL: 6,   // blocks movement, NOT sight (crouch behind it to hide)
-  CRATE: 7,      // blocks movement and sight
+  CRATE: 7,  // blocks movement and sight
+  CONTAINER: 8, // blocks movement and sight
 };
 function isSolidTile(t) {
   return t === TileType.WALL || t === TileType.PILLAR ||
-         t === TileType.LOW_WALL || t === TileType.CRATE;
+         t === TileType.LOW_WALL || t === TileType.CRATE ||
+         t === TileType.CONTAINER;
 }
 
   let gameLoopId = null;
@@ -1552,6 +1554,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawDoors(timestamp);
 //  drawVisionCones(); // hide this in final version
     drawPlayer(timestamp);
+    drawContainers(true); 
     drawChargeBar();
     drawItems(timestamp);
     drawProjectiles();
@@ -1660,7 +1663,7 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
           }
           continue;
         }
-if (tile === TileType.PILLAR || tile === TileType.CRATE || tile === TileType.LOW_WALL) {
+if (tile === TileType.PILLAR || tile === TileType.CRATE || tile === TileType.LOW_WALL || tile === TileType.CONTAINER) {
   if (art) context.drawImage(art.floor, tx, ty);
   else { context.fillStyle = "#9ca3af"; context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE); }
   drawCoverTile(tile, tx, ty);
@@ -1824,9 +1827,11 @@ function drawItems(timestamp = performance.now()) {
   }
 }
 
-  function drawContainers() {
+  function drawContainers(inFront = false) {
     if (!gameState || !gameState.containers) return;
+    const feetY = gameState.player.y + 0.9;
     for (const c of gameState.containers) {
+      if ((c.y + 0.9 > feetY) !== inFront) continue;   // NEW
       const px = c.x * TILE_SIZE;
       const py = c.y * TILE_SIZE;
       context.globalAlpha = c.searched ? 0.55 : 1;
@@ -2166,7 +2171,7 @@ function updateTraps(timestamp) {
     const ty = Math.floor(y);
     if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return true;
     const t = gameState.map[ty][tx];
-    if (t === TileType.WALL || t === TileType.PILLAR || t === TileType.CRATE) return true;
+    if (t === TileType.WALL || t === TileType.PILLAR || t === TileType.CRATE || t === TileType.CONTAINER) return true;
     return !ignoreDoors && isDoorClosedAt(tx, ty);
   }
 
@@ -3092,7 +3097,7 @@ function localizePatrol(e) {
 }
 
 function giveDungeonRoute(e, rooms) {
-  const pool = shuffleInPlace(rooms.slice()).slice(0, ROAMER_ROOM_COUNT);
+  const open = roomPerimeter(room).filter((t) => map[t.y][t.x] === TileType.FLOOR);
   const route = [];
   let cur = { x: e.x, y: e.y };
   while (pool.length) {
@@ -3100,7 +3105,7 @@ function giveDungeonRoute(e, rooms) {
       Math.hypot(a.x + a.w / 2 - cur.x, a.y + a.h / 2 - cur.y) -
       Math.hypot(b.x + b.w / 2 - cur.x, b.y + b.h / 2 - cur.y));
     const room = pool.shift();
-    const t = pickOne(roomPerimeter(room));
+    const t = pickOne(open.length ? open : roomPerimeter(room));
     route.push({ x: t.x, y: t.y, wait: spawnRand(800, 2000) });
     cur = t;
   }
@@ -3112,8 +3117,8 @@ function giveDungeonRoute(e, rooms) {
 }
 
 // Only torch carriers roam the whole dungeon; everyone else keeps their room job.
-function assignTorchesAndRoutes(enemies, rooms) {
-  for (const e of enemies) {
+function assignTorchesAndRoutes(enemies, rooms, map) {
+  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms, map);
     e.hasTorch = Math.random() < ENEMY_TORCH_CHANCE;
     e.torchLit = e.hasTorch;
   }
@@ -4110,7 +4115,7 @@ function placeCover(rooms, map, reserved) {
   // CONTAINERS
   // ---------------------------------------------------------------------------
   const CONTAINERS_PER_ROOM_MIN = 0;
-  const CONTAINERS_PER_ROOM_MAX = 2;
+  const CONTAINERS_PER_ROOM_MAX = 4;
   const CONTAINER_INTERACT_DIST = 1.5;
   const CONTAINER_MESSAGE_MS = 2500;
 
@@ -4176,7 +4181,7 @@ function placeCover(rooms, map, reserved) {
       placement: "center",
       color: "#854d0e",
       searchMs: 1200,
-      spawnWeight: 3,
+      spawnWeight: 6,
       loot: [
         { weight: 20, items: [] }, // add crafting items here
         { weight: 50, items: [{ id: ["stone", "bottle"], min: 1, max: 3 }] },
@@ -5844,6 +5849,15 @@ function placeCover(rooms, map, reserved) {
       [...doors, ...brokenDoors],
       [...items, ...stairs]
     );
+        // Containers are solid. Drop any that would split their room in two.
+    for (let i = containers.length - 1; i >= 0; i--) {
+      const c = containers[i];
+      newMap[c.y][c.x] = TileType.CONTAINER;
+      if (!roomStaysConnected(c.room, newMap)) {
+        newMap[c.y][c.x] = TileType.FLOOR;
+        containers.splice(i, 1);
+      }
+    }
     const reserved = new Set();
     const reserve = (x, y) => reserved.add(`${x},${y}`);
     for (const it of items) reserve(it.x, it.y);
@@ -5863,7 +5877,7 @@ function placeCover(rooms, map, reserved) {
       [...items, ...containers],
       stairs
     );
-    assignTorchesAndRoutes(enemies, rooms);
+    assignTorchesAndRoutes(enemies, rooms, newMap);
     return {
       map: newMap,
       rooms: rooms,
