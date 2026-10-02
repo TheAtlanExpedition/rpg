@@ -47,16 +47,14 @@
 
   let zoom = 1;
 
-  const TileType = {
-    WALL: 0,
-    FLOOR: 1,
-    DOOR: 2,
-    TRAP: 3,
-    SWITCH: 4,
-    PILLAR: 5,
-  };
-  function isSolidTile(t) {
-  return t === TileType.WALL || t === TileType.PILLAR;
+const TileType = {
+  WALL: 0, FLOOR: 1, DOOR: 2, TRAP: 3, SWITCH: 4, PILLAR: 5,
+  LOW_WALL: 6,   // blocks movement, NOT sight (crouch behind it to hide)
+  CRATE: 7,      // blocks movement and sight
+};
+function isSolidTile(t) {
+  return t === TileType.WALL || t === TileType.PILLAR ||
+         t === TileType.LOW_WALL || t === TileType.CRATE;
 }
 
   let gameLoopId = null;
@@ -301,6 +299,78 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
   const movementKeys = new Set(["w", "a", "s", "d"]);
   const heldGaitKeys = { sneak: false, run: false };
 
+
+  // ---------------------------------------------------------------------------
+// STEALTH: CONSTANTS
+// ---------------------------------------------------------------------------
+const AMBIENT_DARKNESS = 0.82;        // 0 = bright, 1 = pitch black
+const LIGHT_RAYS = 48;
+const WALL_TORCH_RADIUS = 4.5;
+const PLAYER_TORCH_RADIUS = 4;
+const ENEMY_TORCH_RADIUS = 3.5;
+const FLOOR_TORCH_RADIUS = 3;
+const FLOOR_TORCH_MS = 20000;
+const PLAYER_NIGHT_VISION = 1.8;      // visual only, doesn't count as light for detection
+const LIGHT_LIT_FRACTION = 0.85;      // how far into a light's radius you count as "lit"
+const SHADOW_SIGHT_RANGE = 1.8;       // crouched in shadow: noticed only this close
+const SHADOW_SIGHT_RANGE_ALERT = 3;
+const WALL_TORCH_INTERACT_DIST = 1.1;
+const WALL_TORCH_LIT_CHANCE = 0.7;
+const TORCH_NOTICE_RADIUS = 8;        // enemies this close investigate a torch going out
+
+const ENEMY_TORCH_CHANCE = 0.4;
+const ROAMER_ROOM_COUNT = 5;
+const ROAMER_DOOR_REACH = 1.2;
+const ENEMY_THROW_MIN = 2.5;
+const ENEMY_THROW_RANGE = 6;
+const ENEMY_THROW_COOLDOWN_MS = 4000;
+
+const THROW_SPEED = 9;                // tiles/sec
+const THROW_RANGE = 7;
+const THROW_COOLDOWN_MS = 500;
+const WATER_SPLASH_RADIUS = 1.4;
+const TORCH_HIT_DAMAGE = 12;
+
+const THROWABLES = {
+  stone:      { color: "#a8a29e", noise: 6, recover: true },
+  bottle:     { color: "#86efac", noise: 9, recover: false },
+  waterFlask: { color: "#38bdf8" },
+  torch:      { color: "#f59e0b" },
+};
+
+function makePlaceholderSprite(color) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 16;
+  const g = c.getContext("2d");
+  g.fillStyle = "#000"; g.fillRect(2, 2, 12, 12);
+  g.fillStyle = color;  g.fillRect(3, 3, 10, 10);
+  c.complete = true; c.naturalWidth = 16; // so your existing draw code accepts it
+  return c;
+}
+for (const [id, def] of Object.entries(THROWABLES)) {
+  ITEM_ANIMATIONS[id] = {
+    image: makePlaceholderSprite(def.color),
+    frames: 1, frameWidth: 16, frameHeight: 16, worldScale: 1,
+  };
+}
+
+const lightCanvas = document.createElement("canvas");
+lightCanvas.width = canvas.width;
+lightCanvas.height = canvas.height;
+const lightCtx = lightCanvas.getContext("2d");
+
+let playerLitCache = false;
+let lastThrownTime = null;
+let lastThrowTime = -Infinity;
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
   // ---------------------------------------------------------------------------
   // PLAYER SPRITESHEET (8 directions)
   // ---------------------------------------------------------------------------
@@ -447,12 +517,15 @@ function useStairs(stair) {
   target.player = player;
   target.inventory = from.inventory;
   target.armedScroll = from.armedScroll;
+  target.armedThrowable = from.armedThrowable;
   player.x = arrival.x;
   player.y = arrival.y;
   player.hidden = false;
   player.hidingSpot = null;
 
   from.projectiles.length = 0;
+  if (from.thrown) from.thrown.length = 0;
+  if (target.thrown) target.thrown.length = 0;
   target.projectiles.length = 0;
   noiseRipples.length = 0;
   calmEnemies(target);
@@ -599,6 +672,8 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   let lastFootstepTime = -Infinity;
   const noiseRipples = [];
 
+
+
   // ---------------------------------------------------------------------------
   // HIDING
   // ---------------------------------------------------------------------------
@@ -647,6 +722,13 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   // INPUT
   // ---------------------------------------------------------------------------
   // Inventory keys
+
+  window.addEventListener("keydown", (event) => {
+  if (event.repeat || !gameRunning || !gameState) return;
+  if (event.code === "KeyF") playerThrow();
+  if (event.code === "KeyT" && !inventoryOpen && !gameState.player.hidden) togglePlayerTorch();
+});
+
   window.addEventListener("keydown", (event) => {
   if (event.code !== "KeyE" || event.repeat) return;
   if (!gameRunning || !gameState) return;
@@ -659,6 +741,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
     toggleHide();
     return;
   }
+  if (toggleNearbyWallTorch()) return;
   if (startContainerSearch()) return;
   toggleNearbyDoor();
 });
@@ -677,12 +760,11 @@ window.addEventListener("keyup", (event) => {
 
   window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
-    if (event.key === "c") heldGaitKeys.sneak = true;
-    if (event.code === "ShiftLeft") heldGaitKeys.run = true;
+    if (event.code === "KeyC") heldGaitKeys.sneak = !heldGaitKeys.sneak;
+    if (event.code === "ShiftLeft") { heldGaitKeys.run = true; heldGaitKeys.sneak = false; }
   });
 
   window.addEventListener("keyup", (event) => {
-    if (event.key === "c") heldGaitKeys.sneak = false;
     if (event.code === "ShiftLeft") heldGaitKeys.run = false;
   });
 
@@ -836,9 +918,11 @@ function directionFromVector(dx, dy) {
   return DIRS_BY_OCTANT[octant];
 }
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
 canvas.addEventListener("mousedown", (event) => {
   if (event.button == 2) {
     chargeStart = null;
+    if (gameRunning && gameState) playerThrow();
     return;
   }
   if (!gameRunning || !gameState) return;
@@ -918,6 +1002,8 @@ window.addEventListener("blur", () => {
   function stopGame3() {
     gameRunning = false;
     heldMoveKeys.clear();
+    hudEl.style.display = "none";
+    miniEl.style.display = "none";
     if (gameLoopId) {
       cancelAnimationFrame(gameLoopId);
       gameLoopId = null;
@@ -963,8 +1049,10 @@ window.addEventListener("blur", () => {
     updateFreePlayerMovement(timestamp);
     revealMinimapView();
     updateTraps(timestamp);
+    updateStealth();
     updateEnemies(timestamp);
     updateProjectiles(timestamp);
+    updateThrown(timestamp);
     updateEffects(timestamp);
     pickupNearbyItems();
     updateContainerSearch();
@@ -1198,7 +1286,7 @@ if (sneak) {
     if (tileX < 0 || tileX >= MAP_WIDTH || tileY < 0 || tileY >= MAP_HEIGHT) {
       return false;
     }
-    return gameState.map[tileY][tileX] !== TileType.WALL;
+    return !isSolidTile(gameState.map[tileY][tileX]);
   }
   // Walkable, and (optionally) not a trap tile.
 function isNavTile(tileX, tileY, avoidTraps = false) {
@@ -1468,9 +1556,12 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
+    drawStealthWorld();
     drawEffects(timestamp, "air"); 
+    drawLighting(timestamp);
     drawHidePrompt();
     drawContainerPrompt(); 
+    drawStealthUI();
     
 
     context.restore();
@@ -1569,13 +1660,10 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
           }
           continue;
         }
-if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
-  if (art) {
-    context.drawImage(art.floor, tx, ty);
-  } else {
-    context.fillStyle = "#9ca3af";
-    context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-  }
+if (tile === TileType.PILLAR || tile === TileType.CRATE || tile === TileType.LOW_WALL) {
+  if (art) context.drawImage(art.floor, tx, ty);
+  else { context.fillStyle = "#9ca3af"; context.fillRect(tx, ty, TILE_SIZE, TILE_SIZE); }
+  drawCoverTile(tile, tx, ty);
   continue;
 }
         if (tile === TileType.TRAP) context.fillStyle = "#7f1d1d";
@@ -1594,60 +1682,43 @@ if (tile === TileType.FLOOR || tile === TileType.PILLAR) {
 
 let minimapVisible = true;
 function drawMiniMap() {
-  if (!minimapVisible) return;
-  if (!gameState || !gameState.player) return;
-
-  
+  if (!minimapVisible || !gameState || !gameState.player) {
+    miniEl.style.display = "none";
+    return;
+  }
   const map = gameState.map;
   if (!map || !map.length || !map[0].length) return;
 
   const mapWidth = map[0].length;
   const mapHeight = map.length;
+  const cell = Math.min(MINI_SIZE / mapWidth, MINI_SIZE / mapHeight);
 
-  const minimapSize = 160;
-  const padding = 12;
-  const cellSize = Math.min(
-    minimapSize / mapWidth,
-    minimapSize / mapHeight
-  );
+  const r = canvas.getBoundingClientRect();
+  miniEl.style.display = "block";
+  miniEl.style.left = r.right - MINI_SIZE - 8 + "px";
+  miniEl.style.top = r.top + 8 + "px";
 
-  const width = mapWidth * cellSize;
-  const height = mapHeight * cellSize;
-  const offsetX = canvas.width + width + padding + 150;
-  const offsetY = padding;
+  const g = miniCtx;
+  g.setTransform(miniDpr, 0, 0, miniDpr, 0, 0);
+  g.clearRect(0, 0, MINI_SIZE, MINI_SIZE);
+  g.fillStyle = "rgba(0, 0, 0, 0.45)";
+  g.fillRect(0, 0, MINI_SIZE, MINI_SIZE);
 
-  context.save();
-
-
-  // Only draw walkable tiles; walls stay transparent
+  // Only explored floor and cover tiles; walls stay transparent.
+  g.fillStyle = "#bebebe";
   for (let y = 0; y < mapHeight; y++) {
     for (let x = 0; x < mapWidth; x++) {
-      const tile = map[y][x];
-                  if (tile !== 1) continue;
+      if (map[y][x] === TileType.WALL) continue;
       if (!gameState.explored.has(y * MAP_WIDTH + x)) continue;
-
-      const x0 = offsetX + x * cellSize;
-      const y0 = offsetY + y * cellSize;
-
-      context.fillStyle = "#bebebe"; // background under the floor
-      context.fillRect(x0, y0, cellSize + 1, cellSize + 1);
+      g.fillRect(x * cell, y * cell, cell + 1, cell + 1);
     }
   }
 
   const player = gameState.player;
-
-  context.fillStyle = "#00ff66";
-  context.beginPath();
-  context.arc(
-    offsetX + player.x * cellSize,
-    offsetY + player.y * cellSize,
-    Math.max(2, cellSize * 0.35),
-    0,
-    Math.PI * 2
-  );
-  context.fill();
-
-  context.restore();
+  g.fillStyle = "#00ff66";
+  g.beginPath();
+  g.arc(player.x * cell, player.y * cell, Math.max(2, cell * 0.35), 0, Math.PI * 2);
+  g.fill();
 }
 
 function drawChargeBar() {
@@ -2064,6 +2135,7 @@ function updateTraps(timestamp) {
     for (const e of enemiesHit) {
       e.hp -= TRAP_ENEMY_DAMAGE;
       if (e.hp <= 0) {
+        dropEnemyTorch(e);
         enemies.splice(enemies.indexOf(e), 1);
         continue;
       }
@@ -2078,9 +2150,7 @@ function updateTraps(timestamp) {
 // ---------------------------------------------------------------------------
   // ENEMY AI
   // ---------------------------------------------------------------------------
-  function isPlayerInLight() {
-    return false;
-  }
+
 
   function enemyCenter(e) {
     return { x: e.x + 0.5, y: e.y + 0.5 };
@@ -2095,7 +2165,8 @@ function updateTraps(timestamp) {
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return true;
-    if (gameState.map[ty][tx] === TileType.WALL) return true;
+    const t = gameState.map[ty][tx];
+    if (t === TileType.WALL || t === TileType.PILLAR || t === TileType.CRATE) return true;
     return !ignoreDoors && isDoorClosedAt(tx, ty);
   }
 
@@ -2219,7 +2290,8 @@ function updateTraps(timestamp) {
       Math.floor(e.y + 0.5),
       Math.floor(gx + 0.5),
       Math.floor(gy + 0.5),
-      avoid
+      avoid,
+      e.role === "roamer" && e.state === "patrol"
     );
     if (!path || path.length === 0) {
       return { x: gx, y: gy, isGoal: true };
@@ -2539,11 +2611,23 @@ function updateTraps(timestamp) {
     e.canSeePlayer = false;
     let seenOuter = false;
 
-    const sightRange =
+    let sightRange =
       e.state === "alert" ? ALERT_SIGHT_RANGE : ENEMY_OUTER_RANGE;
+
+    // Crouched in shadow: only noticed from very close.
+    if (p.gait === "sneak" && !isPlayerInLight()) {
+      sightRange = Math.min(
+        sightRange,
+        e.state === "alert" ? SHADOW_SIGHT_RANGE_ALERT : SHADOW_SIGHT_RANGE
+      );
+    }
+    // Crouched behind a low wall: can't be seen across it.
+    const behindLowWall =
+      p.gait === "sneak" && isCoveredByLowWall(ec.x, ec.y, pc.x, pc.y);
 
     if (
       !playerHidden &&
+      !behindLowWall &&
       dist <= sightRange &&
       hasLineOfSight(ec.x, ec.y, pc.x, pc.y)
     ) {
@@ -2659,10 +2743,14 @@ function updateTraps(timestamp) {
           return;
         }
       }
-
-      if (e.canSeePlayer && bodyDist(e, p) <= ENEMY_MELEE_REACH) {
+            if (e.canSeePlayer && bodyDist(e, p) <= ENEMY_MELEE_REACH) {
         onEnemyReachedPlayer(e, now);
       }
+
+   /*   if (e.canSeePlayer && e.hasTorch && e.torchLit && now >= (e.nextThrowTime ?? 0)) {
+        const d = bodyDist(e, p);
+        if (d >= ENEMY_THROW_MIN && d <= ENEMY_THROW_RANGE) enemyThrowTorch(e, now);
+      } */  // ADD if torch thrown + hit playeer = burn THEN pick up torch if player leaves line of sight.
 
       if (e.searching && !e.canSeePlayer) {
         updateSearch(e, dt, now);
@@ -2733,6 +2821,8 @@ function updateTraps(timestamp) {
         e.waitTimer -= dt * 1000;
         lookAround(e, now);
       } else {
+        if (e.role === "roamer") openDoorAhead(e);
+        if (e.role === "roamer" && tendTorches(e, dt)) return;  
         const wp = e.patrol[e.patrolIndex];
 
         if (steerToward(e, wp.x, wp.y, ENEMY_SPEED.patrol, dt)) {
@@ -2863,14 +2953,541 @@ function updateTraps(timestamp) {
     }
   }
 // ---------------------------------------------------------------------------
+// STEALTH: THROWING
+// ---------------------------------------------------------------------------
+function getThrowTarget() {
+  const m = getMouseWorldTile();
+  if (!m || !gameState) return null;
+  const p = gameState.player;
+  let tx = m.x - 0.5, ty = m.y - 0.5; // entity coords are top-left of the tile
+  const dx = tx - p.x, dy = ty - p.y;
+  const len = Math.hypot(dx, dy);
+  if (len > THROW_RANGE) { tx = p.x + (dx / len) * THROW_RANGE; ty = p.y + (dy / len) * THROW_RANGE; }
+  return { x: tx, y: ty };
+}
+
+function spawnThrown(kind, owner, fx, fy, tx, ty, lit = false) {
+  const dx = tx - fx, dy = ty - fy;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.01) return;
+  const dist = Math.min(len, THROW_RANGE);
+  (gameState.thrown ||= []).push({
+    kind, owner, lit, x: fx, y: fy,
+    dx: dx / len, dy: dy / len, left: dist, total: dist,
+  });
+}
+
+function playerThrow() {
+  if (!gameState || gameState.gameOver || inventoryOpen) return;
+  const p = gameState.player;
+  if (p.hidden) return;
+
+  const type = gameState.armedThrowable;
+  if (!type) { showHint("Select a throwable in the inventory"); return; }
+
+  const now = performance.now();
+  if (now - lastThrowTime < THROW_COOLDOWN_MS) return;
+  const target = getThrowTarget();
+  if (!target) return;
+  if (!takeScroll(type)) { gameState.armedThrowable = null; return; }
+
+  lastThrowTime = now;
+  const wasLit = type === "torch" && p.torchLit;
+  if (!scrollCount(type)) gameState.armedThrowable = null;
+  if (type === "torch" && !scrollCount("torch")) p.torchLit = false;
+
+  p.direction = directionFromVector(target.x - p.x, target.y - p.y);
+  spawnThrown(type, "player", p.x, p.y, target.x, target.y, wasLit);
+}
+
+function dropItemAt(idName, x, y, mustMoveAway = true) {
+  gameState.items.push({
+    id: `${idName}-${Math.round(performance.now())}`,
+    idName, type: idName, x, y, mustMoveAway,
+  });
+}
+
+function updateThrown(timestamp) {
+  const list = gameState && gameState.thrown;
+  if (!list || list.length === 0) return;
+  const dt = lastThrownTime === null ? 0 : Math.min((timestamp - lastThrownTime) / 1000, 0.05);
+  lastThrownTime = timestamp;
+  const p = gameState.player;
+
+  for (let i = list.length - 1; i >= 0; i--) {
+    const t = list[i];
+    const total = Math.min(THROW_SPEED * dt, t.left);
+    const steps = Math.max(1, Math.ceil(total / 0.2));
+    const step = total / steps;
+    let landed = false;
+
+    for (let s = 0; s < steps; s++) {
+      const nx = t.x + t.dx * step;
+      const ny = t.y + t.dy * step;
+      if (isWallAt(nx + 0.5, ny + 0.5)) { landed = true; break; }
+      t.x = nx; t.y = ny;
+      if (t.owner === "player" &&
+          gameState.enemies.some((e) => Math.hypot(e.x - nx, e.y - ny) < 0.55)) { landed = true; break; }
+      if (t.owner === "enemy" && !p.hidden && Math.hypot(p.x - nx, p.y - ny) < 0.55) { landed = true; break; }
+    }
+    t.left -= total;
+
+    if (landed || t.left <= 0.001) {
+      list.splice(i, 1);
+      landThrown(t, timestamp);
+    }
+  }
+}
+
+function landThrown(t, now) {
+  const p = gameState.player;
+  const fx = (gameState.effects ||= []);
+
+  if (t.kind === "waterFlask") {
+    douseNear(t.x, t.y, WATER_SPLASH_RADIUS);
+    makeNoise(t.x, t.y, 2, "#38bdf8");
+    fx.push({ kind: "burst", x: t.x, y: t.y, radius: WATER_SPLASH_RADIUS,
+              color: "#38bdf8", start: now, until: now + 350 });
+    return;
+  }
+
+  if (t.kind === "torch") {
+    if (t.owner === "player") {
+      for (const e of gameState.enemies.slice()) {
+        if (Math.hypot(e.x - t.x, e.y - t.y) < 0.9) hurtEnemy(e, TORCH_HIT_DAMAGE, now);
+      }
+    } else if (!p.hidden && Math.hypot(p.x - t.x, p.y - t.y) < 0.9) {
+      damagePlayer(TORCH_HIT_DAMAGE);
+    }
+    if (t.lit) {
+      (gameState.floorTorches ||= []).push({
+        x: t.x, y: t.y, until: performance.now() + FLOOR_TORCH_MS, seed: Math.random() * 10,
+      });
+      makeNoise(t.x, t.y, 5, "#fb923c");
+    } else {
+      dropItemAt("torch", t.x, t.y);
+    }
+    return;
+  }
+
+  // stone / bottle: pure distraction
+  const def = THROWABLES[t.kind];
+  makeNoise(t.x, t.y, def.noise, def.color);
+  for (const e of gameState.enemies) {
+    if (Math.hypot(e.x - t.x, e.y - t.y) < 0.6) stunEnemy(e, now, 500);
+  }
+  if (def.recover) dropItemAt(t.kind, t.x, t.y);
+}
+
+// ---------------------------------------------------------------------------
+// STEALTH: ENEMY TORCHES / ROAMERS
+// ---------------------------------------------------------------------------
+function localizePatrol(e) {
+  if (e.role !== "roamer") return;
+  e.role = "idler";
+  e.patrol = [{ x: Math.round(e.x), y: Math.round(e.y), wait: 3000 }];
+  e.patrolIndex = 0;
+  e.holdFacing = e.facing;
+  e.baseFacing = e.facing;
+}
+
+function giveDungeonRoute(e, rooms) {
+  const pool = shuffleInPlace(rooms.slice()).slice(0, ROAMER_ROOM_COUNT);
+  const route = [];
+  let cur = { x: e.x, y: e.y };
+  while (pool.length) {
+    pool.sort((a, b) =>
+      Math.hypot(a.x + a.w / 2 - cur.x, a.y + a.h / 2 - cur.y) -
+      Math.hypot(b.x + b.w / 2 - cur.x, b.y + b.h / 2 - cur.y));
+    const room = pool.shift();
+    const t = pickOne(roomPerimeter(room));
+    route.push({ x: t.x, y: t.y, wait: spawnRand(800, 2000) });
+    cur = t;
+  }
+  e.role = "roamer";
+  e.patrol = route;
+  e.patrolIndex = 0;
+  e.holdFacing = null;
+  e.lookSweep = 0.9;
+}
+
+// Only torch carriers roam the whole dungeon; everyone else keeps their room job.
+function assignTorchesAndRoutes(enemies, rooms) {
+  for (const e of enemies) {
+    e.hasTorch = Math.random() < ENEMY_TORCH_CHANCE;
+    e.torchLit = e.hasTorch;
+  }
+  if (enemies.length > 0 && !enemies.some((e) => e.hasTorch)) {
+    const e = pickOne(enemies);
+    e.hasTorch = e.torchLit = true;
+  }
+  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms);
+}
+
+function openDoorAhead(e) {
+  for (const d of gameState.doors) {
+    if (!d.open && Math.hypot(d.x - e.x, d.y - e.y) <= ROAMER_DOOR_REACH) d.open = true;
+  }
+}
+
+function enemyThrowTorch(e, now) {
+  const p = gameState.player;
+  e.nextThrowTime = now + ENEMY_THROW_COOLDOWN_MS;
+  spawnThrown("torch", "enemy", e.x, e.y, p.x, p.y, true);
+  e.hasTorch = false;
+  e.torchLit = false;
+  localizePatrol(e);
+  stunEnemy(e, now, 400);
+}
+
+function dropEnemyTorch(e) {
+  if (e.hasTorch) dropItemAt("torch", e.x, e.y, false);
+}
+
+// ---------------------------------------------------------------------------
+// STEALTH: LIGHTING
+// ---------------------------------------------------------------------------
+function playerHasLitTorch() {
+  const p = gameState && gameState.player;
+  return !!(p && p.torchLit && scrollCount("torch") > 0);
+}
+
+// forDrawing = also include the player's small "night vision" glow.
+function getLightSources(forDrawing = false) {
+  const out = [];
+  if (!gameState) return out;
+  const now = performance.now();
+
+  for (const w of gameState.torches || []) {
+    if (!w.lit) continue;
+    out.push({ x: w.x + 0.5 + w.dx * 0.3, y: w.y + 0.5 + w.dy * 0.3,
+               radius: WALL_TORCH_RADIUS, seed: w.seed });
+  }
+  for (const f of gameState.floorTorches || []) {
+    const fade = Math.min(1, (f.until - now) / 2000);
+    out.push({ x: f.x + 0.5, y: f.y + 0.5,
+               radius: FLOOR_TORCH_RADIUS * Math.max(0.3, fade), seed: f.seed });
+  }
+  for (const e of gameState.enemies || []) {
+    if (e.hasTorch && e.torchLit) {
+      out.push({ x: e.x + 0.5, y: e.y + 0.5, radius: ENEMY_TORCH_RADIUS, seed: 1.7 });
+    }
+  }
+  const p = gameState.player;
+  if (p && !p.hidden) {
+    if (playerHasLitTorch()) {
+      out.push({ x: p.x + 0.5, y: p.y + 0.5, radius: PLAYER_TORCH_RADIUS, seed: 0.3 });
+    } else if (forDrawing) {
+      out.push({ x: p.x + 0.5, y: p.y + 0.5, radius: PLAYER_NIGHT_VISION, seed: 0, steady: true });
+    }
+  }
+  return out;
+}
+
+function computePlayerLit() {
+  const p = gameState.player;
+  if (p.hidden) return false;
+  if (playerHasLitTorch()) return true;
+  const pc = playerCenter();
+  for (const l of getLightSources()) {
+    if (Math.hypot(l.x - pc.x, l.y - pc.y) > l.radius * LIGHT_LIT_FRACTION) continue;
+    if (hasLineOfSight(l.x, l.y, pc.x, pc.y)) return true; // closed doors/pillars block light
+  }
+  return false;
+}
+
+function updateStealth() {
+  if (!gameState || !gameState.player) return;
+  const now = performance.now();
+  const ft = gameState.floorTorches;
+  if (ft) for (let i = ft.length - 1; i >= 0; i--) if (now >= ft[i].until) ft.splice(i, 1);
+  playerLitCache = computePlayerLit();
+}
+
+function isCoveredByLowWall(ax, ay, bx, by) {
+  const dist = Math.hypot(bx - ax, by - ay);
+  if (dist < 1.2) return false; // right next to it you can see over
+  const steps = Math.ceil(dist / 0.2);
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const tx = Math.floor(ax + (bx - ax) * t);
+    const ty = Math.floor(ay + (by - ay) * t);
+    if (tx < 0 || ty < 0 || tx >= MAP_WIDTH || ty >= MAP_HEIGHT) continue;
+    if (gameState.map[ty][tx] === TileType.LOW_WALL) return true;
+  }
+  return false;
+}
+
+function drawLighting(timestamp = performance.now()) {
+  const camera = getCamera();
+  const scale = Math.round(zoom) || 1;
+  const cx = Math.round(camera.x);
+  const cy = Math.round(camera.y);
+  const halfW = Math.floor(DISPLAY_WIDTH / 2);
+  const halfH = Math.floor(DISPLAY_HEIGHT / 2);
+  const g = lightCtx;
+
+  g.setTransform(devicePixelRatioValue, 0, 0, devicePixelRatioValue, 0, 0);
+  g.globalCompositeOperation = "source-over";
+  g.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  g.fillStyle = `rgba(4, 6, 16, ${AMBIENT_DARKNESS})`;
+  g.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  g.globalCompositeOperation = "destination-out";
+
+  for (const l of getLightSources(true)) {
+    const flick = l.steady ? 1 :
+      1 + Math.sin(timestamp / 110 + l.seed * 7) * 0.04 + Math.sin(timestamp / 53 + l.seed * 3) * 0.02;
+    const r = l.radius * flick;
+    const sx = (l.x * TILE_SIZE - cx) * scale + halfW;
+    const sy = (l.y * TILE_SIZE - cy) * scale + halfH;
+    const sr = r * TILE_SIZE * scale;
+    if (![sx, sy, sr].every(Number.isFinite)) {
+      if (!drawLighting.warned) {
+        drawLighting.warned = true;
+        console.warn("Bad light:", { l, sx, sy, sr, cx, cy, scale, flick });
+      }
+      continue;
+    }
+    if (sx + sr < 0 || sy + sr < 0 || sx - sr > DISPLAY_WIDTH || sy - sr > DISPLAY_HEIGHT) continue;
+
+    const grad = g.createRadialGradient(sx, sy, sr * 0.1, sx, sy, sr);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(0.6, "rgba(0,0,0,0.6)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+
+    // Wall-aware light: polygon from rays, pushed half a tile into walls so wall faces are lit.
+    g.beginPath();
+    for (let i = 0; i < LIGHT_RAYS; i++) {
+      const a = (i / LIGHT_RAYS) * Math.PI * 2;
+      const d = Math.min(r, castRay(l.x, l.y, a, r) + 0.55);
+      const px = sx + Math.cos(a) * d * TILE_SIZE * scale;
+      const py = sy + Math.sin(a) * d * TILE_SIZE * scale;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fill();
+  }
+  g.globalCompositeOperation = "source-over";
+
+  // Draw the darkness layer in world space so it lines up with the camera.
+  context.drawImage(
+    lightCanvas, 0, 0, lightCanvas.width, lightCanvas.height,
+    cx - halfW / scale, cy - halfH / scale,
+    DISPLAY_WIDTH / scale, DISPLAY_HEIGHT / scale
+  );
+}
+
+// ---------------------------------------------------------------------------
+// STEALTH: TORCH INTERACTION
+// ---------------------------------------------------------------------------
+function showHint(text, ms = 1800) {
+  if (gameState) gameState.hint = { text, until: performance.now() + ms };
+}
+
+function getNearbyWallTorch() {
+  if (!gameState || !gameState.torches) return null;
+  const pc = playerCenter();
+  let best = null, bd = WALL_TORCH_INTERACT_DIST;
+  for (const w of gameState.torches) {
+    const d = Math.hypot(w.x + 0.5 - pc.x, w.y + 0.5 - pc.y);
+    if (d <= bd) { best = w; bd = d; }
+  }
+  return best;
+}
+
+// Returns true if it handled the E press.
+function toggleNearbyWallTorch() {
+  const w = getNearbyWallTorch();
+  if (!w) return false;
+  if (w.lit) {
+    w.lit = false;
+    torchWentOut(w.x, w.y);
+  } else if (playerHasLitTorch()) {
+    w.lit = true;
+  } else {
+    showHint("Needs a flame to relight");
+  }
+  return true;
+}
+
+function isNearFlame() {
+  const pc = playerCenter();
+  for (const w of gameState.torches || []) {
+    if (w.lit && Math.hypot(w.x + 0.5 - pc.x, w.y + 0.5 - pc.y) < 1.6) return true;
+  }
+  for (const f of gameState.floorTorches || []) {
+    if (Math.hypot(f.x + 0.5 - pc.x, f.y + 0.5 - pc.y) < 1.6) return true;
+  }
+  return false;
+}
+
+function togglePlayerTorch() {
+  const p = gameState.player;
+  if (scrollCount("torch") === 0) { showHint("You have no torch"); return; }
+  if (p.torchLit) { p.torchLit = false; return; }
+  if (!isNearFlame()) { showHint("Light it from a burning torch"); return; }
+  p.torchLit = true;
+}
+function nearestLitFlame(e) {
+  let best = null, bd = Infinity;
+  const consider = (x, y) => {
+    const d = Math.hypot(x - e.x, y - e.y);
+    if (d < bd) { bd = d; best = { x, y }; }
+  };
+  for (const w of gameState.torches || []) if (w.lit) consider(w.x, w.y);
+  for (const f of gameState.floorTorches || []) consider(f.x, f.y);
+  return best;
+}
+
+// Returns true while the enemy is busy walking to a flame.
+function tendTorches(e, dt) {
+  if (!e.hasTorch) return false;
+
+  // Torch burning: relight any dead wall torch it walks past.
+  if (e.torchLit) {
+    for (const w of gameState.torches || []) {
+      if (!w.lit && Math.hypot(w.x - e.x, w.y - e.y) <= 1.2) w.lit = true;
+    }
+    return false;
+  }
+
+  // Torch out: go to the nearest burning torch and relight from it.
+  const flame = nearestLitFlame(e);
+  if (!flame) return false; // nothing burning anywhere, keep patrolling in the dark
+  if (Math.hypot(flame.x - e.x, flame.y - e.y) <= 1.2) {
+    e.torchLit = true;
+    return false;
+  }
+  steerToward(e, flame.x, flame.y, ENEMY_SPEED.patrol, dt, 1);
+  return true;
+}
+// Enemies close to a torch that just went out go and look.
+function torchWentOut(x, y) {
+  for (const e of gameState.enemies) {
+    if (e.state === "alert") continue;
+    if (Math.hypot(e.x - x, e.y - y) <= TORCH_NOTICE_RADIUS) startInvestigating(e, x, y);
+  }
+}
+
+// Water: puts out wall torches, floor torches and enemy torches in the splash.
+function douseNear(x, y, r) {
+  for (const w of gameState.torches || []) {
+    if (w.lit && Math.hypot(w.x - x, w.y - y) <= r) { w.lit = false; torchWentOut(w.x, w.y); }
+  }
+  const ft = gameState.floorTorches || [];
+  for (let i = ft.length - 1; i >= 0; i--) {
+    if (Math.hypot(ft[i].x - x, ft[i].y - y) <= r) { const f = ft.splice(i, 1)[0]; torchWentOut(f.x, f.y); }
+  }
+  for (const e of gameState.enemies) {
+    if (e.hasTorch && e.torchLit && Math.hypot(e.x - x, e.y - y) <= r) {
+      e.torchLit = false;
+      startInvestigating(e, x, y);
+    }
+  }
+  const p = gameState.player;
+  if (p.torchLit && Math.hypot(p.x - x, p.y - y) <= r) p.torchLit = false;
+}
+
+// ---------------------------------------------------------------------------
+// STEALTH: DRAWING
+// ---------------------------------------------------------------------------
+function drawFlame(px, py, lit, now) {
+  context.fillStyle = "#44403c";
+  context.fillRect(px - 1, py, 3, 6);
+  if (!lit) return;
+  const h = 5 + Math.round(Math.sin(now / 80 + px) * 1.5);
+  context.fillStyle = "#f97316"; context.fillRect(px - 2, py - h, 5, h);
+  context.fillStyle = "#fde047"; context.fillRect(px - 1, py - h + 2, 3, h - 2);
+}
+
+function drawCoverTile(tile, tx, ty) {
+  if (tile === TileType.PILLAR) {
+    context.fillStyle = "#000"; context.fillRect(tx + 6, ty + 2, 20, 28);
+    context.fillStyle = "#78716c"; context.fillRect(tx + 7, ty + 3, 18, 26);
+    context.fillStyle = "#a8a29e"; context.fillRect(tx + 9, ty + 3, 4, 26);
+  } else if (tile === TileType.CRATE) {
+    context.fillStyle = "#000"; context.fillRect(tx + 3, ty + 3, 26, 26);
+    context.fillStyle = "#854d0e"; context.fillRect(tx + 4, ty + 4, 24, 24);
+    context.fillStyle = "#713f12";
+    context.fillRect(tx + 4, ty + 15, 24, 2);
+    context.fillRect(tx + 15, ty + 4, 2, 24);
+  } else if (tile === TileType.LOW_WALL) {
+    context.fillStyle = "#000"; context.fillRect(tx, ty + 11, TILE_SIZE, 16);
+    context.fillStyle = "#57534e"; context.fillRect(tx, ty + 12, TILE_SIZE, 14);
+    context.fillStyle = "#78716c"; context.fillRect(tx, ty + 12, TILE_SIZE, 4);
+  }
+}
+
+function drawStealthWorld(timestamp) {
+  if (!gameState) return;
+  const now = performance.now();
+
+  for (const w of gameState.torches || []) {
+    drawFlame(Math.round((w.x + 0.5) * TILE_SIZE + w.dx * 10),
+              Math.round((w.y + 0.5) * TILE_SIZE + w.dy * 10), w.lit, now);
+  }
+  for (const f of gameState.floorTorches || []) {
+    drawFlame(Math.round((f.x + 0.5) * TILE_SIZE), Math.round((f.y + 0.5) * TILE_SIZE + 6), true, now);
+  }
+  for (const e of gameState.enemies || []) {
+    if (!e.hasTorch) continue;
+    drawFlame(Math.round((e.x + 0.5) * TILE_SIZE + Math.cos(e.facing + 1.2) * 11),
+              Math.round((e.y + 0.5) * TILE_SIZE + Math.sin(e.facing + 1.2) * 11 + 4), e.torchLit, now);
+  }
+  for (const t of gameState.thrown || []) {
+    const prog = 1 - t.left / t.total;
+    const lift = Math.sin(Math.PI * prog) * 10;
+    const px = Math.round((t.x + 0.5) * TILE_SIZE);
+    const py = Math.round((t.y + 0.5) * TILE_SIZE);
+    context.fillStyle = "rgba(0,0,0,0.4)";
+    context.fillRect(px - 2, py + 3, 4, 2);
+    context.fillStyle = THROWABLES[t.kind].color;
+    context.fillRect(px - 2, Math.round(py - lift) - 2, 5, 5);
+  }
+}
+
+function drawStealthUI() {
+  if (!gameState || !gameState.player || inventoryOpen) return;
+  const p = gameState.player;
+  const now = performance.now();
+
+  if (gameState.hint && now < gameState.hint.until) {
+    drawContainerText(gameState.hint.text, (p.x + 0.5) * TILE_SIZE, p.y * TILE_SIZE - 22);
+  }
+  if (p.hidden) return;
+
+  const w = getNearbyWallTorch();
+  if (w) {
+    drawContainerText(w.lit ? "E: Snuff torch" : "E: Relight",
+                      (w.x + 0.5) * TILE_SIZE, w.y * TILE_SIZE - 8);
+  }
+  if (gameState.armedThrowable) {
+    const tg = getThrowTarget();
+    if (tg) {
+      context.strokeStyle = THROWABLES[gameState.armedThrowable].color;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.arc((tg.x + 0.5) * TILE_SIZE, (tg.y + 0.5) * TILE_SIZE, 5, 0, Math.PI * 2);
+      context.stroke();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
   // HIDING
   // ---------------------------------------------------------------------------
-  function isPlayerExposed(now) {
-    const p = gameState.player;
-    if (p.hidden) return false;
-    const moving = now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
-    return moving || isPlayerInLight();
-  }
+function isPlayerInLight() {
+  return playerLitCache;
+}
+
+function isPlayerExposed(now) {
+  const p = gameState.player;
+  if (p.hidden) return false;
+  if (isPlayerInLight()) return true;
+  if (p.gait === "sneak") return false; // crouched in shadow: invisible even while creeping
+  return now - (p.lastMovedTime ?? -Infinity) < PLAYER_EXPOSED_MS;
+}
 
   function distanceToHidingSpot(spot) {
     const p = playerCenter();
@@ -3340,6 +3957,155 @@ function updateTraps(timestamp) {
     return { x: door.x, y: door.y + side * off };
   }
 
+// ---------------------------------------------------------------------------
+// LEVEL GEN: WALL TORCHES
+// ---------------------------------------------------------------------------
+function placeWallTorches(rooms, map, reserved) {
+  const torches = [];
+  const isFloor = (x, y) =>
+    x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT && map[y][x] === TileType.FLOOR;
+
+  rooms.forEach((room, index) => {
+    const candidates = [];
+    for (let y = room.y; y < room.y + room.h; y++) {
+      for (let x = room.x; x < room.x + room.w; x++) {
+        const onLeft = x === room.x, onRight = x === room.x + room.w - 1;
+        const onTop = y === room.y, onBottom = y === room.y + room.h - 1;
+        if (onLeft + onRight + onTop + onBottom !== 1) continue;
+
+        const dx = onLeft ? -1 : onRight ? 1 : 0;
+        const dy = onTop ? -1 : onBottom ? 1 : 0;
+        if (isFloor(x + dx, y + dy)) continue;                         // doorway
+        const lx = dy !== 0 ? 1 : 0, ly = dx !== 0 ? 1 : 0;
+        if (isFloor(x + dx + lx, y + dy + ly) || isFloor(x + dx - lx, y + dy - ly)) continue;
+        if (reserved.has(`${x},${y}`)) continue;
+        if (hidingSpots.some((h) => Math.hypot(h.x - x, h.y - y) < 1.5)) continue;
+        candidates.push({ x, y, dx, dy });
+      }
+    }
+    shuffleInPlace(candidates);
+
+    const want = index === 0 ? 1 : rollInt(1, 2);
+    const placed = [];
+    for (const c of candidates) {
+      if (placed.length >= want) break;
+      if (placed.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 4)) continue;
+      placed.push(c);
+    }
+    for (const c of placed) {
+      torches.push({
+        ...c,
+        lit: index === 0 ? true : Math.random() < WALL_TORCH_LIT_CHANCE, // start room is always lit
+        seed: Math.random() * 10,
+      });
+    }
+  });
+  return torches;
+}
+
+// ---------------------------------------------------------------------------
+// LEVEL GEN: COVER CHUNKS
+// ---------------------------------------------------------------------------
+// Cover only goes in the room's interior, so the outer ring stays open and
+// you can always run around it. Each chunk is validated and undone if it
+// would split the room.
+function interiorOf(r) {
+  return { x0: r.x + 1, y0: r.y + 1, x1: r.x + r.w - 2, y1: r.y + r.h - 2, w: r.w - 2, h: r.h - 2 };
+}
+
+const COVER_CHUNKS = [
+  { // one pillar in the middle
+    fits: () => true,
+    build: (r) => {
+      const b = interiorOf(r);
+      return [{ x: b.x0 + ((b.w - 1) >> 1), y: b.y0 + ((b.h - 1) >> 1), tile: TileType.PILLAR }];
+    },
+  },
+  { // four corner pillars
+    fits: (r) => r.w - 2 >= 3 && r.h - 2 >= 3,
+    build: (r) => {
+      const b = interiorOf(r);
+      return [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]
+        .map(([x, y]) => ({ x, y, tile: TileType.PILLAR }));
+    },
+  },
+  { // low wall row (ends left open)
+    fits: (r) => r.w - 2 >= 3,
+    build: (r) => {
+      const b = interiorOf(r), out = [];
+      const y = b.y0 + ((b.h - 1) >> 1);
+      for (let x = b.x0 + 1; x <= b.x1 - 1; x++) out.push({ x, y, tile: TileType.LOW_WALL });
+      return out;
+    },
+  },
+  { // low wall column
+    fits: (r) => r.h - 2 >= 3,
+    build: (r) => {
+      const b = interiorOf(r), out = [];
+      const x = b.x0 + ((b.w - 1) >> 1);
+      for (let y = b.y0 + 1; y <= b.y1 - 1; y++) out.push({ x, y, tile: TileType.LOW_WALL });
+      return out;
+    },
+  },
+  { // L-shaped crate stack in a random inner corner
+    fits: () => true,
+    build: (r) => {
+      const b = interiorOf(r);
+      const left = Math.random() < 0.5, top = Math.random() < 0.5;
+      const cx = left ? b.x0 : b.x1, cy = top ? b.y0 : b.y1;
+      const sx = left ? 1 : -1, sy = top ? 1 : -1;
+      return [[cx, cy], [cx + sx, cy], [cx, cy + sy]].map(([x, y]) => ({ x, y, tile: TileType.CRATE }));
+    },
+  },
+  { // two scattered crates
+    fits: () => true,
+    build: (r) => {
+      const b = interiorOf(r), all = [];
+      for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) all.push({ x, y, tile: TileType.CRATE });
+      return shuffleInPlace(all).slice(0, 2);
+    },
+  },
+];
+
+function roomStaysConnected(room, map) {
+  const open = [];
+  for (let y = room.y; y < room.y + room.h; y++)
+    for (let x = room.x; x < room.x + room.w; x++)
+      if (map[y][x] === TileType.FLOOR) open.push({ x, y });
+  if (open.length === 0) return false;
+
+  const seen = new Set([`${open[0].x},${open[0].y}`]);
+  const queue = [open[0]];
+  for (let head = 0; head < queue.length; head++) {
+    const { x, y } = queue[head];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < room.x || nx >= room.x + room.w || ny < room.y || ny >= room.y + room.h) continue;
+      if (map[ny][nx] !== TileType.FLOOR || seen.has(`${nx},${ny}`)) continue;
+      seen.add(`${nx},${ny}`);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return seen.size === open.length;
+}
+
+function placeCover(rooms, map, reserved) {
+  for (const room of rooms) {
+    const chunkCount = room.w * room.h >= 30 ? 2 : 1; // big rooms get two chunks
+    for (let n = 0; n < chunkCount; n++) {
+      const chunk = pickOne(COVER_CHUNKS.filter((c) => c.fits(room)));
+      const cells = chunk.build(room).filter(
+        (c) => map[c.y][c.x] === TileType.FLOOR && !reserved.has(`${c.x},${c.y}`)
+      );
+      if (cells.length === 0) continue;
+      for (const c of cells) map[c.y][c.x] = c.tile;
+      if (!roomStaysConnected(room, map)) {
+        for (const c of cells) map[c.y][c.x] = TileType.FLOOR; // undo
+      }
+    }
+  }
+}
+
   // ---------------------------------------------------------------------------
   // CONTAINERS
   // ---------------------------------------------------------------------------
@@ -3369,6 +4135,7 @@ function updateTraps(timestamp) {
         { weight: 25, items: [] },
         { weight: 35, items: [{ id: ALL_SCROLLS, min: 1, max: 2 }] },
         { weight: 25, items: [{ id: "healthPotion", min: 1, max: 1 }] },
+        { weight: 15, items: [{ id: "torch", min: 1, max: 1 }] },
         {
           weight: 15,
           items: [
@@ -3388,6 +4155,7 @@ function updateTraps(timestamp) {
       loot: [
         { weight: 55, items: [] },
         { weight: 45, items: [{ id: "healthPotion", min: 1, max: 2 }] },
+        { weight: 25, items: [{ id: "waterFlask", min: 1, max: 2 }] },
       ],
       emptyMessages: ["Just stale water.", "Rotten dregs, nothing useful."],
     },
@@ -3410,7 +4178,8 @@ function updateTraps(timestamp) {
       searchMs: 1200,
       spawnWeight: 3,
       loot: [
-        { weight: 100, items: [] }, // add crafting items here
+        { weight: 20, items: [] }, // add crafting items here
+        { weight: 50, items: [{ id: ["stone", "bottle"], min: 1, max: 3 }] },
       ],
       emptyMessages: [
         "Splintered wood and nothing else.",
@@ -3711,6 +4480,10 @@ function updateTraps(timestamp) {
       scrollFreezeCloud: "Freeze Cloud Scroll",
       scrollChainLightning: "Chain Lightning Scroll",
       healthPotion: "Health Potion",
+      torch: "Torch",
+      stone: "Stone",
+      bottle: "Glass Bottle",
+      waterFlask: "Water Flask",
     };
     return names[itemType] || itemType;
   }
@@ -3903,49 +4676,84 @@ function updateTraps(timestamp) {
     context.fillText(label, x + 2, y + h / 2 + 0.5);
   }
 
-  // Placeholder HUD, drawn in screen space (not affected by camera or zoom).
-  function drawHUD() {
-    if (!gameState || !gameState.player || inventoryOpen) return;
-    const p = gameState.player;
+  const hudEl = document.createElement("div");
+  hudEl.style.cssText =
+    "position:fixed;z-index:10;pointer-events:none;display:none;" +
+    "font:12px monospace;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;";
+  document.body.appendChild(hudEl);
 
-    context.save();
-    // Reset to screen space (256x256 view), ignoring camera and zoom.
-    context.setTransform(
-      devicePixelRatioValue,
-      0,
-      0,
-      devicePixelRatioValue,
-      0,
-      0
-    );
-    context.imageSmoothingEnabled = false;
-
-    const x = 6;
-    const w = 80;
-    const h = 8;
-
-    drawBar(x, 6, w, h, p.hp / (p.maxHp ?? 100), "#dc2626", "HP");
-
-    const staminaColor = p.staminaExhausted ? "#a16207" : "#22c55e";
-    drawBar(x, 18, w, h, p.stamina / STAMINA_MAX, staminaColor, "STA");
-
-    if (gameState.armedScroll) {
-      context.fillStyle = "#fde68a";
-      context.font = "6px monospace";
-      context.textAlign = "left";
-      context.textBaseline = "middle";
-      context.fillText(
-        `${formatItemName(gameState.armedScroll)} x${scrollCount(
-          gameState.armedScroll
-        )}`,
-        x,
-        34
-      );
-    }
-
-    context.restore();
+  function makeHudBar(color) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText =
+      "position:relative;width:120px;height:14px;background:#27272a;" +
+      "border:1px solid #000;margin-bottom:4px;";
+    const fill = document.createElement("div");
+    fill.style.cssText = `height:100%;background:${color};`;
+    const label = document.createElement("span");
+    label.style.cssText = "position:absolute;left:4px;top:0;font-size:10px;line-height:14px;";
+    wrap.append(fill, label);
+    hudEl.appendChild(wrap);
+    return { fill, label };
+  }
+  function makeHudLine() {
+    const line = document.createElement("div");
+    line.style.marginBottom = "2px";
+    hudEl.appendChild(line);
+    return line;
   }
 
+  const hudHp = makeHudBar("#dc2626");
+  const hudSta = makeHudBar("#22c55e");
+  const hudScroll = makeHudLine();
+  const hudThrow = makeHudLine();
+  const hudLight = makeHudLine();
+
+  const MINI_SIZE = 160; // CSS pixels on screen
+  const miniDpr = Math.max(1, window.devicePixelRatio || 1);
+  const miniEl = document.createElement("canvas");
+  miniEl.width = MINI_SIZE * miniDpr;
+  miniEl.height = MINI_SIZE * miniDpr;
+  miniEl.style.cssText =
+    `position:fixed;z-index:10;pointer-events:none;display:none;` +
+    `width:${MINI_SIZE}px;height:${MINI_SIZE}px;`;
+  document.body.appendChild(miniEl);
+  const miniCtx = miniEl.getContext("2d");
+
+  // Placeholder HUD, drawn in screen space (not affected by camera or zoom).
+  function drawHUD() {
+    if (!gameState || !gameState.player || inventoryOpen) {
+      hudEl.style.display = "none";
+      return;
+    }
+    const p = gameState.player;
+    const r = canvas.getBoundingClientRect();
+    hudEl.style.display = "block";
+    hudEl.style.left = r.left + 8 + "px";
+    hudEl.style.top = r.top + 8 + "px";
+
+    const hpFrac = Math.max(0, Math.min(1, p.hp / (p.maxHp ?? 100)));
+    hudHp.fill.style.width = hpFrac * 100 + "%";
+    hudHp.label.textContent = "HP";
+
+    const staFrac = Math.max(0, Math.min(1, p.stamina / STAMINA_MAX));
+    hudSta.fill.style.width = staFrac * 100 + "%";
+    hudSta.fill.style.background = p.staminaExhausted ? "#a16207" : "#22c55e";
+    hudSta.label.textContent = "STA";
+
+    hudScroll.style.color = "#fde68a";
+    hudScroll.textContent = gameState.armedScroll
+      ? `${formatItemName(gameState.armedScroll)} x${scrollCount(gameState.armedScroll)}`
+      : "";
+
+    const t = gameState.armedThrowable;
+    hudThrow.style.color = t ? THROWABLES[t].color : "";
+    hudThrow.textContent = t ? `${formatItemName(t)} x${scrollCount(t)} [RMB/F]` : "";
+
+    const lit = isPlayerInLight();
+    const shadowed = p.gait === "sneak" && !lit;
+    hudLight.style.color = lit ? "#fbbf24" : shadowed ? "#94a3b8" : "#cbd5e1";
+    hudLight.textContent = lit ? "LIT" : shadowed ? "HIDDEN" : "SHADOW";
+  }
   // Removes exactly one item from a stack, cleaning up empty stacks/types.
   function removeOneFromStack(type, stackIndex) {
     const stacks = gameState.inventory[type];
@@ -3963,6 +4771,12 @@ function updateTraps(timestamp) {
     if (SCROLL_COLORS[selected.type]) {
       gameState.armedScroll =
         gameState.armedScroll === selected.type ? null : selected.type;
+      return;
+      
+    }
+        if (THROWABLES[selected.type]) {
+      gameState.armedThrowable =
+        gameState.armedThrowable === selected.type ? null : selected.type;
       return;
     }
 
@@ -4036,6 +4850,7 @@ function updateTraps(timestamp) {
   function hurtEnemy(e, amount, now) {
     e.hp -= amount;
     if (e.hp <= 0) {
+      dropEnemyTorch(e);
       const i = gameState.enemies.indexOf(e);
       if (i !== -1) gameState.enemies.splice(i, 1);
       return true;
@@ -4343,6 +5158,7 @@ function updateTraps(timestamp) {
           } else {
             enemy.hp -= pr.damage;
             if (enemy.hp <= 0) {
+              dropEnemyTorch(e);
               gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
             } else {
               alertEnemy(enemy, timestamp);
@@ -4815,7 +5631,50 @@ function updateTraps(timestamp) {
       rooms.push(room);
       connectors.push(attached);
     }
+    // --- Extra connectors: turn the room tree into loops ----------------------
+    const LOOP_TARGET = 4;
+    const LOOP_MAX_GAP = 8;
+    const loopOptions = [];
+    for (let i = 0; i < rooms.length; i++) {
+      for (let j = i + 1; j < rooms.length; j++) {
+        const a = rooms[i];
+        const b = rooms[j];
 
+        const oy0 = Math.max(a.y, b.y);
+        const oy1 = Math.min(a.y + a.h, b.y + b.h) - 1;
+        if (oy0 <= oy1) {
+          const [l, r] = a.x < b.x ? [a, b] : [b, a];
+          const gap = r.x - (l.x + l.w);
+          if (gap >= 1 && gap <= LOOP_MAX_GAP) {
+            loopOptions.push({ a, b, horizontal: true,
+              rect: { x: l.x + l.w, y: randInt(oy0, oy1), w: gap, h: 1 } });
+          }
+        }
+
+        const ox0 = Math.max(a.x, b.x);
+        const ox1 = Math.min(a.x + a.w, b.x + b.w) - 1;
+        if (ox0 <= ox1) {
+          const [t, u] = a.y < b.y ? [a, b] : [b, a];
+          const gap = u.y - (t.y + t.h);
+          if (gap >= 1 && gap <= LOOP_MAX_GAP) {
+            loopOptions.push({ a, b, horizontal: false,
+              rect: { x: randInt(ox0, ox1), y: t.y + t.h, w: 1, h: gap } });
+          }
+        }
+      }
+    }
+    shuffleInPlace(loopOptions);
+
+    let loopsAdded = 0;
+    for (const opt of loopOptions) {
+      if (loopsAdded >= LOOP_TARGET) break;
+      const { a, b, rect } = opt;
+      if (connectors.some((c) => rectsOverlap(c.rect, a, 1) && rectsOverlap(c.rect, b, 1))) continue; // already linked
+      if (rooms.some((r) => r !== a && r !== b && rectsOverlap(rect, r, 1))) continue;
+      if (connectors.some((c) => rectsOverlap(rect, c.rect, 1))) continue;
+      connectors.push({ room: b, rect, wide: false, horizontal: opt.horizontal });
+      loopsAdded++;
+    }
     // Carve rooms and connectors.
     for (const r of rooms) {
       for (let ry = r.y; ry < r.y + r.h; ry++) {
@@ -4931,6 +5790,7 @@ function updateTraps(timestamp) {
           stamina: STAMINA_MAX,
           staminaExhausted: false,
           staminaRechargeDelay: 0,
+          torchLit: false,
         };
 
     globalPlayer = player;
@@ -4984,6 +5844,16 @@ function updateTraps(timestamp) {
       [...doors, ...brokenDoors],
       [...items, ...stairs]
     );
+    const reserved = new Set();
+    const reserve = (x, y) => reserved.add(`${x},${y}`);
+    for (const it of items) reserve(it.x, it.y);
+    for (const s of stairs) reserve(s.x, s.y);
+    for (const c of containers) reserve(c.x, c.y);
+    for (const h of hidingSpots) reserve(h.x, h.y);
+    reserve(startRoom.x + 1, startRoom.y + 1); // spawn / up stairs
+
+    const torches = placeWallTorches(rooms, newMap, reserved);
+    placeCover(rooms, newMap, reserved);
     const enemies = spawnEnemies(
       level,
       rooms,
@@ -4993,7 +5863,7 @@ function updateTraps(timestamp) {
       [...items, ...containers],
       stairs
     );
-
+    assignTorchesAndRoutes(enemies, rooms);
     return {
       map: newMap,
       rooms: rooms,
@@ -5017,13 +5887,22 @@ function updateTraps(timestamp) {
         scrollFreezeCloud: [],
         scrollChainLightning: [],
         healthPotion: [],
+        torch: [1],
+        stone: [3],
+        bottle: [],
+        waterFlask: [],
       },
       projectiles: [],
       effects: [],
       armedScroll: null,
+      torches,
+      floorTorches: [],
+      thrown: [],
+      armedThrowable: null,
+      hint: null,
     };
   }
 
   window.startGame3 = startGame3;
-  window.stopGame3 = stopGame3;
+  window.stopGame3 = stopGame3; 
 }
