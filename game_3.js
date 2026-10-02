@@ -3108,24 +3108,6 @@ function localizePatrol(e) {
   e.baseFacing = e.facing;
 }
 
-  function drawContainers(inFront = false) {
-    if (!gameState || !gameState.containers) return;
-    const feetY = gameState.player.y + 0.9;
-    for (const c of gameState.containers) {
-      if ((c.y + 0.9 > feetY) !== inFront) continue;
-      const px = c.x * TILE_SIZE;
-      const py = c.y * TILE_SIZE;
-      context.globalAlpha = c.searched ? 0.55 : 1;
-      context.fillStyle = "#000";
-      context.fillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
-      context.fillStyle = CONTAINER_TYPES[c.type].color;
-      context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
-      context.fillStyle = "rgba(0, 0, 0, 0.35)";
-      context.fillRect(px + 5, py + 13, TILE_SIZE - 10, 2);
-      context.globalAlpha = 1;
-    }
-  }
-
 // Only torch carriers roam the whole dungeon; everyone else keeps their room job.
 function assignTorchesAndRoutes(enemies, rooms, map) {
   for (const e of enemies) {
