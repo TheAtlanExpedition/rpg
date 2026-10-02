@@ -725,10 +725,9 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   // ---------------------------------------------------------------------------
   // Inventory keys
 
-  window.addEventListener("keydown", (event) => {
+window.addEventListener("keydown", (event) => {
   if (event.repeat || !gameRunning || !gameState) return;
-  if (event.code === "KeyF") playerThrow();
-  if (event.code === "KeyT" && !inventoryOpen && !gameState.player.hidden) togglePlayerTorch();
+  if (event.code === "KeyF" && !inventoryOpen && !gameState.player.hidden) togglePlayerTorch();
 });
 
   window.addEventListener("keydown", (event) => {
@@ -3331,7 +3330,7 @@ function togglePlayerTorch() {
   const p = gameState.player;
   if (scrollCount("torch") === 0) { showHint("You have no torch"); return; }
   if (p.torchLit) { p.torchLit = false; return; }
-  if (!isNearFlame()) { showHint("Light it from a burning torch"); return; }
+  if (!isNearFlame()) { showHint("Light it from a burning torch (F)"); return; }
   p.torchLit = true;
 }
 function nearestLitFlame(e) {
@@ -4752,8 +4751,7 @@ function placeCover(rooms, map, reserved) {
 
     const t = gameState.armedThrowable;
     hudThrow.style.color = t ? THROWABLES[t].color : "";
-    hudThrow.textContent = t ? `${formatItemName(t)} x${scrollCount(t)} [RMB/F]` : "";
-
+    hudThrow.textContent = t ? `${formatItemName(t)} x${scrollCount(t)} [RMB]` : "";
     const lit = isPlayerInLight();
     const shadowed = p.gait === "sneak" && !lit;
     hudLight.style.color = lit ? "#fbbf24" : shadowed ? "#94a3b8" : "#cbd5e1";
