@@ -314,7 +314,7 @@ const PLAYER_NIGHT_VISION = 1.8;      // visual only, doesn't count as light for
 const LIGHT_LIT_FRACTION = 0.85;      // how far into a light's radius you count as "lit"
 const SHADOW_SIGHT_RANGE = 1.8;       // crouched in shadow: noticed only this close
 const SHADOW_SIGHT_RANGE_ALERT = 3;
-const WALL_TORCH_INTERACT_DIST = 1.1;
+const WALL_TORCH_INTERACT_DIST = .6;
 const WALL_TORCH_LIT_CHANCE = 0.7;
 const TORCH_NOTICE_RADIUS = 8;        // enemies this close investigate a torch going out
 
