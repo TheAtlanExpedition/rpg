@@ -332,7 +332,10 @@ const THROW_RANGE = 7;
 const THROW_COOLDOWN_MS = 500;
 const WATER_SPLASH_RADIUS = 1.4;
 const TORCH_HIT_DAMAGE = 12;
-
+const TORCH_PICKUP_REACH = 0.8;
+const BURN_MS = 3000;
+const BURN_TICK_MS = 500;
+const BURN_TICK_DAMAGE = 3;
 const THROWABLES = {
   stone:      { color: "#a8a29e", noise: 6, recover: true },
   bottle:     { color: "#86efac", noise: 9, recover: false },
@@ -2783,11 +2786,17 @@ function updateTraps(timestamp) {
         onEnemyReachedPlayer(e, now);
       }
 
-   /*   if (e.canSeePlayer && e.hasTorch && e.torchLit && now >= (e.nextThrowTime ?? 0)) {
+          if (e.canSeePlayer && e.hasTorch && e.torchLit && now >= (e.nextThrowTime ?? 0)) {
         const d = bodyDist(e, p);
         if (d >= ENEMY_THROW_MIN && d <= ENEMY_THROW_RANGE) enemyThrowTorch(e, now);
-      } */  // ADD if torch thrown + hit playeer = burn THEN pick up torch if player leaves line of sight.
+      }
 
+      // Lost sight of the player: go and pick the torch back up first.
+      if (!e.canSeePlayer && e.lostTorch) {
+        e.lastSeenTime = now; // don't lose interest while fetching
+        if (fetchLostTorch(e, dt)) return;
+      }
+      
       if (e.searching && !e.canSeePlayer) {
         updateSearch(e, dt, now);
       } else {
@@ -2858,6 +2867,7 @@ function updateTraps(timestamp) {
         lookAround(e, now);
       } else {
         if (e.role === "roamer") openDoorAhead(e);
+        if (fetchLostTorch(e, dt)) return;                
         if (e.role === "roamer" && tendTorches(e, dt)) return;  
         const wp = e.patrol[e.patrolIndex];
 
@@ -3002,13 +3012,13 @@ function getThrowTarget() {
   return { x: tx, y: ty };
 }
 
-function spawnThrown(kind, owner, fx, fy, tx, ty, lit = false) {
+function spawnThrown(kind, owner, fx, fy, tx, ty, lit = false, ownerId = null) {
   const dx = tx - fx, dy = ty - fy;
   const len = Math.hypot(dx, dy);
   if (len < 0.01) return;
   const dist = Math.min(len, THROW_RANGE);
   (gameState.thrown ||= []).push({
-    kind, owner, lit, x: fx, y: fy,
+    kind, owner, lit, ownerId, x: fx, y: fy,
     dx: dx / len, dy: dy / len, left: dist, total: dist,
   });
 }
@@ -3094,10 +3104,18 @@ function landThrown(t, now) {
       }
     } else if (!p.hidden && Math.hypot(p.x - t.x, p.y - t.y) < 0.9) {
       damagePlayer(TORCH_HIT_DAMAGE);
+      const nowMs = performance.now();
+      p.burnUntil = nowMs + BURN_MS;
+      p.nextBurnTick = nowMs + BURN_TICK_MS;
+      showHint("You're on fire!");
     }
     if (t.lit) {
       (gameState.floorTorches ||= []).push({
-        x: t.x, y: t.y, until: performance.now() + FLOOR_TORCH_MS, seed: Math.random() * 10,
+        x: t.x,
+        y: t.y,
+        until: t.ownerId ? Infinity : performance.now() + FLOOR_TORCH_MS,
+        ownerId: t.ownerId ?? null,
+        seed: Math.random() * 10,
       });
       makeNoise(t.x, t.y, 5, "#fb923c");
     } else {
@@ -3114,7 +3132,6 @@ function landThrown(t, now) {
   }
   if (def.recover) dropItemAt(t.kind, t.x, t.y);
 }
-
 // ---------------------------------------------------------------------------
 // STEALTH: ENEMY TORCHES / ROAMERS
 // ---------------------------------------------------------------------------
@@ -3149,25 +3166,62 @@ function openDoorAhead(e) {
 function enemyThrowTorch(e, now) {
   const p = gameState.player;
   e.nextThrowTime = now + ENEMY_THROW_COOLDOWN_MS;
-  spawnThrown("torch", "enemy", e.x, e.y, p.x, p.y, true);
+  spawnThrown("torch", "enemy", e.x, e.y, p.x, p.y, true, e.id);
   e.hasTorch = false;
   e.torchLit = false;
-  localizePatrol(e);
+  e.lostTorch = true;
   stunEnemy(e, now, 400);
 }
 
 function dropEnemyTorch(e) {
   if (e.hasTorch) dropItemAt("torch", e.x, e.y, false);
+  for (const f of gameState.floorTorches || []) {
+    if (f.ownerId === e.id) {
+      f.ownerId = null;
+      f.until = performance.now() + FLOOR_TORCH_MS;
+    }
+  }
 }
+// Returns true while the enemy is busy walking back to its thrown torch.
+function fetchLostTorch(e, dt) {
+  if (!e.lostTorch) return false;
 
+  const list = gameState.floorTorches || [];
+  const i = list.findIndex((f) => f.ownerId === e.id);
+
+  if (i === -1) {
+    // Still in the air: keep waiting, don't give up yet.
+    if ((gameState.thrown || []).some((t) => t.ownerId === e.id)) return false;
+    // It was put out (or burned away): this enemy stays torchless.
+    e.lostTorch = false;
+    localizePatrol(e);
+    return false;
+  }
+
+  const f = list[i];
+  if (Math.hypot(f.x - e.x, f.y - e.y) <= TORCH_PICKUP_REACH) {
+    list.splice(i, 1);
+    e.hasTorch = true;
+    e.torchLit = true;
+    e.lostTorch = false;
+    return false;
+  }
+  steerToward(e, f.x, f.y, ENEMY_SPEED.alert, dt, 0.5);
+  return true;
+}
 // ---------------------------------------------------------------------------
 // STEALTH: LIGHTING
 // ---------------------------------------------------------------------------
-function playerHasLitTorch() {
+function isPlayerBurning() {
   const p = gameState && gameState.player;
-  return !!(p && p.torchLit && scrollCount("torch") > 0);
+  return !!(p && p.burnUntil && performance.now() < p.burnUntil);
 }
 
+function playerHasLitTorch() {
+  const p = gameState && gameState.player;
+  if (!p) return false;
+  return isPlayerBurning() || !!(p.torchLit && scrollCount("torch") > 0);
+}
 // forDrawing = also include the player's small "night vision" glow.
 function getLightSources(forDrawing = false) {
   const out = [];
@@ -3217,9 +3271,14 @@ function updateStealth() {
   const now = performance.now();
   const ft = gameState.floorTorches;
   if (ft) for (let i = ft.length - 1; i >= 0; i--) if (now >= ft[i].until) ft.splice(i, 1);
+
+  const p = gameState.player;
+  if (isPlayerBurning() && !gameState.gameOver && now >= (p.nextBurnTick ?? 0)) {
+    p.nextBurnTick = now + BURN_TICK_MS;
+    damagePlayer(BURN_TICK_DAMAGE);
+  }
   playerLitCache = computePlayerLit();
 }
-
 function isCoveredByLowWall(ax, ay, bx, by) {
   const dist = Math.hypot(bx - ax, by - ay);
   if (dist < 1.2) return false; // right next to it you can see over
@@ -3425,7 +3484,10 @@ function douseNear(x, y, r) {
     }
   }
   const p = gameState.player;
-  if (p.torchLit && Math.hypot(p.x - x, p.y - y) <= r) p.torchLit = false;
+  if (Math.hypot(p.x - x, p.y - y) <= r) {
+    p.torchLit = false;
+    p.burnUntil = 0;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -3484,8 +3546,18 @@ function drawStealthWorld(timestamp) {
     context.fillStyle = THROWABLES[t.kind].color;
     context.fillRect(px - 2, Math.round(py - lift) - 2, 5, 5);
   }
-}
 
+  if (isPlayerBurning() && !gameState.player.hidden) {
+    const p = gameState.player;
+    const px = Math.round((p.x + 0.5) * TILE_SIZE);
+    const py = Math.round((p.y + 0.7) * TILE_SIZE);
+    for (const ox of [-7, 0, 7]) {
+      const h = 6 + Math.round(Math.sin(now / 70 + ox) * 2);
+      context.fillStyle = "#f97316"; context.fillRect(px + ox - 2, py - h, 5, h);
+      context.fillStyle = "#fde047"; context.fillRect(px + ox - 1, py - h + 2, 3, h - 2);
+    }
+  }
+}
 function drawStealthUI() {
   if (!gameState || !gameState.player || inventoryOpen) return;
   const p = gameState.player;
