@@ -50,8 +50,8 @@
 const TileType = {
   WALL: 0, FLOOR: 1, DOOR: 2, TRAP: 3, SWITCH: 4, PILLAR: 5,
   LOW_WALL: 6,   // blocks movement, NOT sight (crouch behind it to hide)
-  CRATE: 7,  // blocks movement and sight
-  CONTAINER: 8, // blocks movement and sight
+  CRATE: 7,  // blocks movement; blocks sight only while the player is crouched
+  CONTAINER: 8, // blocks movement; blocks sight only while the player is crouched
 };
 function isSolidTile(t) {
   return t === TileType.WALL || t === TileType.PILLAR ||
@@ -1049,11 +1049,12 @@ window.addEventListener("blur", () => {
       for (let x = x0; x < x0 + VIEW_TILES_X; x++) {
         if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) continue;
 
-        // Skip tiles hidden behind walls, closed doors, pillars or containers.
+        // Walls, pillars and closed doors always hide tiles.
+        // Crates, containers and low walls hide them only while crouched.
         const tx = x + 0.5;
         const ty = y + 0.5;
         const dd = Math.hypot(tx - ox, ty - oy);
-        if (dd > 0.75 && castRay(ox, oy, Math.atan2(ty - oy, tx - ox), dd) < dd - 0.75) continue;
+        if (dd > 0.75 && castRay(ox, oy, Math.atan2(ty - oy, tx - ox), dd, false, playerIsCrouching()) < dd - 0.75) continue;
 
         gameState.explored.add(y * MAP_WIDTH + x);
       }
@@ -2200,32 +2201,66 @@ function updateTraps(timestamp) {
     return { x: p.x + 0.5, y: p.y + 0.7 };
   }
 
+  // Waist-high: both sides see over these unless the player is crouched.
+  function isLowCoverTile(t) {
+    return t === TileType.LOW_WALL || t === TileType.CRATE || t === TileType.CONTAINER;
+  }
+
+  function playerIsCrouching() {
+    const p = gameState && gameState.player;
+    return !!(p && p.gait === "sneak" && !p.hidden);
+  }
+
+  function isLowCoverAt(x, y) {
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    if (tx < 0 || ty < 0 || tx >= MAP_WIDTH || ty >= MAP_HEIGHT) return false;
+    return isLowCoverTile(gameState.map[ty][tx]);
+  }
+
   function isWallAt(x, y, ignoreDoors = false) {
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return true;
     const t = gameState.map[ty][tx];
-    if (t === TileType.WALL || t === TileType.PILLAR || t === TileType.CRATE || t === TileType.CONTAINER) return true;
+    // Crates and containers are not full height, so they do not block sight.
+    if (t === TileType.WALL || t === TileType.PILLAR) return true;
     return !ignoreDoors && isDoorClosedAt(tx, ty);
   }
 
-  function castRay(x, y, angle, maxDist, ignoreDoors = false) {
+  // Spells stop on crates and containers. Throws arc over them (see blocksThrowAt).
+  function blocksMissileAt(x, y) {
+    if (isWallAt(x, y)) return true;
+    return isLowCoverAt(x, y) && gameState.map[Math.floor(y)][Math.floor(x)] !== TileType.LOW_WALL;
+  }
+
+  // Throws clear the same waist-high cover you can see over: crates, containers, low walls.
+  function blocksThrowAt(x, y) {
+    return isWallAt(x, y);
+  }
+
+  function castRay(x, y, angle, maxDist, ignoreDoors = false, crouchCover = false) {
     const step = 0.1;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     for (let d = step; d <= maxDist; d += step) {
-      if (isWallAt(x + cos * d, y + sin * d, ignoreDoors)) return d - step;
+      const px = x + cos * d;
+      const py = y + sin * d;
+      if (isWallAt(px, py, ignoreDoors)) return d - step;
+      if (crouchCover && isLowCoverAt(px, py)) return d - step;
     }
     return maxDist;
   }
 
-  function hasLineOfSight(ax, ay, bx, by, ignoreDoors = false) {
+  function hasLineOfSight(ax, ay, bx, by, ignoreDoors = false, crouchCover = false) {
     const dx = bx - ax;
     const dy = by - ay;
     const dist = Math.hypot(dx, dy);
     if (dist === 0) return true;
+    // Standing against the cover, you can still see over it.
+    if (crouchCover && dist < 1.2) crouchCover = false;
     return (
-      castRay(ax, ay, Math.atan2(dy, dx), dist, ignoreDoors) >= dist - 0.001
+      castRay(ax, ay, Math.atan2(dy, dx), dist, ignoreDoors, crouchCover) >= dist - 0.001
     );
   }
 
@@ -2660,15 +2695,16 @@ function updateTraps(timestamp) {
         e.state === "alert" ? SHADOW_SIGHT_RANGE_ALERT : SHADOW_SIGHT_RANGE
       );
     }
-    // Crouched behind a low wall: can't be seen across it.
+    // Crouched: neither side can see over low walls, crates or containers.
+    const crouchCover = playerIsCrouching();
     const behindLowWall =
-      p.gait === "sneak" && isCoveredByLowWall(ec.x, ec.y, pc.x, pc.y);
+      crouchCover && !hasLineOfSight(ec.x, ec.y, pc.x, pc.y, false, true);
 
     if (
       !playerHidden &&
       !behindLowWall &&
       dist <= sightRange &&
-      hasLineOfSight(ec.x, ec.y, pc.x, pc.y)
+      hasLineOfSight(ec.x, ec.y, pc.x, pc.y, false, crouchCover)
     ) {
       const diff = Math.abs(angleDiff(angleToPlayer, e.facing));
 
@@ -3070,7 +3106,7 @@ function updateThrown(timestamp) {
     for (let s = 0; s < steps; s++) {
       const nx = t.x + t.dx * step;
       const ny = t.y + t.dy * step;
-      if (isWallAt(nx + 0.5, ny + 0.5)) { landed = true; break; }
+      if (blocksThrowAt(nx + 0.5, ny + 0.5)) { landed = true; break; }
       t.x = nx; t.y = ny;
       if (t.owner === "player" &&
           gameState.enemies.some((e) => Math.hypot(e.x - nx, e.y - ny) < 0.55)) { landed = true; break; }
@@ -3085,7 +3121,28 @@ function updateThrown(timestamp) {
   }
 }
 
+function nearestWalkable(x, y) {
+  const tx = Math.floor(x + 0.5);
+  const ty = Math.floor(y + 0.5);
+  if (isWalkableTile(tx, ty) && !isDoorClosedAt(tx, ty)) return { x, y };
+  let best = null;
+  let bestD = Infinity;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!isWalkableTile(nx, ny) || isDoorClosedAt(nx, ny)) continue;
+      const d = Math.hypot(nx + 0.5 - (x + 0.5), ny + 0.5 - (y + 0.5));
+      if (d < bestD) { bestD = d; best = { x: nx, y: ny }; }
+    }
+  }
+  return best || { x, y };
+}
+
 function landThrown(t, now) {
+  const spot = nearestWalkable(t.x, t.y);
+  t.x = spot.x;
+  t.y = spot.y;
   const p = gameState.player;
   const fx = (gameState.effects ||= []);
 
@@ -3288,7 +3345,7 @@ function isCoveredByLowWall(ax, ay, bx, by) {
     const tx = Math.floor(ax + (bx - ax) * t);
     const ty = Math.floor(ay + (by - ay) * t);
     if (tx < 0 || ty < 0 || tx >= MAP_WIDTH || ty >= MAP_HEIGHT) continue;
-    if (gameState.map[ty][tx] === TileType.LOW_WALL) return true;
+    if (isLowCoverTile(gameState.map[ty][tx])) return true;
   }
   return false;
 }
@@ -3357,7 +3414,7 @@ function drawLighting(timestamp = performance.now()) {
     g.rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     for (let i = 0; i < VISION_RAYS; i++) {
       const a = (i / VISION_RAYS) * Math.PI * 2;
-      const d = Math.min(VISION_RANGE, castRay(ox, oy, a, VISION_RANGE) + 0.55);
+      const d = Math.min(VISION_RANGE, castRay(ox, oy, a, VISION_RANGE, false, playerIsCrouching()) + 0.55);
       const vx = scx + Math.cos(a) * d * TILE_SIZE * scale;
       const vy = scy + Math.sin(a) * d * TILE_SIZE * scale;
       if (i === 0) g.moveTo(vx, vy);
@@ -3681,7 +3738,7 @@ function isPlayerExposed(now) {
     ) {
       return false;
     }
-    return hasLineOfSight(ec.x, ec.y, pc.x, pc.y);
+    return hasLineOfSight(ec.x, ec.y, pc.x, pc.y, false, playerIsCrouching());
   }
 
   function breakHidingSpot(spot) {
@@ -5250,7 +5307,7 @@ function placeCover(rooms, map, reserved) {
         pr.x += stepX;
         pr.y += stepY;
 
-        if (isWallAt(pr.x + 0.5, pr.y + 0.5)) {
+        if (blocksMissileAt(pr.x + 0.5, pr.y + 0.5)) {
           pr.x -= stepX;
           pr.y -= stepY;
           if (pr.scroll) detonateScroll(pr, null, timestamp);
