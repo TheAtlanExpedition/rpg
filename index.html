@@ -5,18 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="AI Image Generations Arcade Games" />
     <title>Test Corner</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <link
       href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Pacifico&display=swap"
       rel="stylesheet"
     />
+
     <link rel="stylesheet" href="styles.css" />
+
+
   </head>
+
   <body>
     <header class="header-wrapper">
       <div class="header-container">
         <h1>Game Corner</h1>
+
         <div class="brand-container">
           <a
             href="https://theatlanexpedition.github.io/Learning_HTML/index.html"
@@ -29,11 +36,35 @@
         </div>
       </div>
     </header>
+
     <script src="html.js" defer></script>
+
     <main class="main">
-      <h2>Controls</h2><dt>Move</dt></dt><dd >W, A, S, D</dd><dt>Crouch</dt><dd >Toggle: C</dd><dt>Run</dt><dd >Hold: Shift</dd><dt>Misc</dt><dd >Torches: Light from wall torches with "F"<br>Throw with RMB<br>Magic: Basic attack with LMB.<br>Select scroll in inventory and HOLD LMB to use.</dd></dl>
       <section id="game" class="page">
         <div class="games-container">
+
+          <!-- Controls -->
+          <dl class="controls">
+            <h2>Controls</h2>
+
+            <dt>Move</dt>
+            <dd>W, A, S, D</dd>
+
+            <dt>Crouch</dt>
+            <dd>Toggle: C</dd>
+
+            <dt>Run</dt>
+            <dd>Hold: Shift</dd>
+
+            <dt>Misc</dt>
+            <dd>
+              Torches: Light from wall torches with "F"<br />
+              Throw with RMB<br />
+              Magic: Basic attack with LMB.<br />
+              Select scroll in inventory and HOLD LMB to use.
+            </dd>
+          </dl>
+
           <!-- Vertical game buttons -->
           <div class="game-buttons">
             <button
@@ -43,9 +74,11 @@
             >
               <img
                 src="https://raw.githubusercontent.com/TheAtlanExpedition/rpg/72e4e4b492e32bd0e4a35f84ccc1c91b69e86a7d/assets/webpage/game-cartridge.svg"
+                alt="Game 1"
               />
               <span class="btn-label">Game<br />1</span>
             </button>
+
             <button
               id="game2Button"
               type="button"
@@ -53,9 +86,11 @@
             >
               <img
                 src="https://raw.githubusercontent.com/TheAtlanExpedition/rpg/72e4e4b492e32bd0e4a35f84ccc1c91b69e86a7d/assets/webpage/game-cartridge.svg"
+                alt="Game 2"
               />
               <span class="btn-label">Game<br />2</span>
             </button>
+
             <button
               id="game3Button"
               type="button"
@@ -63,6 +98,7 @@
             >
               <img
                 src="https://raw.githubusercontent.com/TheAtlanExpedition/rpg/72e4e4b492e32bd0e4a35f84ccc1c91b69e86a7d/assets/webpage/game-cartridge.svg"
+                alt="Game 3"
               />
               <span class="btn-label">Game<br />3</span>
             </button>
@@ -74,22 +110,28 @@
             class="game-window powered-off"
             aria-live="polite"
           >
-         <!-- Power button sits on the frame -->
+            <!-- Power button sits on the frame -->
             <button
               id="gamePowerButton"
               type="button"
               class="power-btn"
               aria-pressed="false"
               title="Power"
-            > 
+            >
               <span class="power-icon">⏻</span>
-            </button> 
-            <button id="globalStopButton" class="menu-button stop-btn">
+            </button>
+
+            <button
+              id="globalStopButton"
+              class="menu-button stop-btn"
+              type="button"
+            >
               <span>Eject Game</span>
-            </button> 
+            </button>
 
             <!-- Single screen area that switches content -->
             <div class="game-screen">
+
               <!-- Powered Off -->
               <div
                 id="poweredOffScreen"
@@ -98,6 +140,8 @@
                 <p>Game Window Powered Off</p>
                 <span>Select a game to power on</span>
               </div>
+
+              <!-- Static Screen -->
               <div
                 id="staticScreen"
                 class="screen-content static-screen"
@@ -108,13 +152,19 @@
                 <span>Select a Game to Play</span>
                 <div class="game-info"></div>
               </div>
+
               <!-- Game 1 -->
               <div
                 id="game1Container"
                 class="screen-content game-container"
                 hidden
               >
-                <canvas id="gameCanvas1" width="800" height="500"></canvas>
+                <canvas
+                  id="gameCanvas1"
+                  width="800"
+                  height="500"
+                ></canvas>
+
                 <div class="game-info"></div>
               </div>
 
@@ -124,8 +174,14 @@
                 class="screen-content game-container"
                 hidden
               >
-                <canvas id="gameCanvas2" width="800" height="640"></canvas>
+                <canvas
+                  id="gameCanvas2"
+                  width="800"
+                  height="640"
+                ></canvas>
+
                 <div id="gameInfo" class="game-info"></div>
+
                 <button
                   id="game2restartButton"
                   type="button"
@@ -141,8 +197,14 @@
                 class="screen-content game-container"
                 hidden
               >
-                <canvas id="gameCanvas3" width="800" height="640"></canvas>
+                <canvas
+                  id="gameCanvas3"
+                  width="800"
+                  height="640"
+                ></canvas>
+
                 <div id="game3Info" class="game-info"></div>
+
                 <button
                   id="game3restartButton"
                   type="button"
