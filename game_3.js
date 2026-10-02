@@ -155,7 +155,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
       x < MAP_WIDTH &&
       y >= 0 &&
       y < MAP_HEIGHT &&
-      gameState.map[y][x] === TileType.FLOOR
+      gameState.map[y][x] !== TileType.WALL
     );
   }
 
@@ -1350,6 +1350,27 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     return isBoxClear(x, y, HITBOX);
   }
 
+
+  function giveDungeonRoute(e, rooms, map) {
+  const pool = shuffleInPlace(rooms.slice()).slice(0, ROAMER_ROOM_COUNT);
+  const route = [];
+  let cur = { x: e.x, y: e.y };
+  while (pool.length) {
+    pool.sort((a, b) =>
+      Math.hypot(a.x + a.w / 2 - cur.x, a.y + a.h / 2 - cur.y) -
+      Math.hypot(b.x + b.w / 2 - cur.x, b.y + b.h / 2 - cur.y));
+    const room = pool.shift();
+    const open = roomPerimeter(room).filter((t) => map[t.y][t.x] === TileType.FLOOR);
+    const t = pickOne(open.length ? open : roomPerimeter(room));
+    route.push({ x: t.x, y: t.y, wait: spawnRand(800, 2000) });
+    cur = t;
+  }
+  e.role = "roamer";
+  e.patrol = route;
+  e.patrolIndex = 0;
+  e.holdFacing = null;
+  e.lookSweep = 0.9;
+}
   // ---------------------------------------------------------------------------
   // NOISE / RIPPLES
   // ---------------------------------------------------------------------------
@@ -1716,8 +1737,6 @@ function drawMiniMap() {
   const g = miniCtx;
   g.setTransform(miniDpr, 0, 0, miniDpr, 0, 0);
   g.clearRect(0, 0, MINI_SIZE, MINI_SIZE);
-  g.fillStyle = "rgba(0, 0, 0, 0.45)";
-  g.fillRect(0, 0, MINI_SIZE, MINI_SIZE);
 
   // Only explored floor and cover tiles; walls stay transparent.
   g.fillStyle = "#bebebe";
@@ -2151,9 +2170,9 @@ function updateTraps(timestamp) {
 
     for (const e of enemiesHit) {
       e.hp -= TRAP_ENEMY_DAMAGE;
-      if (e.hp <= 0) {
-        dropEnemyTorch(e);
-        enemies.splice(enemies.indexOf(e), 1);
+            if (enemy.hp <= 0) {
+              dropEnemyTorch(enemy);
+              gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
         continue;
       }
       knockback(e, item.x, item.y, ENEMY_HITBOX);
