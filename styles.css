@@ -14,7 +14,6 @@
 .game-window  { order: 2; }  /* middle */
 .controls {
   order: 3;
-  flex: 0 0 220px;
   margin: 0;
   padding: 20px;
   box-sizing: border-box;
