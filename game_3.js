@@ -3117,7 +3117,7 @@ function giveDungeonRoute(e, rooms) {
 
 // Only torch carriers roam the whole dungeon; everyone else keeps their room job.
 function assignTorchesAndRoutes(enemies, rooms, map) {
-  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms, map);
+  for (const e of enemies) if (e.hasTorch) giveDungeonRoute(e, rooms, map);{
     e.hasTorch = Math.random() < ENEMY_TORCH_CHANCE;
     e.torchLit = e.hasTorch;
   }
@@ -4755,7 +4755,7 @@ function placeCover(rooms, map, reserved) {
     const lit = isPlayerInLight();
     const shadowed = p.gait === "sneak" && !lit;
     hudLight.style.color = lit ? "#fbbf24" : shadowed ? "#94a3b8" : "#cbd5e1";
-    hudLight.textContent = lit ? "LIT" : shadowed ? "HIDDEN" : "SHADOW";
+    hudLight.textContent = lit ? "Lit" : shadowed ? "Hidden" : "Shadow";
   }
   // Removes exactly one item from a stack, cleaning up empty stacks/types.
   function removeOneFromStack(type, stackIndex) {
