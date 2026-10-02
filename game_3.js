@@ -2174,8 +2174,8 @@ function updateTraps(timestamp) {
     for (const e of enemiesHit) {
       e.hp -= TRAP_ENEMY_DAMAGE;
       if (e.hp <= 0) {
-      dropEnemyTorch(enemy);
-      gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
+        dropEnemyTorch(e);
+        enemies.splice(enemies.indexOf(e), 1);
         continue;
       }
       knockback(e, item.x, item.y, ENEMY_HITBOX);
@@ -5268,7 +5268,7 @@ function placeCover(rooms, map, reserved) {
           } else {
             enemy.hp -= pr.damage;
             if (enemy.hp <= 0) {
-              dropEnemyTorch(e);
+              dropEnemyTorch(enemy);
               gameState.enemies.splice(gameState.enemies.indexOf(enemy), 1);
             } else {
               alertEnemy(enemy, timestamp);
