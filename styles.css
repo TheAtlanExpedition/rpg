@@ -10,8 +10,8 @@
   margin: 20px auto 40px;
 }
 
-.game-buttons { order: 3;  } 
-.game-window  { order: 2; }  /* middle */
+.game-buttons { order: 2;  } 
+.game-window  { order: 3; }
 .controls {
   order: 1; 
   flex: 0 0 220px; 
