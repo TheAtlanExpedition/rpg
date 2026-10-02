@@ -1031,23 +1031,31 @@ window.addEventListener("blur", () => {
   }
 
   function revealMinimapView() {
-  if (!gameState || !gameState.player) return;
+    if (!gameState || !gameState.player) return;
+    if (!gameState.explored) gameState.explored = new Set();
 
-  const ox = gameState.player.x + 0.5;
-  const oy = gameState.player.y + 0.6;
-  const tx = x + 0.5;
-  const ty = y + 0.5;
-  const dd = Math.hypot(tx - ox, ty - oy);
-  if (dd > 0.75 && castRay(ox, oy, Math.atan2(ty - oy, tx - ox), dd) < dd - 0.75) continue;
+    const px = Math.floor(gameState.player.x + 0.5);
+    const py = Math.floor(gameState.player.y + 0.5);
+    const x0 = px - Math.floor(VIEW_TILES_X / 2);
+    const y0 = py - Math.floor(VIEW_TILES_Y / 2);
 
-  for (let y = y0; y < y0 + VIEW_TILES_Y; y++) {
-    for (let x = x0; x < x0 + VIEW_TILES_X; x++) {
-      if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) continue;
-            if (!gameState.explored) gameState.explored = new Set();
-      gameState.explored.add(y * MAP_WIDTH + x);
+    const ox = gameState.player.x + 0.5;
+    const oy = gameState.player.y + 0.6;
+
+    for (let y = y0; y < y0 + VIEW_TILES_Y; y++) {
+      for (let x = x0; x < x0 + VIEW_TILES_X; x++) {
+        if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) continue;
+
+        // Skip tiles hidden behind walls, closed doors, pillars or containers.
+        const tx = x + 0.5;
+        const ty = y + 0.5;
+        const dd = Math.hypot(tx - ox, ty - oy);
+        if (dd > 0.75 && castRay(ox, oy, Math.atan2(ty - oy, tx - ox), dd) < dd - 0.75) continue;
+
+        gameState.explored.add(y * MAP_WIDTH + x);
+      }
     }
   }
-}
 
   function gameLoop(timestamp) {
     if (!gameRunning) return;
