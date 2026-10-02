@@ -1,27 +1,27 @@
 
-      /* Controls placed to the left of the game */
-      .games-container {
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 24px;
-        flex-wrap: nowrap;
-        width: min(95vw, 1400px);
-        margin: 20px auto 40px;
-      }
 
-      .controls {
-        order: 1;
-        flex: 0 0 220px;
-        margin: 0;
-        padding: 20px;
-        box-sizing: border-box;
-        border: 4px solid #000;
-        border-radius: 10px;
-        background-color: #fff;
-        color: #000;
-        font-family: "Black Ops One", sans-serif;
-      }
+.games-container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: nowrap;
+  width: min(95vw, 1400px);
+  margin: 20px auto 40px;
+}
+.controls {
+  order: 1;
+  flex: 0 0 220px;
+  margin: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 4px solid #000;
+  border-radius: 10px;
+  background-color: #fff;
+  color: #000;
+  font-family: "Black Ops One", sans-serif;
+}
+
 
       .controls h2 {
         margin: 0 0 18px;
@@ -42,13 +42,16 @@
         line-height: 1.5;
       }
 
-      .game-buttons {
-        order: 2;
-      }
 
-      .game-window {
-        order: 3;
-      }
+.game-buttons {
+  order: 3;
+}
+
+
+.game-window {
+  order: 2;
+}
+
 
       @media (max-width: 1000px) {
         .games-container {
