@@ -1588,11 +1588,11 @@ function isSegmentClear(ax, ay, bx, by, hb, avoidTraps = false) {
     drawStairs(); 
     drawBrokenDoors();
     drawDoors(timestamp);
+    drawItems(timestamp);
 //  drawVisionCones(); // hide this in final version
     drawPlayer(timestamp);
     drawContainers(true); 
     drawChargeBar();
-    drawItems(timestamp);
     drawProjectiles();
     drawEnemies();
     drawStealthWorld();
