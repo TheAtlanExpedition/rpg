@@ -677,7 +677,7 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   // ---------------------------------------------------------------------------
   // HIDING
   // ---------------------------------------------------------------------------
-  const HIDE_INTERACT_DIST = 0.9;
+  const HIDE_INTERACT_DIST = 0.5;
   const HIDE_SEARCH_RANGE = 1.1;
   const HIDE_SPOT_COLOR = "#334155";
   const HIDE_ATTACK_REACH = 0.9;
@@ -4111,7 +4111,7 @@ function placeCover(rooms, map, reserved) {
   // ---------------------------------------------------------------------------
   const CONTAINERS_PER_ROOM_MIN = 0;
   const CONTAINERS_PER_ROOM_MAX = 2;
-  const CONTAINER_INTERACT_DIST = 1.1;
+  const CONTAINER_INTERACT_DIST = 1.5;
   const CONTAINER_MESSAGE_MS = 2500;
 
   const ALL_SCROLLS = [
