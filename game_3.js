@@ -4982,7 +4982,7 @@ function placeCover(rooms, map, reserved) {
 
   // Fireball
   const FIREBALL_RADIUS = 2;
-  const FIREBALL_DAMAGE = 45; // at the centre, falls to 50% at the edge
+  const FIREBALL_DAMAGE = 85; // at the centre, falls to 50% at the edge
   const FIRE_ZONE_RADIUS = 1.75;
   const FIRE_ZONE_MS = 5000;
   const FIRE_TICK_MS = 1000;
@@ -4991,12 +4991,12 @@ function placeCover(rooms, map, reserved) {
 
   // Freeze cloud
   const FREEZE_RADIUS = 2;
-  const FREEZE_DAMAGE = 10;
+  const FREEZE_DAMAGE = 50;
   const FREEZE_MS = 3500;
   const FREEZE_CLOUD_VISUAL_MS = 1800;
 
   // Chain lightning
-  const LIGHTNING_DAMAGE = 30;
+  const LIGHTNING_DAMAGE = 75;
   const LIGHTNING_FALLOFF = 0.85; // each jump does 85% of the previous
   const LIGHTNING_JUMP_RANGE = 3.5; // tiles
   const LIGHTNING_MAX_JUMPS = 8;
