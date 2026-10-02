@@ -306,7 +306,7 @@ PILLAR_SPRITE.src = "https://raw.githubusercontent.com/TheAtlanExpedition/rpg/re
 // STEALTH: CONSTANTS
 // ---------------------------------------------------------------------------
 const AMBIENT_DARKNESS = 0.82;        // 0 = bright, 1 = pitch black
-const LIGHT_RAYS = 48;
+const LIGHT_RAYS = 96;
 const WALL_TORCH_RADIUS = 4.5;
 const PLAYER_TORCH_RADIUS = 4;
 const ENEMY_TORCH_RADIUS = 3.5;
@@ -692,6 +692,9 @@ let stairsLocked = false;   // true after arriving until the player steps off th
   const HIDE_SUSPECT_RADIUS = 1.5;           // an investigation this close to a spot counts as "at" it
   const HIDE_SUSPECT_COOLDOWN_MS = 6000;     // one visit only counts once per this window
 
+  const VISION_RAYS = 180;
+  const VISION_RANGE = 6;   // tiles; a little over half the 8x8 view
+
   const hidingSpots = [];
   // ---------------------------------------------------------------------------
   // PLAYER DRAW
@@ -1030,10 +1033,12 @@ window.addEventListener("blur", () => {
   function revealMinimapView() {
   if (!gameState || !gameState.player) return;
 
-  const px = Math.floor(gameState.player.x + 0.5);
-  const py = Math.floor(gameState.player.y + 0.5);
-  const x0 = px - Math.floor(VIEW_TILES_X / 2);
-  const y0 = py - Math.floor(VIEW_TILES_Y / 2);
+  const ox = gameState.player.x + 0.5;
+  const oy = gameState.player.y + 0.6;
+  const tx = x + 0.5;
+  const ty = y + 0.5;
+  const dd = Math.hypot(tx - ox, ty - oy);
+  if (dd > 0.75 && castRay(ox, oy, Math.atan2(ty - oy, tx - ox), dd) < dd - 0.75) continue;
 
   for (let y = y0; y < y0 + VIEW_TILES_Y; y++) {
     for (let x = x0; x < x0 + VIEW_TILES_X; x++) {
@@ -3095,25 +3100,23 @@ function localizePatrol(e) {
   e.baseFacing = e.facing;
 }
 
-function giveDungeonRoute(e, rooms) {
-  const open = roomPerimeter(room).filter((t) => map[t.y][t.x] === TileType.FLOOR);
-  const route = [];
-  let cur = { x: e.x, y: e.y };
-  while (pool.length) {
-    pool.sort((a, b) =>
-      Math.hypot(a.x + a.w / 2 - cur.x, a.y + a.h / 2 - cur.y) -
-      Math.hypot(b.x + b.w / 2 - cur.x, b.y + b.h / 2 - cur.y));
-    const room = pool.shift();
-    const t = pickOne(open.length ? open : roomPerimeter(room));
-    route.push({ x: t.x, y: t.y, wait: spawnRand(800, 2000) });
-    cur = t;
+  function drawContainers(inFront = false) {
+    if (!gameState || !gameState.containers) return;
+    const feetY = gameState.player.y + 0.9;
+    for (const c of gameState.containers) {
+      if ((c.y + 0.9 > feetY) !== inFront) continue;
+      const px = c.x * TILE_SIZE;
+      const py = c.y * TILE_SIZE;
+      context.globalAlpha = c.searched ? 0.55 : 1;
+      context.fillStyle = "#000";
+      context.fillRect(px + 4, py + 6, TILE_SIZE - 8, TILE_SIZE - 10);
+      context.fillStyle = CONTAINER_TYPES[c.type].color;
+      context.fillRect(px + 5, py + 7, TILE_SIZE - 10, TILE_SIZE - 12);
+      context.fillStyle = "rgba(0, 0, 0, 0.35)";
+      context.fillRect(px + 5, py + 13, TILE_SIZE - 10, 2);
+      context.globalAlpha = 1;
+    }
   }
-  e.role = "roamer";
-  e.patrol = route;
-  e.patrolIndex = 0;
-  e.holdFacing = null;
-  e.lookSweep = 0.9;
-}
 
 // Only torch carriers roam the whole dungeon; everyone else keeps their room job.
 function assignTorchesAndRoutes(enemies, rooms, map) {
@@ -3272,7 +3275,30 @@ function drawLighting(timestamp = performance.now()) {
     g.closePath();
     g.fill();
   }
-  g.globalCompositeOperation = "source-over";
+  // Fog of war: everything outside the player's line of sight goes black.
+  const pl = gameState.player;
+  if (pl) {
+    const ox = pl.x + 0.5;
+    const oy = pl.y + 0.6;
+    const scx = (ox * TILE_SIZE - cx) * scale + halfW;
+    const scy = (oy * TILE_SIZE - cy) * scale + halfH;
+
+    g.globalCompositeOperation = "source-over";
+    g.fillStyle = "#000";
+    g.beginPath();
+    g.rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    for (let i = 0; i < VISION_RAYS; i++) {
+      const a = (i / VISION_RAYS) * Math.PI * 2;
+      const d = Math.min(VISION_RANGE, castRay(ox, oy, a, VISION_RANGE) + 0.55);
+      const vx = scx + Math.cos(a) * d * TILE_SIZE * scale;
+      const vy = scy + Math.sin(a) * d * TILE_SIZE * scale;
+      if (i === 0) g.moveTo(vx, vy);
+      else g.lineTo(vx, vy);
+    }
+    g.closePath();
+    g.fill("evenodd"); // fills the screen minus the visible shape
+  }
+    g.globalCompositeOperation = "source-over";
 
   // Draw the darkness layer in world space so it lines up with the camera.
   context.drawImage(
